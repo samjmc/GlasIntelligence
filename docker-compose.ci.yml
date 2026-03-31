@@ -1,0 +1,21 @@
+services:
+  glas-intelligence:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glas-ci
+    environment:
+      - SECRET_KEY=ci-test-secret
+      - FLASK_DEBUG=false
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ORIGINS=*
+      - ENABLE_REPORT_PAYLOAD_V1=true
+    ports:
+      - "3000:3000"
+      - "5001:5001"
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: glas-ci-redis

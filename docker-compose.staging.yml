@@ -1,0 +1,50 @@
+services:
+  staging-app:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-glasinsight}/glas-intelligence:latest
+    container_name: staging-glas-intelligence
+    env_file:
+      - .env.staging
+    environment:
+      - REDIS_URL=redis://staging-redis:6379/0
+      - FRONTEND_URL=https://staging.glasinsight.com
+      - CORS_ORIGINS=https://staging.glasinsight.com
+    ports:
+      - "8080:80"
+      - "8443:443"
+    restart: unless-stopped
+    volumes:
+      - staging_uploads:/app/backend/uploads
+      - ./nginx-staging.conf:/etc/nginx/conf.d/default.conf
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - staging-redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  staging-redis:
+    image: redis:7-alpine
+    container_name: staging-glas-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - staging_redis_data:/data
+
+  staging-celery-worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-glasinsight}/glas-intelligence:latest
+    container_name: staging-glas-celery-worker
+    command: /app/backend/.venv/bin/celery -A app.celery_app worker --loglevel=info --concurrency=1
+    working_dir: /app/backend
+    env_file:
+      - .env.staging
+    environment:
+      - REDIS_URL=redis://staging-redis:6379/0
+    restart: unless-stopped
+    depends_on:
+      - staging-redis
+
+volumes:
+  staging_uploads:
+  staging_redis_data:

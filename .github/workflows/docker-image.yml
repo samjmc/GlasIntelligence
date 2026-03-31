@@ -33,7 +33,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/glas intelligence
+          images: ghcr.io/${{ github.repository_owner }}/glas-intelligence
           tags: |
             type=ref,event=tag
             type=sha

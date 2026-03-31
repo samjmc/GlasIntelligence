@@ -1,0 +1,70 @@
+groups:
+  - name: glas-critical
+    rules:
+      - alert: AppDown
+        expr: up{job="flask"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Glas Intelligence API is down"
+          description: "Flask API has been unreachable for more than 1 minute."
+
+      - alert: HighDiskUsage
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk usage above 90%"
+
+      - alert: ContainerOOMKill
+        expr: increase(container_oom_events_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container OOM kill detected"
+
+  - name: glas-warning
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage above 80% for 5 minutes"
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage above 80%"
+
+      - alert: HighErrorRate
+        expr: rate(flask_http_request_total{status=~"5.."}[5m]) / rate(flask_http_request_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API error rate above 5%"
+
+      - alert: HighResponseLatency
+        expr: histogram_quantile(0.95, rate(flask_http_request_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "95th percentile response latency above 5 seconds"
+
+  - name: glas-info
+    rules:
+      - alert: CertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "SSL certificate expires in less than 14 days"
