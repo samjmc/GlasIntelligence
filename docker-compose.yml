@@ -1,0 +1,14 @@
+services:
+  glas-intelligence:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glas-intelligence-dev
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+      - "5001:5001"
+    restart: unless-stopped
+    volumes:
+      - ./backend/uploads:/app/backend/uploads

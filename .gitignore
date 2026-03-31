@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+backend/.venv/
+backend/venv/
+.venv/
+venv/
+
+# Environment files
+.env
+.env.production
+.env.staging
+.env.local
+
+# Backend runtime
+backend/uploads/
+backend/logs/
+*.log
+
+# Frontend build output
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+*.tar
+*.tar.gz
+
+# Test artifacts
+coverage/
+htmlcov/
+.coverage
+*.cover
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
+
+# Generated reports and PDFs
+*.pdf
+visuals/
+visuals_s2/
+
+# Misc
+*.bak
+celerybeat-schedule
+celerybeat.pid
