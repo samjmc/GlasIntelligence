@@ -1,0 +1,33 @@
+NHS PHARMACY FIRST SERVICE - PAYMENT CAPS FROM MARCH 2026
+Source: NHS Business Services Authority (NHSBSA)
+
+OVERVIEW
+The NHS Pharmacy First Service (PFS) replaced the Community Pharmacist Consultation Service (CPCS) and enables community pharmacies to treat seven common conditions through clinical pathways: uncomplicated urinary tract infections in women (16-64), shingles (18+), impetigo (1+), infected insect bites (1+), earache (1-17), sore throat (5+), and sinusitis (12+).
+
+Pharmacists can supply NHS medicines where clinically appropriate, including some prescription-only medicines under Patient Group Directions.
+
+PAYMENT CAP SYSTEM (EFFECTIVE MARCH 2026)
+Pharmacy First caps are based on actual service delivery. Caps are calculated based on a monthly allocation and updated each month to reflect latest actual delivery. Activity can be delivered above the monthly cap but the £17 per consultation service fee will NOT be paid for consultations exceeding the cap.
+
+March 2026 Banding:
+- Band 1: Average <18 consultations/month → Cap at 45 consultations
+- Band 2: Average 18-25 → Cap at 75
+- Band 3: Average 26-31 → Cap at 100
+- Band 4: Average 32-37 → Cap at 119
+- Band 5: Average 38-46 → Cap at 144
+- Band 6: Average 47+ → Cap at 234
+
+Bands are calculated from average delivery October-December 2025.
+
+KEY IMPLICATIONS
+- Pharmacies delivering above their monthly cap will effectively provide NHS clinical consultations for free
+- Higher-performing pharmacies are penalised for growing their Pharmacy First service
+- The cap system creates a financial ceiling on pharmacy revenue from clinical services
+- Pharmacies cannot easily move between bands as bands are recalculated monthly based on rolling 3-month averages
+- The service fee increased from £15 to £17 per consultation in the 2025/26 settlement, but the cap limits total revenue
+
+HISTORICAL CONTEXT
+- Payment caps were first introduced in October 2024
+- Caps have been tightened progressively each month
+- The March 2026 caps represent the most restrictive banding yet applied
+- Total funding for community pharmacy 2025/26: £3.073 billion baseline plus £215 million for Pharmacy First

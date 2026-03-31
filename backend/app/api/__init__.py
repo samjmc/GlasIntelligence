@@ -1,5 +1,5 @@
 """
-API路由模块
+API routing modules
 """
 
 from flask import Blueprint
@@ -11,4 +11,6 @@ report_bp = Blueprint('report', __name__)
 from . import graph  # noqa: E402, F401
 from . import simulation  # noqa: E402, F401
 from . import report  # noqa: E402, F401
+from .billing import billing_bp  # noqa: E402, F401
+from .feed import feed_bp  # noqa: E402, F401
 

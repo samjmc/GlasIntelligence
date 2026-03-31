@@ -1,60 +1,70 @@
-# OS
-.DS_Store
-Thumbs.db
-
-# 环境变量（保护敏感信息）
-.env
-.env.local
-.env.*.local
-.env.development
-.env.test
-.env.production
+# Dependencies
+node_modules/
+frontend/node_modules/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-.venv/
-venv/
-ENV/
-.eggs/
 *.egg-info/
+*.egg
 dist/
 build/
+backend/.venv/
+backend/venv/
+.venv/
+venv/
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Environment files
+.env
+.env.production
+.env.staging
+.env.local
+
+# Backend runtime
+backend/uploads/
+backend/logs/
+*.log
+
+# Frontend build output
+frontend/dist/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# 测试
-.pytest_cache/
-.coverage
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+*.tar
+*.tar.gz
+
+# Test artifacts
+coverage/
 htmlcov/
+.coverage
+*.cover
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Cursor
-.cursor/
-.claude/
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
 
-# 文档与测试程序
-mydoc/
-mytest/
+# Generated reports and PDFs
+*.pdf
+visuals/
+visuals_s2/
 
-# 日志文件
-backend/logs/
-*.log
-
-# 上传文件
-backend/uploads/
-
-# Docker 数据
-data/
+# Misc
+*.bak
+celerybeat-schedule
+celerybeat.pid

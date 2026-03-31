@@ -1,5 +1,5 @@
 """
-MiroFish Backend 启动入口
+Glas Intelligence Backend
 """
 
 import os
@@ -24,13 +24,15 @@ from app.config import Config
 
 def main():
     """主函数"""
-    # 验证配置
-    errors = Config.validate()
+    errors, warnings = Config.validate()
+    if warnings:
+        print("Config warnings:")
+        for w in warnings:
+            print(f"  - {w}")
     if errors:
-        print("配置错误:")
+        print("Config errors:")
         for err in errors:
             print(f"  - {err}")
-        print("\n请检查 .env 文件中的配置")
         sys.exit(1)
     
     # 创建应用

@@ -3,11 +3,11 @@
 </template>
 
 <script setup>
-// 使用 Vue Router 来管理页面
+// Use Vue Router for page management
 </script>
 
 <style>
-/* 全局样式重置 */
+/* Global reset */
 * {
   margin: 0;
   padding: 0;
@@ -15,14 +15,15 @@
 }
 
 #app {
-  font-family: 'JetBrains Mono', 'Space Grotesk', 'Noto Sans SC', monospace;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #000000;
   background-color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
-/* 滚动条样式 */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -40,7 +41,7 @@
   background: #333333;
 }
 
-/* 全局按钮样式 */
+/* Buttons inherit app font */
 button {
   font-family: inherit;
 }
