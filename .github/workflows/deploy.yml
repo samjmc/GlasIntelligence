@@ -118,7 +118,6 @@ jobs:
             echo "Staging deployed with tag: ${DEPLOY_TAG}"
 
       - name: Smoke test staging
-        continue-on-error: true  # TODO: remove once staging.glasinsight.com is live
         run: |
           for i in $(seq 1 30); do
             if curl -sf --connect-timeout 5 https://staging.glasinsight.com/health 2>/dev/null; then
@@ -172,7 +171,6 @@ jobs:
             echo "Production deployed with tag: ${DEPLOY_TAG}"
 
       - name: Health check with auto-rollback
-        continue-on-error: true  # TODO: remove once prod health check is reliable
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ env.DEPLOY_HOST }}
