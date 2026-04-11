@@ -452,7 +452,7 @@ def prepare_simulation():
         document_text = ProjectManager.get_extracted_text(state.project_id) or ""
         
         profile = SupabaseDB.get_profile(g.user_id)
-        user_plan = profile.get('plan', 'free') if profile else 'free'
+        user_plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
         
         entity_types_list = data.get('entity_types')
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
@@ -1571,7 +1571,7 @@ def start_simulation():
             }), 402
 
         profile = SupabaseDB.get_profile(g.user_id)
-        user_plan = profile.get('plan', 'free') if profile else 'free'
+        user_plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
 
         run_state = SimulationRunner.start_simulation(
             simulation_id=simulation_id,

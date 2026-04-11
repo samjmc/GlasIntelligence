@@ -366,7 +366,15 @@ const briefingExpanded = ref(false)
 
 const typewriterText = ref('')
 const typewriterDone = ref(false)
-const userPlan = ref(null)
+
+function normalizeClientPlan(raw) {
+  if (raw == null || raw === '') return 'free'
+  const s = String(raw).trim().toLowerCase()
+  if (s === 'null' || s === 'undefined' || s === 'none') return 'free'
+  return s
+}
+
+const userPlan = ref('free')
 const prefillRestored = ref(false)
 const decisionForm = reactive({
   role: '',
@@ -399,8 +407,10 @@ onMounted(() => {
   }, 70)
 
   apiGet('/billing/status').then(res => {
-    if (res?.success) userPlan.value = res.data?.plan || 'free'
-  }).catch(() => {})
+    if (res?.success) userPlan.value = normalizeClientPlan(res.data?.plan)
+  }).catch(() => {
+    userPlan.value = 'free'
+  })
 
   if (route.query.prefill) {
     const pending = getPendingUpload()
@@ -424,13 +434,15 @@ onUnmounted(() => {
 })
 
 const isPaidUser = computed(() => {
-  return ['pro', 'business', 'enterprise', 'payg'].includes(userPlan.value)
+  const p = normalizeClientPlan(userPlan.value)
+  return ['pro', 'business', 'enterprise', 'payg'].includes(p)
 })
 
 const planLimits = computed(() => {
-  if (userPlan.value === 'business') return { agents: 75, rounds: 30 }
-  if (userPlan.value === 'enterprise') return { agents: 200, rounds: 50 }
-  if (userPlan.value === 'pro' || userPlan.value === 'payg') return { agents: 50, rounds: 25 }
+  const p = normalizeClientPlan(userPlan.value)
+  if (p === 'business') return { agents: 75, rounds: 30 }
+  if (p === 'enterprise') return { agents: 200, rounds: 50 }
+  if (p === 'pro' || p === 'payg') return { agents: 50, rounds: 25 }
   return { agents: 25, rounds: 15 }
 })
 

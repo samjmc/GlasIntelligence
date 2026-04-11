@@ -93,8 +93,19 @@ class Config:
     ENTERPRISE_SIMULATION_ROUNDS = int(os.environ.get('ENTERPRISE_SIMULATION_ROUNDS', '50'))
     
     @classmethod
-    def simulation_limits(cls, plan: str) -> tuple:
+    def normalize_plan(cls, plan: str | None) -> str:
+        """Lowercase/strip profiles.plan (e.g. manual Supabase value 'Enterprise')."""
+        if plan is None:
+            return 'free'
+        p = str(plan).strip().lower()
+        if p in ('', 'null', 'none', 'undefined'):
+            return 'free'
+        return p
+
+    @classmethod
+    def simulation_limits(cls, plan: str | None) -> tuple:
         """Return (max_agents, max_rounds) for a given plan."""
+        plan = cls.normalize_plan(plan)
         if plan in ('free', 'payg'):
             return cls.FREE_SIMULATION_AGENTS, cls.FREE_SIMULATION_ROUNDS
         if plan == 'business':
