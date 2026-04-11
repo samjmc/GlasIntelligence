@@ -41,7 +41,7 @@ WORKDIR /app
 
 COPY backend/pyproject.toml backend/uv.lock ./backend/
 RUN cd backend && uv sync --frozen \
-  && .venv/bin/pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+  && uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu \
   && rm -rf /root/.cache
 
 COPY backend/ ./backend/
