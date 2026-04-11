@@ -185,7 +185,7 @@ def _handle_invoice_paid(invoice):
 
     profile = profiles.data[0]
     user_id = profile['id']
-    plan = profile.get('plan', 'free')
+    plan = Config.normalize_plan(profile.get('plan', 'free'))
 
     sims = SUBSCRIPTION_SIMULATIONS.get(plan, 0)
     if sims > 0:
@@ -219,7 +219,7 @@ def billing_status():
     return jsonify({
         "success": True,
         "data": {
-            "plan": profile.get('plan', 'free'),
+            "plan": Config.normalize_plan(profile.get('plan', 'free')),
             "credits": profile.get('credits', 0),
             "has_billing": bool(profile.get('stripe_customer_id')),
         }
@@ -231,7 +231,7 @@ def billing_status():
 def can_simulate():
     """Lightweight pre-flight check for simulation eligibility."""
     profile = SupabaseDB.get_profile(g.user_id)
-    plan = profile.get('plan', 'free') if profile else 'free'
+    plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
     credits = profile.get('credits', 0) if profile else 0
 
     can_run = credits > 0

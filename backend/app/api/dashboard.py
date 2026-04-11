@@ -1,6 +1,7 @@
 """User dashboard API routes."""
 
 from flask import Blueprint, jsonify, g
+from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
 from ..utils.logger import get_logger
@@ -32,7 +33,7 @@ def dashboard_overview():
             "profile": {
                 "email": profile.get("email", ""),
                 "display_name": profile.get("display_name", ""),
-                "plan": profile.get("plan", "free"),
+                "plan": Config.normalize_plan(profile.get("plan", "free")),
                 "credits": profile.get("credits", 0),
             },
             "recent_projects": projects,
@@ -66,6 +67,6 @@ def usage_stats():
         "data": {
             "simulations_this_month": simulations_this_month,
             "credits_remaining": profile.get("credits", 0),
-            "plan": profile.get("plan", "free"),
+            "plan": Config.normalize_plan(profile.get("plan", "free")),
         }
     })

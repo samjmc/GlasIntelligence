@@ -89,7 +89,7 @@ def suggest_sources():
 def auto_research():
     """Generate a research briefing. Requires auth + paid plan (does not deduct credits)."""
     profile = SupabaseDB.get_profile(g.user_id)
-    plan = profile.get('plan', 'free') if profile else 'free'
+    plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
 
     if plan == 'free':
         return jsonify({
@@ -148,7 +148,7 @@ def start_deep_research():
         return jsonify({"success": False, "error": "Deep research is not enabled"}), 403
 
     profile = SupabaseDB.get_profile(g.user_id)
-    plan = profile.get('plan', 'free') if profile else 'free'
+    plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
     if plan == 'free':
         return jsonify({
             "success": False,

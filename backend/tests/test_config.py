@@ -30,6 +30,11 @@ class TestConfigSimulationLimits:
         assert agents == Config.ENTERPRISE_SIMULATION_AGENTS
         assert rounds == Config.ENTERPRISE_SIMULATION_ROUNDS
 
+    def test_enterprise_plan_limits_normalizes_casing(self):
+        agents, rounds = Config.simulation_limits("Enterprise")
+        assert agents == Config.ENTERPRISE_SIMULATION_AGENTS
+        assert rounds == Config.ENTERPRISE_SIMULATION_ROUNDS
+
     def test_unknown_plan_defaults_to_pro(self):
         agents, rounds = Config.simulation_limits("unknown")
         assert agents == Config.PRO_SIMULATION_AGENTS

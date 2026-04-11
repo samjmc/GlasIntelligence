@@ -3,6 +3,7 @@
 import os
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
+from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
 from ..utils.logger import get_logger
@@ -26,11 +27,7 @@ def _effective_feed_plan(user_id, profile):
         return 'enterprise'
     if not profile:
         return 'free'
-    raw = profile.get('plan') or 'free'
-    p = str(raw).strip().lower()
-    if p in ('', 'null', 'none'):
-        return 'free'
-    return p
+    return Config.normalize_plan(profile.get('plan') or 'free')
 
 
 def _feed_has_full_access(plan_effective: str) -> bool:
