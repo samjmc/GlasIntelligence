@@ -1,11 +1,6 @@
 services:
   glas-intelligence:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-      args:
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-samjmc}/glas-intelligence:${DEPLOY_TAG:-latest}
     container_name: glas-intelligence
     env_file:
       - .env
@@ -17,7 +12,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend/uploads:/app/backend/uploads
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - redis
@@ -41,26 +36,55 @@ services:
       retries: 3
 
   celery-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-samjmc}/glas-intelligence:${DEPLOY_TAG:-latest}
     container_name: glas-celery-worker
-    command: /app/backend/.venv/bin/celery -A app.celery_app worker --loglevel=info --concurrency=2
+    command: /app/backend/.venv/bin/celery -A app.celery_app worker --loglevel=info --concurrency=2 --queues=celery
     working_dir: /app/backend
     env_file:
       - .env
     environment:
       - REDIS_URL=redis://redis:6379/0
     restart: unless-stopped
+    stop_grace_period: 1200s
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+    depends_on:
+      - redis
+
+  celery-sim-worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-samjmc}/glas-intelligence:${DEPLOY_TAG:-latest}
+    container_name: glas-sim-worker
+    command: /app/backend/.venv/bin/celery -A app.celery_app worker --loglevel=info --concurrency=1 --queues=simulation -n sim@%h
+    working_dir: /app/backend
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    restart: unless-stopped
+    stop_grace_period: 1200s
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+    depends_on:
+      - redis
+
+  celery-research-worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-samjmc}/glas-intelligence:${DEPLOY_TAG:-latest}
+    container_name: glas-research-worker
+    command: /app/backend/.venv/bin/celery -A app.celery_app worker --loglevel=info --concurrency=1 --queues=research -n research@%h
+    working_dir: /app/backend
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    restart: unless-stopped
+    stop_grace_period: 1200s
     volumes:
       - ./backend/uploads:/app/backend/uploads
     depends_on:
       - redis
 
   celery-beat:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-samjmc}/glas-intelligence:${DEPLOY_TAG:-latest}
     container_name: glas-celery-beat
     command: /app/backend/.venv/bin/celery -A app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     working_dir: /app/backend

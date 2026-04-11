@@ -160,6 +160,7 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
 
             export GITHUB_REPOSITORY_OWNER="${{ github.repository_owner }}"
+            export DEPLOY_TAG="${{ needs.build-and-push.outputs.image_tag }}"
 
             CURRENT_IMAGE=$(docker inspect glas-intelligence --format='{{.Config.Image}}' 2>/dev/null || echo "")
             echo "${CURRENT_IMAGE}" > /opt/glas/.rollback-image
@@ -167,8 +168,8 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --build
-            echo "Production deployed"
+            docker compose -f docker-compose.prod.yml up -d
+            echo "Production deployed with tag: ${DEPLOY_TAG}"
 
       - name: Health check with auto-rollback
         uses: appleboy/ssh-action@v1
