@@ -182,7 +182,7 @@ jobs:
             HEALTHY=false
             sleep 10
             for i in $(seq 1 24); do
-              if curl -sf --connect-timeout 5 http://localhost:5001/health > /dev/null 2>&1; then
+              if docker exec glas-intelligence curl -sf --connect-timeout 5 http://127.0.0.1:5001/health > /dev/null 2>&1; then
                 HEALTHY=true
                 echo "Health check passed on attempt $i"
                 break
