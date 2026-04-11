@@ -181,13 +181,14 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
 
             HEALTHY=false
-            for i in $(seq 1 12); do
+            sleep 10
+            for i in $(seq 1 24); do
               if curl -sf --connect-timeout 5 http://localhost:5001/health > /dev/null 2>&1; then
                 HEALTHY=true
                 echo "Health check passed on attempt $i"
                 break
               fi
-              echo "Health check attempt $i/12 failed, waiting 5s..."
+              echo "Health check attempt $i/24 failed, waiting 5s..."
               sleep 5
             done
 
