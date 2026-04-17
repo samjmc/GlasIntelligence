@@ -66,16 +66,25 @@
         <section v-if="bundles.length > 0" class="dash-section">
           <h2 class="section-heading">Decision Bundles</h2>
           <div class="bundle-list">
-            <div v-for="b in bundles" :key="b.id" class="bundle-row">
+            <router-link
+              v-for="b in bundles"
+              :key="b.id"
+              :to="{ name: 'BundleResults', params: { bundleId: b.id } }"
+              class="bundle-row is-clickable"
+            >
               <div class="bundle-info">
                 <span class="bundle-title">{{ b.title }}</span>
+                <span
+                  class="bundle-timestamp"
+                  :title="formatAbsolute(b.created_at)"
+                >Created {{ formatRelative(b.created_at) }}</span>
                 <span class="bundle-progress-text">{{ b.progress?.completed || 0 }} of {{ b.progress?.total || 0 }} scenarios</span>
               </div>
               <div class="bundle-bar-wrap">
                 <div class="bundle-bar" :style="{ width: bundlePct(b) + '%' }"></div>
               </div>
               <span class="bundle-status-tag" :class="'status-' + b.status">{{ b.status === 'completed' ? 'Done' : 'In Progress' }}</span>
-            </div>
+            </router-link>
           </div>
         </section>
 
@@ -152,6 +161,7 @@ import { useRouter } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import { authState } from '../store/auth'
 import { listBundles, listReminders } from '../api/simulation'
+import { formatRelative, formatAbsolute } from '../utils/formatTime'
 import AppNavbar from '../components/AppNavbar.vue'
 
 const router = useRouter()
@@ -591,10 +601,31 @@ onMounted(() => {
 /* Decision Bundles */
 .bundle-list { display: flex; flex-direction: column; gap: 1px; background: #1a1a1a; border-radius: 8px; overflow: hidden; }
 .bundle-row {
-  display: flex; align-items: center; gap: 16px; padding: 14px 20px; background: #111;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 20px;
+  background: #111;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
 }
-.bundle-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.bundle-row.is-clickable {
+  cursor: pointer;
+}
+.bundle-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.bundle-row:focus-visible {
+  outline: 2px solid #00c853;
+  outline-offset: 2px;
+}
+.bundle-info { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bundle-title { font-size: 13px; color: #e0e0e0; font-weight: 500; }
+.bundle-timestamp {
+  font-size: 12px;
+  color: #888;
+}
 .bundle-progress-text { font-size: 11px; color: #666; font-family: 'JetBrains Mono', monospace; }
 .bundle-bar-wrap {
   width: 80px; height: 4px; background: #222; border-radius: 2px; overflow: hidden;
