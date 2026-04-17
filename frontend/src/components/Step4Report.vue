@@ -1567,7 +1567,7 @@ const InterviewDisplay = {
     const cleanQuoteText = (text) => {
       if (!text) return ''
       // Remove leading patterns like "1. ", "2. ", "1、", "（1）", "(1)" etc.
-      return text.replace(/^\s*\d+[\.\、\)）]\s*/, '').trim()
+      return text.replace(/^\s*\d+[.、)）]\s*/, '').trim()
     }
     
     const activeIndex = ref(0)
