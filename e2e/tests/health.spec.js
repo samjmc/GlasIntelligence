@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Health checks', () => {
   test('backend API health endpoint returns ok', async ({ request }) => {
-    const resp = await request.get('/api/health', {
-      baseURL: process.env.BASE_URL?.replace(':3000', ':5001') || 'http://localhost:5001',
-    })
+    // Must use absolute URL: global baseURL is the Vite dev server (:3000); relative /health returns SPA HTML.
+    const backend = (process.env.API_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '')
+    const resp = await request.get(`${backend}/health`)
     expect(resp.ok()).toBeTruthy()
     const body = await resp.json()
     expect(body.status).toBe('ok')
