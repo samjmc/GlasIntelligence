@@ -110,11 +110,18 @@ jobs:
             # docker-compose.staging.yml uses ghcr.io/${GITHUB_REPOSITORY_OWNER:-glasinsight}/... — must match push owner
             export GITHUB_REPOSITORY_OWNER="${{ github.repository_owner }}"
 
+            # Sync compose + nginx files from repo (these aren't baked into the image)
+            if [ -d .git ]; then
+              git fetch --depth=1 origin main && git reset --hard origin/main
+            else
+              echo "WARN: ${{ env.DEPLOY_PATH }} is not a git checkout; compose/nginx files will not auto-update"
+            fi
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
             docker pull ${REGISTRY}/${IMAGE_NAME}:${DEPLOY_TAG} || docker pull ${REGISTRY}/${IMAGE_NAME}:latest
 
-            docker compose -f docker-compose.staging.yml up -d --pull always
+            docker compose -f docker-compose.staging.yml up -d --pull always --force-recreate
             echo "Staging deployed with tag: ${DEPLOY_TAG}"
 
       - name: Smoke test staging
@@ -164,11 +171,25 @@ jobs:
             CURRENT_IMAGE=$(docker inspect glas-intelligence --format='{{.Config.Image}}' 2>/dev/null || echo "")
             echo "${CURRENT_IMAGE}" > /opt/glas/.rollback-image
 
+            # Sync compose + nginx files from repo (these aren't baked into the image)
+            if [ -d .git ]; then
+              git fetch --depth=1 origin main && git reset --hard origin/main
+            else
+              echo "WARN: ${{ env.DEPLOY_PATH }} is not a git checkout; compose/nginx files will not auto-update"
+            fi
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml up -d --force-recreate
             echo "Production deployed with tag: ${DEPLOY_TAG}"
+
+            # Verify what's actually running
+            sleep 5
+            RUNNING_IMAGE=$(docker inspect glas-intelligence --format='{{.Config.Image}}' 2>/dev/null || echo "unknown")
+            RUNNING_DIGEST=$(docker inspect glas-intelligence --format='{{.Image}}' 2>/dev/null || echo "unknown")
+            echo "Running image:  ${RUNNING_IMAGE}"
+            echo "Running digest: ${RUNNING_DIGEST}"
 
       - name: Health check with auto-rollback
         uses: appleboy/ssh-action@v1
