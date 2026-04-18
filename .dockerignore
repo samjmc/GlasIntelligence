@@ -21,3 +21,12 @@ frontend/dist
 frontend/.vite
 
 backend/uploads
+
+# Not needed in images; reduces context size
+docs
+scripts
+visuals
+
+# Staging/monitoring nginx configs are bind-mounted at runtime, not COPY'd into images
+nginx/nginx-staging.conf
+nginx/nginx-monitoring.conf

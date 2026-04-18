@@ -36,12 +36,10 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check app/
 
-      # Pre-existing formatting/type debt – warn-only until codebase is incrementally cleaned
-      - name: Ruff format check (warn-only)
+      - name: Ruff format check
         run: uv run ruff format --check app/
-        continue-on-error: true
 
-      - name: Mypy type check (warn-only)
+      - name: Mypy type check
         run: uv run mypy app/ --ignore-missing-imports
         continue-on-error: true
 
@@ -77,13 +75,6 @@ jobs:
       ENABLE_REPORT_PAYLOAD_V1: "true"
       FLASK_DEBUG: "false"
       SECRET_KEY: "test-secret-key"
-      # Placeholder values so app/services importing these at module load time don't bail in CI
-      SUPABASE_URL: "https://placeholder.supabase.co"
-      SUPABASE_SERVICE_KEY: "placeholder-service-key"
-      SUPABASE_ANON_KEY: "placeholder-anon-key"
-      LLM_API_KEY: "placeholder-llm-key"
-      OPENAI_API_KEY: "placeholder-openai-key"
-      ZEP_API_KEY: "placeholder-zep-key"
     steps:
       - uses: actions/checkout@v4
 
@@ -139,12 +130,6 @@ jobs:
       FLASK_DEBUG: "false"
       SECRET_KEY: "test-secret-key"
       ENABLE_REPORT_PAYLOAD_V1: "true"
-      SUPABASE_URL: "https://placeholder.supabase.co"
-      SUPABASE_SERVICE_KEY: "placeholder-service-key"
-      SUPABASE_ANON_KEY: "placeholder-anon-key"
-      LLM_API_KEY: "placeholder-llm-key"
-      OPENAI_API_KEY: "placeholder-openai-key"
-      ZEP_API_KEY: "placeholder-zep-key"
     steps:
       - uses: actions/checkout@v4
 
@@ -210,15 +195,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free disk space on runner
-        uses: jlumbroso/free-disk-space@main
+      # Dev image pulls camel-ai + PyTorch/CUDA (~10GB+). Hosted runners need extra free space.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
           android: true
           dotnet: true
           haskell: true
-          large-packages: false
+          large-packages: true
+          docker-images: true
           swap-storage: true
+
+      - name: Disk usage
+        run: df -h
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -260,7 +250,7 @@ jobs:
       - name: Install Playwright
         run: |
           cd e2e
-          npm ci --no-audit --no-fund
+          npm ci
           npx playwright install --with-deps chromium
 
       - name: Run E2E tests
@@ -269,6 +259,7 @@ jobs:
           npx playwright test
         env:
           BASE_URL: http://localhost:3000
+          API_BASE_URL: http://127.0.0.1:5001
 
       - name: Upload E2E artifacts
         if: failure()
@@ -290,14 +281,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free disk space on runner
-        uses: jlumbroso/free-disk-space@main
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
           android: true
           dotnet: true
           haskell: true
-          large-packages: false
+          large-packages: true
+          docker-images: true
           swap-storage: true
 
       - name: Build production image

@@ -43,9 +43,9 @@
           <li><span class="check">&#10003;</span> Full custom inputs</li>
           <li><span class="check">&#10003;</span> Full simulation output</li>
           <li><span class="check">&#10003;</span> PDF report download</li>
-          <li><span class="check">&#10003;</span> Deep Research Briefing</li>
+          <li><span class="check">&#10003;</span> 1 Deep Research Briefing included</li>
           <li><span class="check">&#10003;</span> Decision Recommendations</li>
-          <li class="feature-excluded"><span class="cross">&#10005;</span> No subscription required</li>
+          <li class="feature-overage">Extra briefings: $7 each</li>
         </ul>
         <button
           class="plan-cta cta-primary"
@@ -65,13 +65,13 @@
         </div>
         <ul class="plan-features">
           <li><span class="check">&#10003;</span> 10 simulations / month</li>
+          <li><span class="check">&#10003;</span> 3 Deep Research Briefings / month</li>
           <li><span class="check">&#10003;</span> Full custom inputs</li>
           <li><span class="check">&#10003;</span> All industry feeds</li>
           <li><span class="check">&#10003;</span> PDF report downloads</li>
-          <li><span class="check">&#10003;</span> Deep Research Briefings</li>
           <li><span class="check">&#10003;</span> Decision Recommendations</li>
           <li><span class="check">&#10003;</span> Save &amp; compare simulations</li>
-          <li class="feature-overage">Overage: $12 / extra simulation</li>
+          <li class="feature-overage">Overage: $12 / sim · $7 / briefing</li>
         </ul>
         <button
           class="plan-cta cta-primary"
@@ -91,12 +91,13 @@
         </div>
         <ul class="plan-features">
           <li><span class="check">&#10003;</span> 40 simulations / month</li>
+          <li><span class="check">&#10003;</span> 13 Deep Research Briefings / month</li>
           <li><span class="check">&#10003;</span> Everything in Pro</li>
           <li><span class="check">&#10003;</span> Advanced scenario stacking</li>
           <li><span class="check">&#10003;</span> Higher agent &amp; round limits</li>
           <li><span class="check">&#10003;</span> Priority support</li>
           <li><span class="check">&#10003;</span> Team-ready exports</li>
-          <li class="feature-overage">Overage: $10 / extra simulation</li>
+          <li class="feature-overage">Overage: $10 / sim · $7 / briefing</li>
         </ul>
         <button
           class="plan-cta cta-primary"
@@ -116,6 +117,7 @@
         </div>
         <ul class="plan-features">
           <li><span class="check">&#10003;</span> 100+ simulations / month</li>
+          <li><span class="check">&#10003;</span> 33+ Deep Research Briefings / month</li>
           <li><span class="check">&#10003;</span> Custom agent configurations</li>
           <li><span class="check">&#10003;</span> Industry-specific tuning</li>
           <li><span class="check">&#10003;</span> Dedicated support</li>
@@ -143,6 +145,7 @@
           <span class="pack-label">{{ pack.qty === 1 ? 'simulation' : 'simulations' }}</span>
           <span class="pack-price">${{ pack.price }}</span>
           <span class="pack-unit">${{ pack.unitPrice }} each</span>
+          <span class="pack-research">Includes {{ pack.research }} research briefings</span>
           <span v-if="pack.save" class="pack-save">Save {{ pack.save }}</span>
           <button
             class="pack-cta"
@@ -172,8 +175,8 @@ const loading = ref(false)
 const errorMsg = ref('')
 
 const simPacks = [
-  { product: 'pack_5', qty: 5, price: 59, unitPrice: '11.80', save: null },
-  { product: 'pack_10', qty: 10, price: 99, unitPrice: '9.90', save: '15%' },
+  { product: 'pack_5', qty: 5, price: 59, unitPrice: '11.80', save: null, research: 2 },
+  { product: 'pack_10', qty: 10, price: 99, unitPrice: '9.90', save: '15%', research: 5 },
 ]
 
 function handleFree() {
@@ -499,6 +502,12 @@ async function redirectToCheckout(product) {
 .pack-unit {
   font-size: 0.75rem;
   color: #666;
+}
+
+.pack-research {
+  font-size: 0.72rem;
+  color: #888;
+  font-style: italic;
 }
 
 .pack-save {

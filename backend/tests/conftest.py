@@ -6,11 +6,27 @@ import pytest
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("FLASK_DEBUG", "false")
 os.environ.setdefault("ENABLE_REPORT_PAYLOAD_V1", "true")
-os.environ.setdefault("SUPABASE_URL", "")
-os.environ.setdefault("SUPABASE_SERVICE_KEY", "")
-os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret")
 
 from app import create_app
+from app import config as app_config
+from app.services.supabase_client import get_supabase_client
+
+# Middleware and services use the module-level Config class (not Flask's TestConfig).
+# Placeholders allow client init where needed; empty JWT keeps anonymous auth.
+# (Real Supabase HTTP is mocked per-test — see _mock_supabase_client.)
+_PLACEHOLDER_SUPABASE_URL = "http://127.0.0.1:54321"
+_PLACEHOLDER_SUPABASE_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSJ9.ci-test-placeholder"
+)
+_PLACEHOLDER_LLM_KEY = "sk-test-ci-placeholder"
+_PLACEHOLDER_ZEP_KEY = "zep-test-ci-placeholder"
+
+app_config.Config.SUPABASE_URL = os.environ.get("SUPABASE_URL") or _PLACEHOLDER_SUPABASE_URL
+app_config.Config.SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or _PLACEHOLDER_SUPABASE_KEY
+app_config.Config.LLM_API_KEY = os.environ.get("LLM_API_KEY") or _PLACEHOLDER_LLM_KEY
+app_config.Config.ZEP_API_KEY = os.environ.get("ZEP_API_KEY") or _PLACEHOLDER_ZEP_KEY
+app_config.Config.SUPABASE_JWT_SECRET = ""
+get_supabase_client.cache_clear()
 
 
 class TestConfig:
@@ -20,14 +36,14 @@ class TestConfig:
     ENABLE_REPORT_PAYLOAD_V1 = True
     ENABLE_GROUNDING_FEATURES = True
     ENABLE_DECISION_LAYER = False
-    SUPABASE_URL = ""
-    SUPABASE_SERVICE_KEY = ""
-    SUPABASE_JWT_SECRET = "test-jwt-secret"
+    SUPABASE_URL = app_config.Config.SUPABASE_URL
+    SUPABASE_SERVICE_KEY = app_config.Config.SUPABASE_SERVICE_KEY
+    SUPABASE_JWT_SECRET = ""
     SUPABASE_ANON_KEY = ""
-    LLM_API_KEY = ""
+    LLM_API_KEY = app_config.Config.LLM_API_KEY
     LLM_BASE_URL = "https://api.openai.com/v1"
     LLM_MODEL_NAME = "gpt-4o-mini"
-    ZEP_API_KEY = ""
+    ZEP_API_KEY = app_config.Config.ZEP_API_KEY
     STRIPE_SECRET_KEY = ""
     STRIPE_WEBHOOK_SECRET = ""
     STRIPE_PRICE_PAYG = ""
@@ -85,6 +101,67 @@ class TestConfig:
     @classmethod
     def validate(cls):
         return [], []
+
+
+class _EmptyRows:
+    data = []
+
+
+class _MockQueryChain:
+    """Fluent Supabase-style chain ending in .execute() -> {data: []}."""
+
+    def eq(self, *a, **k):
+        return self
+
+    def order(self, *a, **k):
+        return self
+
+    def limit(self, *a, **k):
+        return self
+
+    def gte(self, *a, **k):
+        return self
+
+    def lte(self, *a, **k):
+        return self
+
+    def in_(self, *a, **k):
+        return self
+
+    def execute(self):
+        return _EmptyRows()
+
+
+class _MockTable:
+    def select(self, *a, **k):
+        return _MockQueryChain()
+
+    def insert(self, *a, **k):
+        return _MockQueryChain()
+
+    def update(self, *a, **k):
+        return _MockQueryChain()
+
+    def delete(self, *a, **k):
+        return _MockQueryChain()
+
+
+class _MockSupabaseClient:
+    def table(self, _name):
+        return _MockTable()
+
+
+@pytest.fixture(autouse=True)
+def _mock_supabase_http(monkeypatch):
+    """Do not call real Supabase (CI has no DB; placeholder host may not resolve)."""
+    from app.services import supabase_client
+
+    monkeypatch.setattr(
+        supabase_client.SupabaseDB,
+        "client",
+        staticmethod(lambda: _MockSupabaseClient()),
+    )
+    supabase_client.get_supabase_client.cache_clear()
 
 
 @pytest.fixture

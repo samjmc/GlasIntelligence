@@ -6,35 +6,26 @@ Produces a structured research dossier for simulation grounding.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List
+import time
+from typing import Any
 
-from openai import OpenAI
+from openai import OpenAI, RateLimitError, APIStatusError
 
 from ..config import Config
 from ..utils.logger import get_logger
+from .research_angles import (
+    ALL_ANGLE_IDS,
+    classify_scenario,
+    build_research_prompt,
+    get_angles_by_ids,
+)
 
-logger = get_logger('glas.deep_research')
+_TRANSIENT_STATUS_CODES = {500, 502, 503}
+_MAX_RETRIES = 5
+_RETRY_BACKOFFS = [5, 10, 30, 60, 90]
+_MAX_OUTPUT_TOKENS = 16000
 
-RESEARCH_SYSTEM_PROMPT = """\
-You are a senior research analyst preparing a comprehensive dossier for a scenario simulation engine.
-
-Your task:
-1. Search the web thoroughly for the most current, relevant information about the scenario.
-2. Produce a structured research report covering:
-   - **Background & Context**: Key facts, recent developments, regulatory landscape.
-   - **Key Stakeholders**: Major players, their positions, interests, and power dynamics.
-   - **Quantitative Anchors**: Specific numbers, statistics, market data, financial figures.
-   - **Historical Precedents**: Similar past scenarios and their outcomes.
-   - **Key Risk Factors**: What could go wrong, uncertainty sources.
-
-Requirements:
-- Use specific names, dates, figures, and citations.
-- Prefer recent data (last 12 months) over older sources.
-- Include URLs for all sources referenced.
-- Write 1500-2500 words.
-- Structure with clear markdown headings.
-- Conclude with a "Key Facts Summary" section: 5-10 bullet points of the most important quantitative facts.
-"""
+logger = get_logger("glas.deep_research")
 
 
 class DeepResearchAgent:
@@ -42,51 +33,109 @@ class DeepResearchAgent:
         self.client = OpenAI(
             api_key=Config.LLM_API_KEY,
             base_url="https://api.openai.com/v1",
+            max_retries=0,
+            # Single Responses API call can run 30–45+ min on complex topics; must exceed Celery soft limit
+            timeout=2700.0,
         )
         self.model = Config.DEEP_RESEARCH_MODEL
         self.max_tool_calls = Config.DEEP_RESEARCH_MAX_TOOL_CALLS
 
-    def run(self, scenario: str, context: str = "") -> Dict[str, Any]:
-        user_text = f"Research this scenario thoroughly:\n\n{scenario}"
+    def run(
+        self,
+        scenario: str,
+        context: str = "",
+        angle_overrides: dict[str, bool] | None = None,
+    ) -> dict[str, Any]:
+        user_text = (
+            "Research this scenario thoroughly. The output will ground a multi-agent simulation: "
+            "prioritise verifiable facts, named actors with incentives/constraints, testable if–then "
+            "reactions, quantitative anchors with dates/units, and explicit gaps where evidence is weak.\n\n"
+            f"{scenario}"
+        )
         if context:
             user_text += f"\n\nAdditional context:\n{context}"
 
-        logger.info(f"Starting deep research: model={self.model}, scenario={scenario[:100]}...")
+        selected_ids = self._resolve_angles(scenario, angle_overrides)
+        angles = get_angles_by_ids(selected_ids)
+        system_prompt = build_research_prompt(angles)
 
-        try:
-            response = self.client.responses.create(
-                model=self.model,
-                input=[
-                    {
-                        "role": "developer",
-                        "content": [{"type": "input_text", "text": RESEARCH_SYSTEM_PROMPT}],
-                    },
-                    {
-                        "role": "user",
-                        "content": [{"type": "input_text", "text": user_text}],
-                    },
-                ],
-                tools=[{"type": "web_search_preview"}],
-                reasoning={"summary": "auto"},
-            )
-            return self._parse_response(response)
+        logger.info(f"Starting deep research: model={self.model}, angles={selected_ids}, scenario={scenario[:100]}...")
 
-        except Exception:
-            logger.exception("Deep research failed")
-            return {
-                "sources": [],
-                "key_facts": [],
-                "historical_precedents": [],
-                "quantitative_anchors": [],
-                "summary_md": "Deep research encountered an error. Please try again.",
-                "search_queries": [],
-                "error": True,
-            }
+        response = self._call_with_retry(system_prompt, user_text)
+        result = self._parse_response(response)
+        result["selected_angles"] = selected_ids
+        return result
 
-    def _parse_response(self, response) -> Dict[str, Any]:
+    def _call_with_retry(self, system_prompt: str, user_text: str):
+        """Call the Responses API with retry on transient errors."""
+        last_exc: Exception | None = None
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                return self.client.responses.create(
+                    model=self.model,
+                    max_output_tokens=_MAX_OUTPUT_TOKENS,
+                    input=[
+                        {
+                            "role": "developer",
+                            "content": [{"type": "input_text", "text": system_prompt}],
+                        },
+                        {
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": user_text}],
+                        },
+                    ],
+                    tools=[{"type": "web_search_preview"}],
+                )
+            except RateLimitError as e:
+                last_exc = e
+                wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                logger.warning(
+                    f"Rate limited by OpenAI (attempt {attempt + 1}/{_MAX_RETRIES}), retrying in {wait}s: {e.message}"
+                )
+                time.sleep(wait)
+                continue
+            except APIStatusError as e:
+                last_exc = e
+                if e.status_code not in _TRANSIENT_STATUS_CODES:
+                    logger.error(f"API error {e.status_code}: {e}")
+                    raise
+                wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                logger.warning(
+                    f"Transient API error {e.status_code} (attempt {attempt + 1}/{_MAX_RETRIES}), retrying in {wait}s"
+                )
+                time.sleep(wait)
+
+        logger.error(f"Deep research failed after {_MAX_RETRIES} attempts")
+        raise last_exc  # type: ignore[misc]
+
+    @staticmethod
+    def _resolve_angles(
+        scenario: str,
+        overrides: dict[str, bool] | None,
+    ) -> list[str]:
+        """Merge LLM-classified angles with explicit user overrides."""
+        auto_ids = set(classify_scenario(scenario))
+
+        if not overrides:
+            return sorted(auto_ids)
+
+        valid_ids = set(ALL_ANGLE_IDS)
+        result = set(auto_ids)
+        for angle_id, forced_on in overrides.items():
+            if angle_id not in valid_ids:
+                continue
+            if forced_on:
+                result.add(angle_id)
+            else:
+                result.discard(angle_id)
+
+        return sorted(result)
+
+    def _parse_response(self, response) -> dict[str, Any]:
         summary_md = ""
-        sources: List[Dict[str, str]] = []
-        search_queries: List[str] = []
+        sources: list[dict[str, str]] = []
+        search_queries: list[str] = []
         seen_urls: set = set()
 
         for item in response.output:
@@ -110,9 +159,12 @@ class DeepResearchAgent:
         historical_precedents = self._extract_section(summary_md, "Historical Precedents")
         quantitative_anchors = self._extract_section(summary_md, "Quantitative Anchors")
 
+        structured_precedents = self._structure_precedents(historical_precedents, quantitative_anchors, sources)
+
         logger.info(
             f"Deep research complete: {len(sources)} sources, "
-            f"{len(key_facts)} key facts, {len(search_queries)} searches"
+            f"{len(key_facts)} key facts, {len(search_queries)} searches, "
+            f"{len(structured_precedents)} structured precedents"
         )
 
         return {
@@ -120,13 +172,14 @@ class DeepResearchAgent:
             "key_facts": key_facts,
             "historical_precedents": historical_precedents,
             "quantitative_anchors": quantitative_anchors,
+            "structured_precedents": structured_precedents,
             "summary_md": summary_md,
             "search_queries": search_queries,
         }
 
     @staticmethod
-    def _extract_key_facts(md: str) -> List[str]:
-        facts: List[str] = []
+    def _extract_key_facts(md: str) -> list[str]:
+        facts: list[str] = []
         in_facts = False
         for line in md.split("\n"):
             stripped = line.strip()
@@ -145,8 +198,8 @@ class DeepResearchAgent:
         return facts
 
     @staticmethod
-    def _extract_section(md: str, heading: str) -> List[str]:
-        items: List[str] = []
+    def _extract_section(md: str, heading: str) -> list[str]:
+        items: list[str] = []
         in_section = False
         for line in md.split("\n"):
             stripped = line.strip()
@@ -160,6 +213,79 @@ class DeepResearchAgent:
                 if stripped.startswith("- ") or stripped.startswith("* "):
                     items.append(stripped[2:].strip())
         return items
+
+    def _structure_precedents(
+        self,
+        precedents: list[str],
+        anchors: list[str],
+        sources: list[dict],
+    ) -> list[dict]:
+        """
+        Convert raw markdown precedents into structured objects via LLM.
+        Each gets: event, outcome, timeline, relevance_score, key_metric, source_url.
+        """
+        if not precedents:
+            return []
+
+        combined = "\n".join(f"- {p}" for p in precedents)
+        anchors_text = "\n".join(f"- {a}" for a in anchors) if anchors else "None"
+        source_urls = [s.get("url", "") for s in sources[:10]]
+
+        system = """\
+You are a research analyst structuring historical precedents for comparison with a scenario simulation.
+
+Return ONLY valid JSON:
+{
+  "precedents": [
+    {
+      "event": "Name of the historical event or case",
+      "outcome": "What happened — the result or resolution",
+      "timeline": "When it occurred and how long it took to resolve",
+      "relevance_score": 0.0-1.0,
+      "key_metric": "Most important quantitative figure from this precedent",
+      "source_url": "URL if identifiable from the sources list, otherwise empty string"
+    }
+  ]
+}
+
+Rules:
+- relevance_score: 1.0 = same mechanism and comparable actors/constraints; 0.5 = partial analogy; \
+0.0 = surface similarity only. Down-rank analogies that differ on veto players, institutions, or scale.
+- key_metric: a specific number, percentage, or financial figure with units if given (e.g. \
+"42% market share decline in 18 months"); use empty string if no numeric anchor exists.
+- Include ALL precedents from the input, even if relevance is low
+- Be concise: event and outcome should each be 1-2 sentences; do not invent facts not in the input \
+or source URLs not in the provided list
+"""
+        user = (
+            f"[Historical precedents from research]\n{combined}\n\n"
+            f"[Quantitative anchors]\n{anchors_text}\n\n"
+            f"[Available source URLs]\n{chr(10).join(source_urls)}"
+        )
+
+        try:
+            from ..utils.llm_client import LLMClient
+
+            llm = LLMClient()
+            data = llm.chat_json(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.15,
+                max_tokens=2000,
+            )
+            result = data.get("precedents", [])
+            for p in result:
+                p["relevance_score"] = max(0.0, min(1.0, float(p.get("relevance_score", 0.5))))
+            result.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+            return result
+        except Exception as e:
+            logger.warning(f"Failed to structure precedents: {e}")
+            return [
+                {"event": p, "outcome": "", "timeline": "", "relevance_score": 0.5, "key_metric": "", "source_url": ""}
+                for p in precedents
+            ]
 
     @staticmethod
     def source_id_from_url(url: str) -> str:

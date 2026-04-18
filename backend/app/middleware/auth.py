@@ -1,13 +1,12 @@
 """JWT authentication middleware using Supabase."""
 
-import os
 import functools
 from flask import request, jsonify, g
 import jwt
 from ..config import Config
 from ..utils.logger import get_logger
 
-logger = get_logger('glas.auth')
+logger = get_logger("glas.auth")
 
 ANONYMOUS_USER_ID = "anonymous"
 
@@ -60,6 +59,7 @@ def extract_user_from_request():
 
 def require_auth(f):
     """Decorator that rejects unauthenticated requests."""
+
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         if not Config.SUPABASE_URL or not Config.SUPABASE_JWT_SECRET:
@@ -70,12 +70,15 @@ def require_auth(f):
         if not getattr(g, "user_id", None):
             return jsonify({"success": False, "error": "Authentication required"}), 401
         return f(*args, **kwargs)
+
     return wrapper
 
 
 def optional_auth(f):
     """Decorator that allows unauthenticated requests (user_id may be None)."""
+
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         return f(*args, **kwargs)
+
     return wrapper

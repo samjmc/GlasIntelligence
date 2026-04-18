@@ -12,8 +12,8 @@ from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
 
-source_agent_bp = Blueprint('source_agent', __name__)
-logger = get_logger('glas.source_agent')
+source_agent_bp = Blueprint("source_agent", __name__)
+logger = get_logger("glas.source_agent")
 
 SUGGEST_SYSTEM_PROMPT = """You are a research analyst for Glas Intelligence, a scenario simulation platform.
 The user will describe a scenario they want to simulate. Your job is to suggest 3-5 specific source documents
@@ -35,11 +35,11 @@ The user will describe a scenario. You must produce a comprehensive markdown bri
 2. **Key Stakeholders** — Who are the major players? What are their positions and interests?
 3. **Current State** — What is the status quo? Key data points, regulations, market conditions.
 4. **Scenario Variables** — What could change? What are the key decision points?
-5. **Historical Precedents** — Similar situations that have played out before.
+5. **Historical Precedents** — Similar situations that have played out before (mechanism-level parallels, not just keywords).
 
-Write 800-1200 words. Use specific names, dates, and figures where possible.
+Write 800-1200 words. Use specific names, dates, and figures where possible; flag uncertain or contested claims.
 This briefing will be fed into a multi-agent simulation engine, so focus on information that helps
-model stakeholder behavior and reactions."""
+model stakeholder behavior and reactions: incentives, constraints, audiences, and plausible if–then reactions."""
 
 
 def _get_llm_client():
@@ -48,7 +48,7 @@ def _get_llm_client():
     return OpenAI(api_key=Config.LLM_API_KEY, base_url=Config.LLM_BASE_URL)
 
 
-@source_agent_bp.route('/suggest-sources', methods=['POST'])
+@source_agent_bp.route("/suggest-sources", methods=["POST"])
 @optional_auth
 def suggest_sources():
     """Suggest source documents for a given scenario. Available to all users."""
@@ -57,7 +57,7 @@ def suggest_sources():
         return jsonify({"success": False, "error": "LLM not configured"}), 503
 
     data = request.get_json() or {}
-    prompt = data.get('prompt', '').strip()
+    prompt = data.get("prompt", "").strip()
 
     if not prompt or len(prompt) < 10:
         return jsonify({"success": False, "error": "Please describe your scenario in more detail"}), 400
@@ -84,25 +84,27 @@ def suggest_sources():
         return jsonify({"success": False, "error": "Failed to analyze scenario"}), 500
 
 
-@source_agent_bp.route('/auto-research', methods=['POST'])
+@source_agent_bp.route("/auto-research", methods=["POST"])
 @require_auth
 def auto_research():
     """Generate a research briefing. Requires auth + paid plan (does not deduct credits)."""
     profile = SupabaseDB.get_profile(g.user_id)
-    plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
+    plan = Config.normalize_plan(profile.get("plan", "free") if profile else "free")
 
-    if plan == 'free':
-        return jsonify({
-            "success": False,
-            "error": "Auto-research requires a Pro or Business subscription",
-        }), 403
+    if plan == "free":
+        return jsonify(
+            {
+                "success": False,
+                "error": "Auto-research requires a Pro or Business subscription",
+            }
+        ), 403
 
     client = _get_llm_client()
     if not client:
         return jsonify({"success": False, "error": "LLM not configured"}), 503
 
     data = request.get_json() or {}
-    prompt = data.get('prompt', '').strip()
+    prompt = data.get("prompt", "").strip()
 
     if not prompt or len(prompt) < 10:
         return jsonify({"success": False, "error": "Please describe your scenario in more detail"}), 400
@@ -121,17 +123,19 @@ def auto_research():
         if not response.choices:
             return jsonify({"success": False, "error": "No response from LLM"}), 502
         content_md = response.choices[0].message.content
-        safe_title = re.sub(r'[^\w\-]', '_', prompt[:60])
+        safe_title = re.sub(r"[^\w\-]", "_", prompt[:60])
         filename = f"briefing_{safe_title}.md"
 
-        return jsonify({
-            "success": True,
-            "data": {
-                "title": f"Research Briefing: {prompt[:80]}",
-                "content_md": content_md,
-                "filename": filename,
-            },
-        })
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "title": f"Research Briefing: {prompt[:80]}",
+                    "content_md": content_md,
+                    "filename": filename,
+                },
+            }
+        )
 
     except Exception as e:
         logger.error(f"auto-research failed: {e}")
@@ -140,40 +144,57 @@ def auto_research():
 
 # ============== Deep Research (OpenAI Responses API) ==============
 
-@source_agent_bp.route('/deep-research', methods=['POST'])
+
+@source_agent_bp.route("/deep-research", methods=["POST"])
 @require_auth
 def start_deep_research():
-    """Launch deep research as a background task. Requires auth + paid plan."""
+    """Launch deep research as a background task. Requires auth + research credits.
+
+    DEPRECATED: Use POST /api/session/:id/research instead for session-based
+    research with Supabase persistence and credit management.
+    """
     if not Config.DEEP_RESEARCH_ENABLED:
         return jsonify({"success": False, "error": "Deep research is not enabled"}), 403
 
-    profile = SupabaseDB.get_profile(g.user_id)
-    plan = Config.normalize_plan(profile.get('plan', 'free') if profile else 'free')
-    if plan == 'free':
-        return jsonify({
-            "success": False,
-            "error": "Deep research requires a Pro or Business subscription",
-        }), 403
+    if not SupabaseDB.deduct_research_credit(g.user_id, "Deep research (legacy endpoint)"):
+        profile = SupabaseDB.get_profile(g.user_id)
+        return jsonify(
+            {
+                "success": False,
+                "error": "no_research_credits",
+                "research_credits": profile.get("research_credits", 0) if profile else 0,
+                "message": "No research credits remaining.",
+            }
+        ), 402
 
     data = request.get_json() or {}
-    prompt = data.get('prompt', '').strip()
+    prompt = data.get("prompt", "").strip()
     if not prompt or len(prompt) < 10:
+        SupabaseDB.refund_research_credit(g.user_id, "Invalid prompt — refund")
         return jsonify({"success": False, "error": "Please describe your scenario in more detail"}), 400
 
+    angle_overrides = data.get("angle_overrides") or None
+    if angle_overrides is not None and not isinstance(angle_overrides, dict):
+        angle_overrides = None
+
+    user_id = g.user_id
     tm = TaskManager()
     task_id = tm.create_task("deep_research")
     tm.update_task(task_id, status=TaskStatus.PROCESSING, message="Starting deep research...")
 
     def _run():
         try:
-            tm.update_task(task_id, message="Research in progress...")
+            tm.update_task(task_id, message="Classifying scenario and selecting research angles...")
             from ..services.deep_research_agent import DeepResearchAgent
+
             agent = DeepResearchAgent()
-            dossier = agent.run(prompt)
+            tm.update_task(task_id, message="Research in progress...")
+            dossier = agent.run(prompt, angle_overrides=angle_overrides)
             tm.complete_task(task_id, dossier)
-        except Exception as exc:
+        except Exception:
             logger.exception("Deep research background task failed")
             tm.fail_task(task_id, "Deep research failed. Please try again.")
+            SupabaseDB.refund_research_credit(user_id, "Deep research failed — refund")
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
@@ -181,7 +202,7 @@ def start_deep_research():
     return jsonify({"success": True, "data": {"task_id": task_id}})
 
 
-@source_agent_bp.route('/deep-research/status/<task_id>', methods=['GET'])
+@source_agent_bp.route("/deep-research/status/<task_id>", methods=["GET"])
 @require_auth
 def deep_research_status(task_id):
     """Poll deep research task status."""
@@ -191,7 +212,7 @@ def deep_research_status(task_id):
     return jsonify({"success": True, "data": task.to_dict()})
 
 
-@source_agent_bp.route('/deep-research/result/<task_id>', methods=['GET'])
+@source_agent_bp.route("/deep-research/result/<task_id>", methods=["GET"])
 @require_auth
 def deep_research_result(task_id):
     """Retrieve completed deep research dossier."""

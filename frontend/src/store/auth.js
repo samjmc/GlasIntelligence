@@ -56,3 +56,12 @@ export async function signOut() {
 export function getAccessToken() {
   return authState.session?.access_token || ''
 }
+
+export async function refreshAccessToken() {
+  if (!supabase) return
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session) {
+    authState.session = session
+    authState.user = session.user ?? null
+  }
+}
