@@ -188,9 +188,14 @@ export const getSimulationHistory = (limit = 20) => {
 /**
  * Start deep research (async background task)
  * @param {string} scenario - The scenario prompt to research
+ * @param {Object} [angleOverrides] - Optional { angle_id: true|false } overrides
  */
-export const startDeepResearch = (scenario) => {
-  return service.post('/api/source/deep-research', { prompt: scenario })
+export const startDeepResearch = (scenario, angleOverrides) => {
+  const body = { prompt: scenario }
+  if (angleOverrides && Object.keys(angleOverrides).length > 0) {
+    body.angle_overrides = angleOverrides
+  }
+  return service.post('/api/source/deep-research', body)
 }
 
 /**
@@ -250,6 +255,57 @@ export const completeBundleScenario = (bundleId, data) => {
 }
 
 /**
+ * Update a decision bundle (scenarios, status, etc.)
+ * @param {string} bundleId
+ * @param {Object} fields
+ */
+export const updateBundle = (bundleId, fields) => {
+  return service.patch(`/api/bundle/${bundleId}`, fields)
+}
+
+/**
+ * Start executing all scenarios in a bundle sequentially
+ * @param {string} bundleId
+ * @param {Object} data - { session_id }
+ */
+export const runBundle = (bundleId, data) => {
+  return service.post(`/api/bundle/${bundleId}/run`, data)
+}
+
+/**
+ * Get bundle execution status
+ * @param {string} bundleId
+ */
+export const getBundleStatus = (bundleId) => {
+  return service.get(`/api/bundle/${bundleId}/status`)
+}
+
+/**
+ * Get bundle comparison data
+ * @param {string} bundleId
+ */
+export const getBundleComparison = (bundleId) => {
+  return service.get(`/api/bundle/${bundleId}/comparison`)
+}
+
+/**
+ * Get bundle executive synthesis JSON (if generated)
+ * @param {string} bundleId
+ */
+export const getBundleSynthesis = (bundleId) => {
+  return service.get(`/api/bundle/${bundleId}/synthesis`)
+}
+
+/**
+ * PATCH branch weights; server recomputes marginals
+ * @param {string} bundleId
+ * @param {{ branch_weights: Array<{ scenario_index: number, p_branch: number }> }} body
+ */
+export const patchBundleSynthesisWeights = (bundleId, body) => {
+  return service.patch(`/api/bundle/${bundleId}/synthesis/weights`, body)
+}
+
+/**
  * Delete a decision bundle
  * @param {string} bundleId
  */
@@ -278,5 +334,105 @@ export const createReminder = (data) => {
  */
 export const listReminders = () => {
   return service.get('/api/simulation/reminders')
+}
+
+// ── Scenario Sessions ──
+
+/**
+ * Create a scenario session (deducts 1 credit)
+ * @param {string} prompt
+ * @param {Object} [decisionContext]
+ */
+export const createSession = (prompt, decisionContext) => {
+  return service.post('/api/session', { prompt, decision_context: decisionContext || {} })
+}
+
+/**
+ * Get user's active (non-completed/abandoned) sessions
+ */
+export const getActiveSessions = () => {
+  return service.get('/api/session/active')
+}
+
+/**
+ * Get a session by ID
+ * @param {string} sessionId
+ */
+export const getSession = (sessionId) => {
+  return service.get(`/api/session/${sessionId}`)
+}
+
+/**
+ * Update session fields (prompt, decision_context, bundle_config)
+ * @param {string} sessionId
+ * @param {Object} fields
+ */
+export const updateSession = (sessionId, fields) => {
+  return service.patch(`/api/session/${sessionId}`, fields)
+}
+
+/**
+ * Upload files to a session
+ * @param {string} sessionId
+ * @param {FormData} formData
+ */
+export const uploadSessionFiles = (sessionId, formData) => {
+  return service.post(`/api/session/${sessionId}/files`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/**
+ * Get signed download URL for a session file
+ * @param {string} sessionId
+ * @param {string} filename
+ */
+export const getSessionFileUrl = (sessionId, filename) => {
+  return service.get(`/api/session/${sessionId}/files/${encodeURIComponent(filename)}`)
+}
+
+/**
+ * Start deep research within a session (free if retrying)
+ * @param {string} sessionId
+ * @param {Object} [angleOverrides]
+ */
+export const startSessionResearch = (sessionId, angleOverrides) => {
+  const body = {}
+  if (angleOverrides && Object.keys(angleOverrides).length > 0) {
+    body.angle_overrides = angleOverrides
+  }
+  return service.post(`/api/session/${sessionId}/research`, body)
+}
+
+/**
+ * Poll session research status
+ * @param {string} sessionId
+ */
+export const getSessionResearchStatus = (sessionId) => {
+  return service.get(`/api/session/${sessionId}/research/status`)
+}
+
+/**
+ * Abandon a session (no refund)
+ * @param {string} sessionId
+ */
+export const abandonSession = (sessionId) => {
+  return service.post(`/api/session/${sessionId}/abandon`)
+}
+
+/**
+ * Check if user can run research (has research credits)
+ */
+export const canResearch = () => {
+  return service.get('/api/billing/can-research')
+}
+
+/**
+ * Buy research credits via Stripe checkout
+ * @param {'research_1'|'research_5'} product
+ * @param {string} [sessionId] - Optional session ID for return URL
+ */
+export const buyResearchCredits = (product, sessionId) => {
+  return service.post('/api/billing/checkout', { product, session_id: sessionId || '' })
 }
 

@@ -126,13 +126,80 @@
                 </div>
               </div>
 
+              <div v-if="decisionPayload.recommended_actions?.length" class="decision-section action-plan-section">
+                <h4>Recommended Actions</h4>
+                <div class="action-plan-list">
+                  <div v-for="(a, i) in decisionPayload.recommended_actions" :key="i" class="action-plan-item" :class="'priority-' + a.priority">
+                    <div class="action-plan-header">
+                      <span class="action-priority-badge" :class="'priority-' + a.priority">{{ a.priority }}</span>
+                      <span class="action-timeline-badge">{{ a.timeline }}</span>
+                    </div>
+                    <p class="action-plan-text">{{ a.action }}</p>
+                    <p v-if="a.rationale" class="action-plan-rationale">{{ a.rationale }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="decisionPayload.decision_criteria?.length" class="decision-section criteria-section">
+                <h4>Decision Criteria</h4>
+                <p class="criteria-desc">Validate these before acting on the verdict</p>
+                <div class="criteria-list">
+                  <label v-for="(dc, i) in decisionPayload.decision_criteria" :key="i" class="criteria-item">
+                    <input type="checkbox" class="criteria-checkbox" />
+                    <span class="criteria-text">{{ dc }}</span>
+                  </label>
+                </div>
+              </div>
+
+              <div v-if="decisionPayload.monitoring_indicators?.length" class="decision-section monitoring-section">
+                <h4>Monitoring Indicators</h4>
+                <div class="monitoring-grid">
+                  <div v-for="(m, i) in decisionPayload.monitoring_indicators" :key="i" class="monitoring-card">
+                    <div class="monitoring-indicator-name">{{ m.indicator }}</div>
+                    <div class="monitoring-row">
+                      <span class="monitoring-label">Current</span>
+                      <span class="monitoring-value">{{ m.current_state }}</span>
+                    </div>
+                    <div class="monitoring-row">
+                      <span class="monitoring-label">Threshold</span>
+                      <span class="monitoring-value monitoring-threshold">{{ m.threshold }}</span>
+                    </div>
+                    <div class="monitoring-row">
+                      <span class="monitoring-label">If triggered</span>
+                      <span class="monitoring-value monitoring-action">{{ m.action_if_triggered }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="decisionPayload.time_sensitivity" class="decision-section time-sensitivity-section">
+                <h4>Time Sensitivity</h4>
+                <div class="time-sensitivity-card">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>{{ decisionPayload.time_sensitivity }}</span>
+                </div>
+              </div>
+
               <div v-if="scenarioLadder.length" class="decision-section scenario-outcomes-section">
                 <h4>Scenario Outcomes</h4>
                 <div class="scenario-outcomes">
                   <div v-for="(sc, i) in scenarioLadder" :key="i" class="scenario-outcome-card">
                     <div class="scenario-outcome-header">
                       <span class="scenario-outcome-name">{{ sc.name }}</span>
-                      <span v-if="sc.qualitative_only" class="qualitative-tag">qualitative estimate</span>
+                      <span v-if="sc.qualitative_only" class="qualitative-tag">
+                        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        qualitative estimate
+                      </span>
+                      <span v-else class="data-backed-tag">
+                        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        data-backed
+                      </span>
+                    </div>
+                    <div v-if="sc.assumptions?.length" class="scenario-assumptions">
+                      <span class="scenario-assumptions-label">Assumptions</span>
+                      <ul class="scenario-assumptions-list">
+                        <li v-for="(a, ai) in sc.assumptions" :key="ai">{{ a }}</li>
+                      </ul>
                     </div>
                     <div v-if="sc.probability_range && sc.probability_range.low != null" class="probability-bar-container">
                       <div class="probability-bar">
@@ -146,9 +213,26 @@
                         <span>{{ sc.probability_range.high ?? 0 }}%</span>
                       </div>
                     </div>
+                    <div v-if="sc._meta?.mc_ci_95" class="scenario-mc-overlay">
+                      <span class="scenario-mc-label">MC 95% CI:</span>
+                      <span class="scenario-mc-range">[{{ sc._meta.mc_ci_95[0]?.toFixed(1) }}%, {{ sc._meta.mc_ci_95[1]?.toFixed(1) }}%]</span>
+                      <span v-if="sc._meta.mc_mean" class="scenario-mc-mean">mean {{ sc._meta.mc_mean?.toFixed(1) }}%</span>
+                    </div>
+                    <div v-if="sc._meta?.non_exhaustive" class="scenario-non-exhaustive">
+                      Scenario probabilities sum to {{ sc._meta.probability_sum }}% (non-exhaustive)
+                    </div>
                     <p v-if="sc.outcome_narrative" class="scenario-outcome-narrative">{{ sc.outcome_narrative }}</p>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Consistency Warnings -->
+            <div v-if="consistencyWarnings.length" class="decision-section consistency-warnings-section">
+              <h4>Data Consistency Notes</h4>
+              <div v-for="(w, i) in consistencyWarnings" :key="i" class="consistency-warning">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>{{ w.message }}</span>
               </div>
             </div>
           </div>
@@ -193,6 +277,353 @@
               </div>
 
               <p v-if="!groundingSources.length && !groundingClaims.length" class="grounding-empty">No structured grounding data available for this simulation.</p>
+            </div>
+          </div>
+
+          <!-- Simulation Analytics Dashboard (from quant payload) -->
+          <div v-if="isComplete && hasQuantData" class="quant-dashboard">
+            <div class="quant-dashboard-header">
+              <h3 class="quant-dashboard-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Simulation Analytics
+              </h3>
+            </div>
+
+            <div class="quant-grid">
+              <!-- Escalation Timeline -->
+              <div v-if="escalationData && escalationData.intensity_curve?.length" class="quant-card quant-card-wide">
+                <div class="quant-card-header">
+                  <h4>Escalation Timeline</h4>
+                  <span class="quant-trend-badge" :class="'trend-' + (escalationData.overall_trend || 'stable')">
+                    {{ escalationData.overall_trend }}
+                  </span>
+                </div>
+                <div class="escalation-chart">
+                  <div class="escalation-bars">
+                    <div 
+                      v-for="(point, i) in escalationData.intensity_curve" 
+                      :key="i" 
+                      class="escalation-bar-wrapper"
+                      :title="'Round ' + point.round + ': ' + point.total_actions + ' actions'"
+                    >
+                      <div 
+                        class="escalation-bar" 
+                        :class="{ 'is-peak': point.round === escalationData.peak_round }"
+                        :style="{ height: (point.normalized_intensity * 100) + '%' }"
+                      ></div>
+                      <span class="escalation-round-label">{{ point.round }}</span>
+                    </div>
+                  </div>
+                  <div v-if="escalationData.turning_points?.length" class="escalation-turning-points">
+                    <span v-for="(tp, i) in escalationData.turning_points" :key="i" class="turning-point-tag">
+                      R{{ tp.round }}: {{ tp.description }}
+                    </span>
+                  </div>
+                </div>
+                <div class="escalation-meta">
+                  <span>{{ escalationData.total_rounds }} rounds</span>
+                  <span>Peak: Round {{ escalationData.peak_round }}</span>
+                  <span v-if="escalationData.escalation_detected" class="escalation-alert">Escalation detected</span>
+                </div>
+              </div>
+
+              <!-- Stance Distribution -->
+              <div v-if="stanceData && stanceData.position_distribution" class="quant-card">
+                <div class="quant-card-header">
+                  <h4>Stance Distribution</h4>
+                  <span class="quant-agents-count">{{ stanceData.agents_analyzed }} agents</span>
+                </div>
+                <div class="stance-bars">
+                  <div v-for="position in ['supportive', 'opposing', 'neutral', 'ambivalent']" :key="position" class="stance-row">
+                    <span class="stance-label">{{ position }}</span>
+                    <div class="stance-bar-track">
+                      <div class="stance-bar-fill" :class="'stance-' + position" :style="{ width: (stanceData.position_distribution[position] || 0) + '%' }"></div>
+                    </div>
+                    <span class="stance-pct">{{ (stanceData.position_distribution[position] || 0).toFixed(0) }}%</span>
+                  </div>
+                </div>
+                <div v-if="consensusData" class="consensus-meta">
+                  <div class="consensus-stat">
+                    <span class="consensus-stat-label">Polarization</span>
+                    <span class="consensus-stat-value" :class="consensusData.polarization_index > 0.7 ? 'pol-high' : consensusData.polarization_index > 0.4 ? 'pol-moderate' : 'pol-low'">
+                      {{ (consensusData.polarization_index * 100).toFixed(0) }}%
+                    </span>
+                  </div>
+                  <div class="consensus-stat">
+                    <span class="consensus-stat-label">Agreement</span>
+                    <span class="consensus-stat-value">{{ (consensusData.agreement_ratio || 0).toFixed(0) }}%</span>
+                  </div>
+                  <div class="consensus-stat">
+                    <span class="consensus-stat-label">Factions</span>
+                    <span class="consensus-stat-value">{{ consensusData.faction_count }}</span>
+                  </div>
+                </div>
+                <div v-if="consensusData?.key_fault_lines?.length" class="fault-lines">
+                  <span v-for="(fl, i) in consensusData.key_fault_lines" :key="i" class="fault-line-tag">{{ fl }}</span>
+                </div>
+              </div>
+
+              <!-- Risk Heatmap -->
+              <div v-if="riskMatrixData && riskMatrixData.risks?.length" class="quant-card">
+                <div class="quant-card-header">
+                  <h4>Risk Matrix</h4>
+                  <span class="quant-risk-count">{{ riskMatrixData.risks.length }} risks</span>
+                </div>
+                <div class="risk-grid">
+                  <div class="risk-grid-labels">
+                    <span class="risk-axis-label risk-y-label">Impact</span>
+                    <span class="risk-axis-label risk-x-label">Likelihood</span>
+                  </div>
+                  <div class="risk-grid-cells">
+                    <template v-for="impact in [5, 4, 3, 2, 1]" :key="'row-' + impact">
+                      <div v-for="likelihood in [1, 2, 3, 4, 5]" :key="'cell-' + impact + '-' + likelihood" 
+                        class="risk-cell" 
+                        :class="getRiskCellClass(likelihood, impact)"
+                      >
+                        <span v-for="(r, ri) in getRisksInCell(likelihood, impact)" :key="ri" class="risk-dot" :title="r.risk">
+                          {{ ri + 1 }}
+                        </span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+                <div class="risk-legend">
+                  <div v-for="(r, i) in riskMatrixData.top_risks?.slice(0, 3)" :key="i" class="risk-legend-item">
+                    <span class="risk-legend-dot" :class="'severity-' + r.severity"></span>
+                    <span class="risk-legend-text">{{ r.risk }}</span>
+                  </div>
+                </div>
+                <p v-if="riskMatrixData.risk_summary" class="risk-summary-text">{{ riskMatrixData.risk_summary }}</p>
+              </div>
+
+              <!-- Stakeholder Impact Matrix -->
+              <div v-if="stakeholderData?.rows?.length" class="quant-card quant-card-wide">
+                <div class="quant-card-header">
+                  <h4>Stakeholder Impact</h4>
+                </div>
+                <div class="stakeholder-table-wrapper">
+                  <table class="stakeholder-table">
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Majority Stance</th>
+                        <th>Intensity</th>
+                        <th>Activity</th>
+                        <th>Escalation</th>
+                        <th>Voice Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, i) in stakeholderData.rows" :key="i">
+                        <td class="stakeholder-type">{{ row.entity_type }}</td>
+                        <td><span class="stance-mini-badge" :class="'stance-' + row.stance_majority">{{ row.stance_majority }}</span></td>
+                        <td>
+                          <div class="intensity-bar-mini">
+                            <div class="intensity-fill" :style="{ width: (row.avg_intensity / 5 * 100) + '%' }"></div>
+                          </div>
+                          <span class="intensity-value">{{ row.avg_intensity.toFixed(1) }}</span>
+                        </td>
+                        <td :class="row.activity_index > 1.5 ? 'activity-high' : row.activity_index < 0.5 ? 'activity-low' : ''">
+                          {{ row.activity_index.toFixed(2) }}x
+                        </td>
+                        <td :class="row.escalation_exposure > 30 ? 'escalation-high' : ''">
+                          {{ row.escalation_exposure.toFixed(1) }}%
+                        </td>
+                        <td>{{ row.voice_share_pct.toFixed(1) }}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Simulation Activity Summary -->
+              <div v-if="simulationMetrics" class="quant-card">
+                <div class="quant-card-header">
+                  <h4>Activity Summary</h4>
+                </div>
+                <div class="activity-stats">
+                  <div class="activity-stat">
+                    <span class="activity-stat-value">{{ simulationMetrics.total_actions?.toLocaleString() }}</span>
+                    <span class="activity-stat-label">Total Actions</span>
+                  </div>
+                  <div class="activity-stat">
+                    <span class="activity-stat-value">{{ simulationMetrics.total_agents }}</span>
+                    <span class="activity-stat-label">Agents</span>
+                  </div>
+                  <div class="activity-stat">
+                    <span class="activity-stat-value">{{ simulationMetrics.total_rounds }}</span>
+                    <span class="activity-stat-label">Rounds</span>
+                  </div>
+                  <div class="activity-stat">
+                    <span class="activity-stat-value">{{ (simulationMetrics.engagement_rate || 0).toFixed(1) }}%</span>
+                    <span class="activity-stat-label">Engagement</span>
+                  </div>
+                </div>
+                <div v-if="simulationMetrics.platform_ratio" class="platform-split">
+                  <div class="platform-bar">
+                    <div class="platform-segment platform-twitter" :style="{ width: (simulationMetrics.platform_ratio.twitter || 0) + '%' }"></div>
+                    <div class="platform-segment platform-reddit" :style="{ width: (simulationMetrics.platform_ratio.reddit || 0) + '%' }"></div>
+                  </div>
+                  <div class="platform-labels">
+                    <span class="platform-label"><span class="platform-dot dot-twitter"></span>Twitter {{ (simulationMetrics.platform_ratio.twitter || 0).toFixed(0) }}%</span>
+                    <span class="platform-label"><span class="platform-dot dot-reddit"></span>Reddit {{ (simulationMetrics.platform_ratio.reddit || 0).toFixed(0) }}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Monte Carlo Analysis (from MC engine) -->
+          <div v-if="isComplete && mcComposite" class="mc-dashboard">
+            <div class="mc-dashboard-header">
+              <h3 class="mc-dashboard-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                Probabilistic Analysis
+              </h3>
+              <div class="mc-convergence-badge" :class="mcComposite.convergence?.converged ? 'converged' : 'not-converged'">
+                <span class="mc-conv-dot"></span>
+                {{ mcComposite.convergence?.converged ? 'Converged' : 'Low confidence' }}
+                <span class="mc-iterations">{{ mcComposite.metadata?.iterations?.toLocaleString() }} iterations</span>
+              </div>
+            </div>
+
+            <!-- Composite Distribution Chart -->
+            <div class="mc-card mc-hero-card">
+              <div class="mc-card-header">
+                <h4>Overall Scenario Favorability</h4>
+                <span class="mc-disclaimer">simulation-derived uncertainty envelope</span>
+              </div>
+
+              <div class="mc-histogram">
+                <div class="mc-histogram-bars">
+                  <div 
+                    v-for="(bin, i) in mcComposite.histogram" 
+                    :key="i"
+                    class="mc-hist-bar-wrapper"
+                    :title="bin.center?.toFixed(1) + '%: ' + bin.count + ' samples (' + bin.percentage?.toFixed(1) + '%)'"
+                  >
+                    <div 
+                      class="mc-hist-bar"
+                      :class="getMcBarClass(bin, mcComposite.confidence_intervals)"
+                      :style="{ height: getHistBarHeight(bin, mcComposite.histogram) + '%' }"
+                    ></div>
+                  </div>
+                </div>
+                <div class="mc-histogram-axis">
+                  <span>{{ mcComposite.histogram?.[0]?.min?.toFixed(0) }}%</span>
+                  <span>{{ mcComposite.mean?.toFixed(1) }}%</span>
+                  <span>{{ mcComposite.histogram?.[mcComposite.histogram.length - 1]?.max?.toFixed(0) }}%</span>
+                </div>
+              </div>
+
+              <div class="mc-ci-bands">
+                <div v-for="(ci, level) in mcComposite.confidence_intervals" :key="level" class="mc-ci-row">
+                  <span class="mc-ci-label">{{ level }} CI</span>
+                  <div class="mc-ci-bar-track">
+                    <div 
+                      class="mc-ci-bar-fill" 
+                      :class="'ci-level-' + level.replace('%', '')"
+                      :style="getCiBandStyle(ci, mcComposite)"
+                    ></div>
+                    <div class="mc-ci-mean-marker" :style="getMeanMarkerStyle(mcComposite)"></div>
+                  </div>
+                  <span class="mc-ci-range">[{{ ci[0]?.toFixed(1) }}%, {{ ci[1]?.toFixed(1) }}%]</span>
+                </div>
+              </div>
+
+              <div class="mc-summary-stats">
+                <div class="mc-stat">
+                  <span class="mc-stat-label">Mean</span>
+                  <span class="mc-stat-value">{{ mcComposite.mean?.toFixed(1) }}%</span>
+                </div>
+                <div class="mc-stat">
+                  <span class="mc-stat-label">Median</span>
+                  <span class="mc-stat-value">{{ mcComposite.median?.toFixed(1) }}%</span>
+                </div>
+                <div class="mc-stat">
+                  <span class="mc-stat-label">Std Dev</span>
+                  <span class="mc-stat-value">{{ mcComposite.std_dev?.toFixed(2) }}%</span>
+                </div>
+                <div class="mc-stat">
+                  <span class="mc-stat-label">Mode</span>
+                  <span class="mc-stat-value">{{ mcComposite.mode?.toFixed(1) }}%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tail Risk Callout -->
+            <div v-if="mcComposite.tail_risk" class="mc-card mc-tail-risk-card">
+              <div class="mc-tail-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div class="mc-tail-content">
+                <h4>Tail Risk Assessment</h4>
+                <p>In the <strong>worst 5%</strong> of simulated outcomes, the expected scenario favorability is <strong>{{ mcComposite.tail_risk.expected_shortfall?.toFixed(1) }}%</strong>.</p>
+                <div class="mc-tail-stats">
+                  <span>1st percentile: {{ mcComposite.tail_risk.percentile_1?.toFixed(1) }}%</span>
+                  <span>5th percentile: {{ mcComposite.tail_risk.percentile_5?.toFixed(1) }}%</span>
+                  <span>99th percentile: {{ mcComposite.tail_risk.percentile_99?.toFixed(1) }}%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Per-Outcome MC Results -->
+            <div v-if="mcPerOutcome.length" class="mc-per-outcome">
+              <h4 class="mc-per-outcome-title">Per-Outcome Confidence Intervals</h4>
+              <div class="mc-outcome-grid">
+                <div v-for="(item, i) in mcPerOutcome" :key="i" class="mc-outcome-card">
+                  <div class="mc-outcome-name">{{ item.outcome }}</div>
+                  <div class="mc-outcome-stats">
+                    <span class="mc-outcome-mean">{{ item.monte_carlo?.mean?.toFixed(1) }}%</span>
+                    <span class="mc-outcome-ci">
+                      95% CI: [{{ item.monte_carlo?.confidence_intervals?.['95%']?.[0]?.toFixed(1) }}%, {{ item.monte_carlo?.confidence_intervals?.['95%']?.[1]?.toFixed(1) }}%]
+                    </span>
+                  </div>
+                  <div class="mc-outcome-bar-track">
+                    <div 
+                      class="mc-outcome-bar-fill"
+                      :style="{ 
+                        left: (item.monte_carlo?.confidence_intervals?.['95%']?.[0] || 0) + '%',
+                        width: ((item.monte_carlo?.confidence_intervals?.['95%']?.[1] || 0) - (item.monte_carlo?.confidence_intervals?.['95%']?.[0] || 0)) + '%'
+                      }"
+                    ></div>
+                    <div class="mc-outcome-mean-dot" :style="{ left: (item.monte_carlo?.mean || 0) + '%' }"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Historical Comparison (from deep research precedents) -->
+          <div v-if="isComplete && historicalPrecedents.length" class="historical-dashboard">
+            <div class="historical-dashboard-header">
+              <h3 class="historical-dashboard-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Historical Precedents
+              </h3>
+              <span class="historical-count">{{ historicalPrecedents.length }} cases</span>
+            </div>
+            <div class="precedent-cards">
+              <div v-for="(p, i) in historicalPrecedents" :key="i" class="precedent-card">
+                <div class="precedent-card-header">
+                  <span class="precedent-event">{{ p.event }}</span>
+                  <div class="precedent-relevance">
+                    <div class="relevance-bar">
+                      <div class="relevance-fill" :style="{ width: ((p.relevance_score || 0) * 100) + '%' }"></div>
+                    </div>
+                    <span class="relevance-label">{{ ((p.relevance_score || 0) * 100).toFixed(0) }}% relevant</span>
+                  </div>
+                </div>
+                <p v-if="p.outcome" class="precedent-outcome">{{ p.outcome }}</p>
+                <div class="precedent-meta">
+                  <span v-if="p.timeline" class="precedent-meta-item">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    {{ p.timeline }}
+                  </span>
+                  <span v-if="p.key_metric" class="precedent-metric">{{ p.key_metric }}</span>
+                </div>
+                <a v-if="p.source_url" :href="p.source_url" target="_blank" rel="noopener" class="precedent-source-link">Source</a>
+              </div>
             </div>
           </div>
 
@@ -619,9 +1050,28 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted, nextTick, h, reactive } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import DOMPurify from 'dompurify'
+
+import {
+  getToolDisplayName,
+  getToolColor,
+  getToolIcon,
+} from './step4/step4ReportToolConfig.js'
+import {
+  parseInsightForge,
+  parsePanorama,
+  parseInterview,
+  parseQuickSearch,
+} from './step4/step4ReportParsers.js'
+import { renderMarkdown } from './step4/step4ReportMarkdown.js'
+import {
+  InsightDisplay,
+  PanoramaDisplay,
+  InterviewDisplay,
+  QuickSearchDisplay,
+} from './step4/step4ReportToolDisplays.js'
+
 import { getAgentLog, getConsoleLog, getReportPayload } from '../api/report'
 import { suggestFollowups, createReminder } from '../api/simulation'
 import { setPendingUpload } from '../store/pendingUpload'
@@ -772,1213 +1222,6 @@ const isLogCollapsed = (log) => {
   return false
 }
 
-// Tool configurations with display names and colors
-const toolConfig = {
-  'insight_forge': {
-    name: 'Deep Insight',
-    color: 'purple',
-    icon: 'lightbulb' // Lightbulb icon - represents insight
-  },
-  'panorama_search': {
-    name: 'Panorama Search',
-    color: 'blue',
-    icon: 'globe' // Globe icon - represents panorama search
-  },
-  'interview_agents': {
-    name: 'Agent Interview',
-    color: 'green',
-    icon: 'users' // Users icon - represents conversation
-  },
-  'quick_search': {
-    name: 'Quick Search',
-    color: 'orange',
-    icon: 'zap' // Lightning icon - represents quick
-  },
-  'get_graph_statistics': {
-    name: 'Graph Stats',
-    color: 'cyan',
-    icon: 'chart' // Chart icon - represents statistics
-  },
-  'get_entities_by_type': {
-    name: 'Entity Query',
-    color: 'pink',
-    icon: 'database' // Database icon - represents entity
-  }
-}
-
-const getToolDisplayName = (toolName) => {
-  return toolConfig[toolName]?.name || toolName
-}
-
-const getToolColor = (toolName) => {
-  return toolConfig[toolName]?.color || 'gray'
-}
-
-const getToolIcon = (toolName) => {
-  return toolConfig[toolName]?.icon || 'tool'
-}
-
-// Parse functions
-const parseInsightForge = (text) => {
-  const result = {
-    query: '',
-    simulationRequirement: '',
-    stats: { facts: 0, entities: 0, relationships: 0 },
-    subQueries: [],
-    facts: [],
-    entities: [],
-    relations: []
-  }
-  
-  try {
-    // 提取分析问题
-    const queryMatch = text.match(/分析问题:\s*(.+?)(?:\n|$)/)
-    if (queryMatch) result.query = queryMatch[1].trim()
-    
-    // Extract prediction scenario
-    const reqMatch = text.match(/预测场景:\s*(.+?)(?:\n|$)/)
-    if (reqMatch) result.simulationRequirement = reqMatch[1].trim()
-    
-    // Extract statistics - match "related prediction facts: X" format
-    const factMatch = text.match(/相关预测事实:\s*(\d+)/)
-    const entityMatch = text.match(/涉及实体:\s*(\d+)/)
-    const relMatch = text.match(/关系链:\s*(\d+)/)
-    if (factMatch) result.stats.facts = parseInt(factMatch[1])
-    if (entityMatch) result.stats.entities = parseInt(entityMatch[1])
-    if (relMatch) result.stats.relationships = parseInt(relMatch[1])
-    
-    // Extract sub-questions - full extract, no limit
-    const subQSection = text.match(/### 分析的子问题\n([\s\S]*?)(?=\n###|$)/)
-    if (subQSection) {
-      const lines = subQSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.subQueries = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
-    }
-    
-    // Extract key facts - full extract, no limit
-    const factsSection = text.match(/### 【关键事实】[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
-    if (factsSection) {
-      const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.facts = lines.map(l => {
-        const match = l.match(/^\d+\.\s*"?(.+?)"?\s*$/)
-        return match ? match[1].replace(/^"|"$/g, '').trim() : l.replace(/^\d+\.\s*/, '').trim()
-      }).filter(Boolean)
-    }
-    
-    // Extract core entities - full extract, includes summary and related fact count
-    const entitySection = text.match(/### 【核心实体】\n([\s\S]*?)(?=\n###|$)/)
-    if (entitySection) {
-      const entityText = entitySection[1]
-      // Split entity blocks by "- **"
-      const entityBlocks = entityText.split(/\n(?=- \*\*)/).filter(b => b.trim().startsWith('- **'))
-      result.entities = entityBlocks.map(block => {
-        const nameMatch = block.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
-        const summaryMatch = block.match(/摘要:\s*"?(.+?)"?(?:\n|$)/)
-        const relatedMatch = block.match(/相关事实:\s*(\d+)/)
-        return {
-          name: nameMatch ? nameMatch[1].trim() : '',
-          type: nameMatch ? nameMatch[2].trim() : '',
-          summary: summaryMatch ? summaryMatch[1].trim() : '',
-          relatedFactsCount: relatedMatch ? parseInt(relatedMatch[1]) : 0
-        }
-      }).filter(e => e.name)
-    }
-    
-    // Extract relation chains - full extract, no limit
-    const relSection = text.match(/### 【关系链】\n([\s\S]*?)(?=\n###|$)/)
-    if (relSection) {
-      const lines = relSection[1].split('\n').filter(l => l.trim().startsWith('-'))
-      result.relations = lines.map(l => {
-        const match = l.match(/^-\s*(.+?)\s*--\[(.+?)\]-->\s*(.+)$/)
-        if (match) {
-          return { source: match[1].trim(), relation: match[2].trim(), target: match[3].trim() }
-        }
-        return null
-      }).filter(Boolean)
-    }
-  } catch (e) {
-    console.warn('Parse insight_forge failed:', e)
-  }
-  
-  return result
-}
-
-const parsePanorama = (text) => {
-  const result = {
-    query: '',
-    stats: { nodes: 0, edges: 0, activeFacts: 0, historicalFacts: 0 },
-    activeFacts: [],
-    historicalFacts: [],
-    entities: []
-  }
-  
-  try {
-    // Extract query
-    const queryMatch = text.match(/查询:\s*(.+?)(?:\n|$)/)
-    if (queryMatch) result.query = queryMatch[1].trim()
-    
-    // Extract statistics
-    const nodesMatch = text.match(/总节点数:\s*(\d+)/)
-    const edgesMatch = text.match(/总边数:\s*(\d+)/)
-    const activeMatch = text.match(/当前有效事实:\s*(\d+)/)
-    const histMatch = text.match(/历史\/过期事实:\s*(\d+)/)
-    if (nodesMatch) result.stats.nodes = parseInt(nodesMatch[1])
-    if (edgesMatch) result.stats.edges = parseInt(edgesMatch[1])
-    if (activeMatch) result.stats.activeFacts = parseInt(activeMatch[1])
-    if (histMatch) result.stats.historicalFacts = parseInt(histMatch[1])
-    
-    // Extract current valid facts - full extract, no limit
-    const activeSection = text.match(/### 【当前有效事实】[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
-    if (activeSection) {
-      const lines = activeSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.activeFacts = lines.map(l => {
-        // Remove numbering and quotes
-        const factText = l.replace(/^\d+\.\s*/, '').replace(/^"|"$/g, '').trim()
-        return factText
-      }).filter(Boolean)
-    }
-    
-    // Extract historical/expired facts - full extract, no limit
-    const histSection = text.match(/### 【历史\/过期事实】[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
-    if (histSection) {
-      const lines = histSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.historicalFacts = lines.map(l => {
-        const factText = l.replace(/^\d+\.\s*/, '').replace(/^"|"$/g, '').trim()
-        return factText
-      }).filter(Boolean)
-    }
-    
-    // Extract involved entities - full extract, no limit
-    const entitySection = text.match(/### 【涉及实体】\n([\s\S]*?)(?=\n###|$)/)
-    if (entitySection) {
-      const lines = entitySection[1].split('\n').filter(l => l.trim().startsWith('-'))
-      result.entities = lines.map(l => {
-        const match = l.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
-        if (match) return { name: match[1].trim(), type: match[2].trim() }
-        return null
-      }).filter(Boolean)
-    }
-  } catch (e) {
-    console.warn('Parse panorama failed:', e)
-  }
-  
-  return result
-}
-
-const parseInterview = (text) => {
-  const result = {
-    topic: '',
-    agentCount: '',
-    successCount: 0,
-    totalCount: 0,
-    selectionReason: '',
-    interviews: [],
-    summary: ''
-  }
-  
-  try {
-    // Extract interview topic
-    const topicMatch = text.match(/\*\*采访主题:\*\*\s*(.+?)(?:\n|$)/)
-    if (topicMatch) result.topic = topicMatch[1].trim()
-    
-    // Extract interview count (e.g. "5 / 9 simulation agents")
-    const countMatch = text.match(/\*\*采访人数:\*\*\s*(\d+)\s*\/\s*(\d+)/)
-    if (countMatch) {
-      result.successCount = parseInt(countMatch[1])
-      result.totalCount = parseInt(countMatch[2])
-      result.agentCount = `${countMatch[1]} / ${countMatch[2]}`
-    }
-    
-    // Extract interviewee selection reasons
-    const reasonMatch = text.match(/### 采访对象选择理由\n([\s\S]*?)(?=\n---\n|\n### 采访实录)/)
-    if (reasonMatch) {
-      result.selectionReason = reasonMatch[1].trim()
-    }
-    
-    // Parse each person's selection reason
-    const parseIndividualReasons = (reasonText) => {
-      const reasons = {}
-      if (!reasonText) return reasons
-      
-      const lines = reasonText.split(/\n+/)
-      let currentName = null
-      let currentReason = []
-      
-      for (const line of lines) {
-        let headerMatch = null
-        let name = null
-        let reasonStart = null
-        
-        // Format 1: num. **name (index=X)**: reason
-        // e.g. 1. **alumni_345 (index=1)**: As alumni...
-        headerMatch = line.match(/^\d+\.\s*\*\*([^*（(]+)(?:[（(]index\s*=?\s*\d+[)）])?\*\*[：:]\s*(.*)/)
-        if (headerMatch) {
-          name = headerMatch[1].trim()
-          reasonStart = headerMatch[2]
-        }
-        
-        // Format 2: - select name (index X): reason
-        // e.g. - select parent_601 (index 0): As parent representative...
-        if (!headerMatch) {
-          headerMatch = line.match(/^-\s*选择([^（(]+)(?:[（(]index\s*=?\s*\d+[)）])?[：:]\s*(.*)/)
-          if (headerMatch) {
-            name = headerMatch[1].trim()
-            reasonStart = headerMatch[2]
-          }
-        }
-        
-        // Format 3: - **name (index X)**: reason
-        // e.g. - **parent_601 (index 0)**: As parent representative...
-        if (!headerMatch) {
-          headerMatch = line.match(/^-\s*\*\*([^*（(]+)(?:[（(]index\s*=?\s*\d+[)）])?\*\*[：:]\s*(.*)/)
-          if (headerMatch) {
-            name = headerMatch[1].trim()
-            reasonStart = headerMatch[2]
-          }
-        }
-        
-        if (name) {
-          // Save previous person's reason
-          if (currentName && currentReason.length > 0) {
-            reasons[currentName] = currentReason.join(' ').trim()
-          }
-          // 开始新的人
-          currentName = name
-          currentReason = reasonStart ? [reasonStart.trim()] : []
-        } else if (currentName && line.trim() && !line.match(/^未选|^综上|^最终选择/)) {
-          // Reason continuation (exclude final summary paragraphs)
-          currentReason.push(line.trim())
-        }
-      }
-      
-      // Save last person's reason
-      if (currentName && currentReason.length > 0) {
-        reasons[currentName] = currentReason.join(' ').trim()
-      }
-      
-      return reasons
-    }
-    
-    const individualReasons = parseIndividualReasons(result.selectionReason)
-    
-    // Extract each interview record
-    const interviewBlocks = text.split(/#### 采访 #\d+:/).slice(1)
-    
-    interviewBlocks.forEach((block, index) => {
-      const interview = {
-        num: index + 1,
-        title: '',
-        name: '',
-        role: '',
-        bio: '',
-        selectionReason: '',
-        questions: [],
-        twitterAnswer: '',
-        redditAnswer: '',
-        quotes: []
-      }
-      
-      // Extract title (e.g. "student", "educator")
-      const titleMatch = block.match(/^(.+?)\n/)
-      if (titleMatch) interview.title = titleMatch[1].trim()
-      
-      // Extract name and role
-      const nameRoleMatch = block.match(/\*\*(.+?)\*\*\s*\((.+?)\)/)
-      if (nameRoleMatch) {
-        interview.name = nameRoleMatch[1].trim()
-        interview.role = nameRoleMatch[2].trim()
-        // Set this person's selection reason
-        interview.selectionReason = individualReasons[interview.name] || ''
-      }
-      
-      // Extract bio
-      const bioMatch = block.match(/_简介:\s*([\s\S]*?)_\n/)
-      if (bioMatch) {
-        interview.bio = bioMatch[1].trim().replace(/\.\.\.$/, '...')
-      }
-      
-      // Extract question list
-      const qMatch = block.match(/\*\*Q:\*\*\s*([\s\S]*?)(?=\n\n\*\*A:\*\*|\*\*A:\*\*)/)
-      if (qMatch) {
-        const qText = qMatch[1].trim()
-        // Split questions by number
-        const questions = qText.split(/\n\d+\.\s+/).filter(q => q.trim())
-        if (questions.length > 0) {
-          // If first question has "1." prefix, special handling
-          const firstQ = qText.match(/^1\.\s+(.+)/)
-          if (firstQ) {
-            interview.questions = [firstQ[1].trim(), ...questions.slice(1).map(q => q.trim())]
-          } else {
-            interview.questions = questions.map(q => q.trim())
-          }
-        }
-      }
-      
-      // Extract answer - split Twitter and Reddit
-      const answerMatch = block.match(/\*\*A:\*\*\s*([\s\S]*?)(?=\*\*关键引言|$)/)
-      if (answerMatch) {
-        const answerText = answerMatch[1].trim()
-        
-        // Split Twitter and Reddit answers
-        const twitterMatch = answerText.match(/【Twitter平台回答】\n?([\s\S]*?)(?=【Reddit平台回答】|$)/)
-        const redditMatch = answerText.match(/【Reddit平台回答】\n?([\s\S]*?)$/)
-        
-        if (twitterMatch) {
-          interview.twitterAnswer = twitterMatch[1].trim()
-        }
-        if (redditMatch) {
-          interview.redditAnswer = redditMatch[1].trim()
-        }
-        
-        // Platform fallback (compat old format: single platform marker)
-        if (!twitterMatch && redditMatch) {
-          // Reddit only: copy as default when non-placeholder
-          if (interview.redditAnswer && interview.redditAnswer !== '（该平台未获得回复）') {
-            interview.twitterAnswer = interview.redditAnswer
-          }
-        } else if (twitterMatch && !redditMatch) {
-          if (interview.twitterAnswer && interview.twitterAnswer !== '（该平台未获得回复）') {
-            interview.redditAnswer = interview.twitterAnswer
-          }
-        } else if (!twitterMatch && !redditMatch) {
-          // No platform marker (very old format), use whole as answer
-          interview.twitterAnswer = answerText
-        }
-      }
-      
-      // Extract key quotes (compat multiple quote formats)
-      const quotesMatch = block.match(/\*\*关键引言:\*\*\n([\s\S]*?)(?=\n---|\n####|$)/)
-      if (quotesMatch) {
-        const quotesText = quotesMatch[1]
-        // Prefer > "text" format
-        let quoteMatches = quotesText.match(/> "([^"]+)"/g)
-        // Fallback: match > "text" or > \u201Ctext\u201D (Chinese quotes)
-        if (!quoteMatches) {
-          quoteMatches = quotesText.match(/> [\u201C""]([^\u201D""]+)[\u201D""]/g)
-        }
-        if (quoteMatches) {
-          interview.quotes = quoteMatches
-            .map(q => q.replace(/^> [\u201C""]|[\u201D""]$/g, '').trim())
-            .filter(q => q)
-        }
-      }
-      
-      if (interview.name || interview.title) {
-        result.interviews.push(interview)
-      }
-    })
-    
-    // Extract interview summary
-    const summaryMatch = text.match(/### 采访摘要与核心观点\n([\s\S]*?)$/)
-    if (summaryMatch) {
-      result.summary = summaryMatch[1].trim()
-    }
-  } catch (e) {
-    console.warn('Parse interview failed:', e)
-  }
-  
-  return result
-}
-
-const parseQuickSearch = (text) => {
-  const result = {
-    query: '',
-    count: 0,
-    facts: [],
-    edges: [],
-    nodes: []
-  }
-  
-  try {
-    // Extract search query
-    const queryMatch = text.match(/搜索查询:\s*(.+?)(?:\n|$)/)
-    if (queryMatch) result.query = queryMatch[1].trim()
-    
-    // Extract result count
-    const countMatch = text.match(/找到\s*(\d+)\s*条/)
-    if (countMatch) result.count = parseInt(countMatch[1])
-    
-    // Extract related facts - full extract, no limit
-    const factsSection = text.match(/### 相关事实:\n([\s\S]*)$/)
-    if (factsSection) {
-      const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
-      result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
-    }
-    
-    // Try extract edge info (if any)
-    const edgesSection = text.match(/### 相关边:\n([\s\S]*?)(?=\n###|$)/)
-    if (edgesSection) {
-      const lines = edgesSection[1].split('\n').filter(l => l.trim().startsWith('-'))
-      result.edges = lines.map(l => {
-        const match = l.match(/^-\s*(.+?)\s*--\[(.+?)\]-->\s*(.+)$/)
-        if (match) {
-          return { source: match[1].trim(), relation: match[2].trim(), target: match[3].trim() }
-        }
-        return null
-      }).filter(Boolean)
-    }
-    
-    // Try extract node info (if any)
-    const nodesSection = text.match(/### 相关节点:\n([\s\S]*?)(?=\n###|$)/)
-    if (nodesSection) {
-      const lines = nodesSection[1].split('\n').filter(l => l.trim().startsWith('-'))
-      result.nodes = lines.map(l => {
-        const match = l.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
-        if (match) return { name: match[1].trim(), type: match[2].trim() }
-        const simpleMatch = l.match(/^-\s*(.+)$/)
-        if (simpleMatch) return { name: simpleMatch[1].trim(), type: '' }
-        return null
-      }).filter(Boolean)
-    }
-  } catch (e) {
-    console.warn('Parse quick_search failed:', e)
-  }
-  
-  return result
-}
-
-// ========== Sub Components ==========
-
-// Insight Display Component - Enhanced with full data rendering (Interview-like style)
-const InsightDisplay = {
-  props: ['result', 'resultLength'],
-  setup(props) {
-    const activeTab = ref('facts') // 'facts', 'entities', 'relations', 'subqueries'
-    const expandedFacts = ref(false)
-    const expandedEntities = ref(false)
-    const expandedRelations = ref(false)
-    const INITIAL_SHOW_COUNT = 5
-    
-    // Format result size for display
-    const formatSize = (length) => {
-      if (!length) return ''
-      if (length >= 1000) {
-        return `${(length / 1000).toFixed(1)}k chars`
-      }
-      return `${length} chars`
-    }
-    
-    return () => h('div', { class: 'insight-display' }, [
-      // Header Section - like interview header
-      h('div', { class: 'insight-header' }, [
-        h('div', { class: 'header-main' }, [
-          h('div', { class: 'header-title' }, 'Deep Insight'),
-          h('div', { class: 'header-stats' }, [
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.stats.facts || props.result.facts.length),
-              h('span', { class: 'stat-label' }, 'Facts')
-            ]),
-            h('span', { class: 'stat-divider' }, '/'),
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.stats.entities || props.result.entities.length),
-              h('span', { class: 'stat-label' }, 'Entities')
-            ]),
-            h('span', { class: 'stat-divider' }, '/'),
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.stats.relationships || props.result.relations.length),
-              h('span', { class: 'stat-label' }, 'Relations')
-            ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
-            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
-          ])
-        ]),
-        props.result.query && h('div', { class: 'header-topic' }, props.result.query),
-        props.result.simulationRequirement && h('div', { class: 'header-scenario' }, [
-          h('span', { class: 'scenario-label' }, 'Prediction Scenario: '),
-          h('span', { class: 'scenario-text' }, props.result.simulationRequirement)
-        ])
-      ]),
-      
-      // Tab Navigation
-      h('div', { class: 'insight-tabs' }, [
-        h('button', {
-          class: ['insight-tab', { active: activeTab.value === 'facts' }],
-          onClick: () => { activeTab.value = 'facts' }
-        }, [
-          h('span', { class: 'tab-label' }, `Key Memories (${props.result.facts.length})`)
-        ]),
-        h('button', {
-          class: ['insight-tab', { active: activeTab.value === 'entities' }],
-          onClick: () => { activeTab.value = 'entities' }
-        }, [
-          h('span', { class: 'tab-label' }, `Core Entities (${props.result.entities.length})`)
-        ]),
-        h('button', {
-          class: ['insight-tab', { active: activeTab.value === 'relations' }],
-          onClick: () => { activeTab.value = 'relations' }
-        }, [
-          h('span', { class: 'tab-label' }, `Relation Chains (${props.result.relations.length})`)
-        ]),
-        props.result.subQueries.length > 0 && h('button', {
-          class: ['insight-tab', { active: activeTab.value === 'subqueries' }],
-          onClick: () => { activeTab.value = 'subqueries' }
-        }, [
-          h('span', { class: 'tab-label' }, `Sub-questions (${props.result.subQueries.length})`)
-        ])
-      ]),
-      
-      // Tab Content
-      h('div', { class: 'insight-content' }, [
-        // Facts Tab
-        activeTab.value === 'facts' && props.result.facts.length > 0 && h('div', { class: 'facts-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Latest key facts from temporal memory'),
-            h('span', { class: 'panel-count' }, `${props.result.facts.length} total`)
-          ]),
-          h('div', { class: 'facts-list' },
-            (expandedFacts.value ? props.result.facts : props.result.facts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
-              h('div', { class: 'fact-item', key: i }, [
-                h('span', { class: 'fact-number' }, i + 1),
-                h('div', { class: 'fact-content' }, fact)
-              ])
-            )
-          ),
-          props.result.facts.length > INITIAL_SHOW_COUNT && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedFacts.value = !expandedFacts.value }
-          }, expandedFacts.value ? `Collapse ▲` : `Expand all ${props.result.facts.length} ▼`)
-        ]),
-        
-        // Entities Tab
-        activeTab.value === 'entities' && props.result.entities.length > 0 && h('div', { class: 'entities-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Core Entities'),
-            h('span', { class: 'panel-count' }, `${props.result.entities.length} total`)
-          ]),
-          h('div', { class: 'entities-grid' },
-            (expandedEntities.value ? props.result.entities : props.result.entities.slice(0, 12)).map((entity, i) => 
-              h('div', { class: 'entity-tag', key: i, title: entity.summary || '' }, [
-                h('span', { class: 'entity-name' }, entity.name),
-                h('span', { class: 'entity-type' }, entity.type),
-                entity.relatedFactsCount > 0 && h('span', { class: 'entity-fact-count' }, `${entity.relatedFactsCount}`)
-              ])
-            )
-          ),
-          props.result.entities.length > 12 && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedEntities.value = !expandedEntities.value }
-          }, expandedEntities.value ? `Collapse ▲` : `Expand all ${props.result.entities.length} ▼`)
-        ]),
-        
-        // Relations Tab
-        activeTab.value === 'relations' && props.result.relations.length > 0 && h('div', { class: 'relations-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Relation Chains'),
-            h('span', { class: 'panel-count' }, `${props.result.relations.length} total`)
-          ]),
-          h('div', { class: 'relations-list' },
-            (expandedRelations.value ? props.result.relations : props.result.relations.slice(0, INITIAL_SHOW_COUNT)).map((rel, i) => 
-              h('div', { class: 'relation-item', key: i }, [
-                h('span', { class: 'rel-source' }, rel.source),
-                h('span', { class: 'rel-arrow' }, [
-                  h('span', { class: 'rel-line' }),
-                  h('span', { class: 'rel-label' }, rel.relation),
-                  h('span', { class: 'rel-line' })
-                ]),
-                h('span', { class: 'rel-target' }, rel.target)
-              ])
-            )
-          ),
-          props.result.relations.length > INITIAL_SHOW_COUNT && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedRelations.value = !expandedRelations.value }
-          }, expandedRelations.value ? `Collapse ▲` : `Expand all ${props.result.relations.length} ▼`)
-        ]),
-        
-        // Sub-queries Tab
-        activeTab.value === 'subqueries' && props.result.subQueries.length > 0 && h('div', { class: 'subqueries-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Drift query sub-questions'),
-            h('span', { class: 'panel-count' }, `${props.result.subQueries.length} total`)
-          ]),
-          h('div', { class: 'subqueries-list' },
-            props.result.subQueries.map((sq, i) => 
-              h('div', { class: 'subquery-item', key: i }, [
-                h('span', { class: 'subquery-number' }, `Q${i + 1}`),
-                h('div', { class: 'subquery-text' }, sq)
-              ])
-            )
-          )
-        ]),
-        
-        // Empty state
-        activeTab.value === 'facts' && props.result.facts.length === 0 && h('div', { class: 'empty-state' }, 'No key memories'),
-        activeTab.value === 'entities' && props.result.entities.length === 0 && h('div', { class: 'empty-state' }, 'No core entities'),
-        activeTab.value === 'relations' && props.result.relations.length === 0 && h('div', { class: 'empty-state' }, 'No relation chains')
-      ])
-    ])
-  }
-}
-
-// Panorama Display Component - Enhanced with Active/Historical tabs
-const PanoramaDisplay = {
-  props: ['result', 'resultLength'],
-  setup(props) {
-    const activeTab = ref('active') // 'active', 'historical', 'entities'
-    const expandedActive = ref(false)
-    const expandedHistorical = ref(false)
-    const expandedEntities = ref(false)
-    const INITIAL_SHOW_COUNT = 5
-    
-    // Format result size for display
-    const formatSize = (length) => {
-      if (!length) return ''
-      if (length >= 1000) {
-        return `${(length / 1000).toFixed(1)}k chars`
-      }
-      return `${length} chars`
-    }
-    
-    return () => h('div', { class: 'panorama-display' }, [
-      // Header Section
-      h('div', { class: 'panorama-header' }, [
-        h('div', { class: 'header-main' }, [
-          h('div', { class: 'header-title' }, 'Panorama Search'),
-          h('div', { class: 'header-stats' }, [
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.stats.nodes),
-              h('span', { class: 'stat-label' }, 'Nodes')
-            ]),
-            h('span', { class: 'stat-divider' }, '/'),
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.stats.edges),
-              h('span', { class: 'stat-label' }, 'Edges')
-            ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
-            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
-          ])
-        ]),
-        props.result.query && h('div', { class: 'header-topic' }, props.result.query)
-      ]),
-      
-      // Tab Navigation
-      h('div', { class: 'panorama-tabs' }, [
-        h('button', {
-          class: ['panorama-tab', { active: activeTab.value === 'active' }],
-          onClick: () => { activeTab.value = 'active' }
-        }, [
-          h('span', { class: 'tab-label' }, `Current Memories (${props.result.activeFacts.length})`)
-        ]),
-        h('button', {
-          class: ['panorama-tab', { active: activeTab.value === 'historical' }],
-          onClick: () => { activeTab.value = 'historical' }
-        }, [
-          h('span', { class: 'tab-label' }, `Historical Memories (${props.result.historicalFacts.length})`)
-        ]),
-        h('button', {
-          class: ['panorama-tab', { active: activeTab.value === 'entities' }],
-          onClick: () => { activeTab.value = 'entities' }
-        }, [
-          h('span', { class: 'tab-label' }, `Involved Entities (${props.result.entities.length})`)
-        ])
-      ]),
-      
-      // Tab Content
-      h('div', { class: 'panorama-content' }, [
-        // Active Facts Tab
-        activeTab.value === 'active' && h('div', { class: 'facts-panel active-facts' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Current Memories'),
-            h('span', { class: 'panel-count' }, `${props.result.activeFacts.length} total`)
-          ]),
-          props.result.activeFacts.length > 0 ? h('div', { class: 'facts-list' },
-            (expandedActive.value ? props.result.activeFacts : props.result.activeFacts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
-              h('div', { class: 'fact-item active', key: i }, [
-                h('span', { class: 'fact-number' }, i + 1),
-                h('div', { class: 'fact-content' }, fact)
-              ])
-            )
-          ) : h('div', { class: 'empty-state' }, 'No current memories'),
-          props.result.activeFacts.length > INITIAL_SHOW_COUNT && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedActive.value = !expandedActive.value }
-          }, expandedActive.value ? `Collapse ▲` : `Expand all ${props.result.activeFacts.length} ▼`)
-        ]),
-        
-        // Historical Facts Tab
-        activeTab.value === 'historical' && h('div', { class: 'facts-panel historical-facts' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Historical Memories'),
-            h('span', { class: 'panel-count' }, `${props.result.historicalFacts.length} total`)
-          ]),
-          props.result.historicalFacts.length > 0 ? h('div', { class: 'facts-list' },
-            (expandedHistorical.value ? props.result.historicalFacts : props.result.historicalFacts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
-              h('div', { class: 'fact-item historical', key: i }, [
-                h('span', { class: 'fact-number' }, i + 1),
-                h('div', { class: 'fact-content' }, [
-                  // Try extract time info [time - time]
-                  (() => {
-                    const timeMatch = fact.match(/^\[(.+?)\]\s*(.*)$/)
-                    if (timeMatch) {
-                      return [
-                        h('span', { class: 'fact-time' }, timeMatch[1]),
-                        h('span', { class: 'fact-text' }, timeMatch[2])
-                      ]
-                    }
-                    return h('span', { class: 'fact-text' }, fact)
-                  })()
-                ])
-              ])
-            )
-          ) : h('div', { class: 'empty-state' }, 'No historical memories'),
-          props.result.historicalFacts.length > INITIAL_SHOW_COUNT && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedHistorical.value = !expandedHistorical.value }
-          }, expandedHistorical.value ? `Collapse ▲` : `Expand all ${props.result.historicalFacts.length} ▼`)
-        ]),
-        
-        // Entities Tab
-        activeTab.value === 'entities' && h('div', { class: 'entities-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Involved Entities'),
-            h('span', { class: 'panel-count' }, `${props.result.entities.length} total`)
-          ]),
-          props.result.entities.length > 0 ? h('div', { class: 'entities-grid' },
-            (expandedEntities.value ? props.result.entities : props.result.entities.slice(0, 8)).map((entity, i) => 
-              h('div', { class: 'entity-tag', key: i }, [
-                h('span', { class: 'entity-name' }, entity.name),
-                entity.type && h('span', { class: 'entity-type' }, entity.type)
-              ])
-            )
-          ) : h('div', { class: 'empty-state' }, 'No involved entities'),
-          props.result.entities.length > 8 && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedEntities.value = !expandedEntities.value }
-          }, expandedEntities.value ? `Collapse ▲` : `Expand all ${props.result.entities.length} ▼`)
-        ])
-      ])
-    ])
-  }
-}
-
-// Interview Display Component - Conversation Style (Q&A Format)
-const InterviewDisplay = {
-  props: ['result', 'resultLength'],
-  setup(props) {
-    // Format result size for display
-    const formatSize = (length) => {
-      if (!length) return ''
-      if (length >= 1000) {
-        return `${(length / 1000).toFixed(1)}k chars`
-      }
-      return `${length} chars`
-    }
-    
-    // Clean quote text - remove leading list numbers to avoid double numbering
-    const cleanQuoteText = (text) => {
-      if (!text) return ''
-      // Remove leading patterns like "1. ", "2. ", "1、", "（1）", "(1)" etc.
-      return text.replace(/^\s*\d+[.、)）]\s*/, '').trim()
-    }
-    
-    const activeIndex = ref(0)
-    const expandedAnswers = ref(new Set())
-    // Maintain independent platform selection per Q&A pair
-    const platformTabs = reactive({}) // { 'agentIdx-qIdx': 'twitter' | 'reddit' }
-    
-    // Get current platform selection for a question
-    const getPlatformTab = (agentIdx, qIdx) => {
-      const key = `${agentIdx}-${qIdx}`
-      return platformTabs[key] || 'twitter'
-    }
-    
-    // Set platform selection for a question
-    const setPlatformTab = (agentIdx, qIdx, platform) => {
-      const key = `${agentIdx}-${qIdx}`
-      platformTabs[key] = platform
-    }
-    
-    const toggleAnswer = (key) => {
-      const newSet = new Set(expandedAnswers.value)
-      if (newSet.has(key)) {
-        newSet.delete(key)
-      } else {
-        newSet.add(key)
-      }
-      expandedAnswers.value = newSet
-    }
-    
-    const formatAnswer = (text, expanded) => {
-      if (!text) return ''
-      if (expanded || text.length <= 400) return text
-      return text.substring(0, 400) + '...'
-    }
-    
-    // Check if platform placeholder text
-    const isPlaceholderText = (text) => {
-      if (!text) return true
-      const t = text.trim()
-      return t === '（该平台未获得回复）' || t === '(该平台未获得回复)' || t === '[无回复]'
-    }
-
-    // Try split answer by question number
-    const splitAnswerByQuestions = (answerText, questionCount) => {
-      if (!answerText || questionCount <= 0) return [answerText]
-      if (isPlaceholderText(answerText)) return ['']
-
-      // Support two formats:
-      // 1. "Question X:" (Chinese format, backend new format)
-      // 2. "1. " or "\n1. " (number+dot, old format compat)
-      let matches = []
-      let match
-
-      // Prefer "Question X:" format
-      const cnPattern = /(?:^|[\r\n]+)问题(\d+)[：:]\s*/g
-      while ((match = cnPattern.exec(answerText)) !== null) {
-        matches.push({
-          num: parseInt(match[1]),
-          index: match.index,
-          fullMatch: match[0]
-        })
-      }
-
-      // If no match, fallback to "number." format
-      if (matches.length === 0) {
-        const numPattern = /(?:^|[\r\n]+)(\d+)\.\s+/g
-        while ((match = numPattern.exec(answerText)) !== null) {
-          matches.push({
-            num: parseInt(match[1]),
-            index: match.index,
-            fullMatch: match[0]
-          })
-        }
-      }
-
-      // 如果没有找到编号或只找到一个，返回整体
-      if (matches.length <= 1) {
-        const cleaned = answerText
-          .replace(/^问题\d+[：:]\s*/, '')
-          .replace(/^\d+\.\s+/, '')
-          .trim()
-        return [cleaned || answerText]
-      }
-
-      // Extract parts by number
-      const parts = []
-      for (let i = 0; i < matches.length; i++) {
-        const current = matches[i]
-        const next = matches[i + 1]
-
-        const startIdx = current.index + current.fullMatch.length
-        const endIdx = next ? next.index : answerText.length
-
-        let part = answerText.substring(startIdx, endIdx).trim()
-        part = part.replace(/[\r\n]+$/, '').trim()
-        parts.push(part)
-      }
-
-      if (parts.length > 0 && parts.some(p => p)) {
-        return parts
-      }
-
-      return [answerText]
-    }
-    
-    // Get answer for a question
-    const getAnswerForQuestion = (interview, qIdx, platform) => {
-      const answer = platform === 'twitter' ? interview.twitterAnswer : (interview.redditAnswer || interview.twitterAnswer)
-      if (!answer || isPlaceholderText(answer)) return answer || ''
-
-      const questionCount = interview.questions?.length || 1
-      const answers = splitAnswerByQuestions(answer, questionCount)
-
-      // Split success and index valid
-      if (answers.length > 1 && qIdx < answers.length) {
-        return answers[qIdx] || ''
-      }
-
-      // Split failed: first question gets full answer, rest empty
-      return qIdx === 0 ? answer : ''
-    }
-    
-    // Check if question has dual-platform answer (filter placeholders)
-    const hasMultiplePlatforms = (interview, qIdx) => {
-      if (!interview.twitterAnswer || !interview.redditAnswer) return false
-      const twitterAnswer = getAnswerForQuestion(interview, qIdx, 'twitter')
-      const redditAnswer = getAnswerForQuestion(interview, qIdx, 'reddit')
-      // Both platforms have real answers (non-placeholder) and content differs
-      return !isPlaceholderText(twitterAnswer) && !isPlaceholderText(redditAnswer) && twitterAnswer !== redditAnswer
-    }
-    
-    return () => h('div', { class: 'interview-display' }, [
-      // Header Section
-      h('div', { class: 'interview-header' }, [
-        h('div', { class: 'header-main' }, [
-          h('div', { class: 'header-title' }, 'Agent Interview'),
-          h('div', { class: 'header-stats' }, [
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.successCount || props.result.interviews.length),
-              h('span', { class: 'stat-label' }, 'Interviewed')
-            ]),
-            props.result.totalCount > 0 && h('span', { class: 'stat-divider' }, '/'),
-            props.result.totalCount > 0 && h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.totalCount),
-              h('span', { class: 'stat-label' }, 'Total')
-            ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
-            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
-          ])
-        ]),
-        props.result.topic && h('div', { class: 'header-topic' }, props.result.topic)
-      ]),
-      
-      // Agent Selector Tabs
-      props.result.interviews.length > 0 && h('div', { class: 'agent-tabs' }, 
-        props.result.interviews.map((interview, i) => h('button', {
-          class: ['agent-tab', { active: activeIndex.value === i }],
-          key: i,
-          onClick: () => { activeIndex.value = i }
-        }, [
-          h('span', { class: 'tab-avatar' }, interview.name ? interview.name.charAt(0) : (i + 1)),
-          h('span', { class: 'tab-name' }, interview.title || interview.name || `Agent ${i + 1}`)
-        ]))
-      ),
-      
-      // Active Interview Detail
-      props.result.interviews.length > 0 && h('div', { class: 'interview-detail' }, [
-        // Agent Profile Card
-        h('div', { class: 'agent-profile' }, [
-          h('div', { class: 'profile-avatar' }, props.result.interviews[activeIndex.value]?.name?.charAt(0) || 'A'),
-          h('div', { class: 'profile-info' }, [
-            h('div', { class: 'profile-name' }, props.result.interviews[activeIndex.value]?.name || 'Agent'),
-            h('div', { class: 'profile-role' }, props.result.interviews[activeIndex.value]?.role || ''),
-            props.result.interviews[activeIndex.value]?.bio && h('div', { class: 'profile-bio' }, props.result.interviews[activeIndex.value].bio)
-          ])
-        ]),
-        
-        // Selection Reason
-        props.result.interviews[activeIndex.value]?.selectionReason && h('div', { class: 'selection-reason' }, [
-          h('div', { class: 'reason-label' }, 'Selection Reason'),
-          h('div', { class: 'reason-content' }, props.result.interviews[activeIndex.value].selectionReason)
-        ]),
-        
-        // Q&A Conversation Thread
-        h('div', { class: 'qa-thread' }, 
-          (props.result.interviews[activeIndex.value]?.questions?.length > 0 
-            ? props.result.interviews[activeIndex.value].questions 
-            : [props.result.interviews[activeIndex.value]?.question || 'No question available']
-          ).map((question, qIdx) => {
-            const interview = props.result.interviews[activeIndex.value]
-            const currentPlatform = getPlatformTab(activeIndex.value, qIdx)
-            const answerText = getAnswerForQuestion(interview, qIdx, currentPlatform)
-            const hasDualPlatform = hasMultiplePlatforms(interview, qIdx)
-            const expandKey = `${activeIndex.value}-${qIdx}`
-            const isExpanded = expandedAnswers.value.has(expandKey)
-            const isPlaceholder = isPlaceholderText(answerText)
-
-            return h('div', { class: 'qa-pair', key: qIdx }, [
-              // Question Block
-              h('div', { class: 'qa-question' }, [
-                h('div', { class: 'qa-badge q-badge' }, `Q${qIdx + 1}`),
-                h('div', { class: 'qa-content' }, [
-                  h('div', { class: 'qa-sender' }, 'Interviewer'),
-                  h('div', { class: 'qa-text' }, question)
-                ])
-              ]),
-
-              // Answer Block
-              answerText && h('div', { class: ['qa-answer', { 'answer-placeholder': isPlaceholder }] }, [
-                h('div', { class: 'qa-badge a-badge' }, `A${qIdx + 1}`),
-                h('div', { class: 'qa-content' }, [
-                  h('div', { class: 'qa-answer-header' }, [
-                    h('div', { class: 'qa-sender' }, interview?.name || 'Agent'),
-                    // Dual-platform toggle (only when real dual-platform answers)
-                    hasDualPlatform && h('div', { class: 'platform-switch' }, [
-                      h('button', {
-                        class: ['platform-btn', { active: currentPlatform === 'twitter' }],
-                        onClick: (e) => { e.stopPropagation(); setPlatformTab(activeIndex.value, qIdx, 'twitter') }
-                      }, [
-                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                          h('circle', { cx: '12', cy: '12', r: '10' }),
-                          h('line', { x1: '2', y1: '12', x2: '22', y2: '12' }),
-                          h('path', { d: 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z' })
-                        ]),
-                        h('span', {}, 'World 1')
-                      ]),
-                      h('button', {
-                        class: ['platform-btn', { active: currentPlatform === 'reddit' }],
-                        onClick: (e) => { e.stopPropagation(); setPlatformTab(activeIndex.value, qIdx, 'reddit') }
-                      }, [
-                        h('svg', { class: 'platform-icon', viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }, [
-                          h('path', { d: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z' })
-                        ]),
-                        h('span', {}, 'World 2')
-                      ])
-                    ])
-                  ]),
-                  h('div', {
-                    class: ['qa-text', 'answer-text', { 'placeholder-text': isPlaceholder }],
-                    innerHTML: isPlaceholder
-                      ? answerText
-                      : formatAnswer(answerText, isExpanded)
-                          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                          .replace(/\n/g, '<br>')
-                  }),
-                  // Expand/Collapse Button (hide for placeholder)
-                  !isPlaceholder && answerText.length > 400 && h('button', {
-                    class: 'expand-answer-btn',
-                    onClick: () => toggleAnswer(expandKey)
-                  }, isExpanded ? 'Show Less' : 'Show More')
-                ])
-              ])
-            ])
-          })
-        ),
-        
-        // Key Quotes Section
-        props.result.interviews[activeIndex.value]?.quotes?.length > 0 && h('div', { class: 'quotes-section' }, [
-          h('div', { class: 'quotes-header' }, 'Key Quotes'),
-          h('div', { class: 'quotes-list' },
-            props.result.interviews[activeIndex.value].quotes.slice(0, 3).map((quote, qi) => {
-              const cleanedQuote = cleanQuoteText(quote)
-              const displayQuote = cleanedQuote.length > 200 ? cleanedQuote.substring(0, 200) + '...' : cleanedQuote
-              return h('blockquote', { 
-                key: qi, 
-                class: 'quote-item',
-                innerHTML: renderMarkdown(displayQuote)
-              })
-            })
-          )
-        ])
-      ]),
-
-      // Summary Section (Collapsible)
-      props.result.summary && h('div', { class: 'summary-section' }, [
-        h('div', { class: 'summary-header' }, 'Interview Summary'),
-        h('div', { 
-          class: 'summary-content',
-          innerHTML: renderMarkdown(props.result.summary.length > 500 ? props.result.summary.substring(0, 500) + '...' : props.result.summary)
-        })
-      ])
-    ])
-  }
-}
-
-// Quick Search Display Component - Enhanced with full data rendering
-const QuickSearchDisplay = {
-  props: ['result', 'resultLength'],
-  setup(props) {
-    const activeTab = ref('facts') // 'facts', 'edges', 'nodes'
-    const expandedFacts = ref(false)
-    const INITIAL_SHOW_COUNT = 5
-    
-    // Check if there are edges or nodes to show tabs
-    const hasEdges = computed(() => props.result.edges && props.result.edges.length > 0)
-    const hasNodes = computed(() => props.result.nodes && props.result.nodes.length > 0)
-    const showTabs = computed(() => hasEdges.value || hasNodes.value)
-    
-    // Format result size for display
-    const formatSize = (length) => {
-      if (!length) return ''
-      if (length >= 1000) {
-        return `${(length / 1000).toFixed(1)}k chars`
-      }
-      return `${length} chars`
-    }
-    
-    return () => h('div', { class: 'quick-search-display' }, [
-      // Header Section
-      h('div', { class: 'quicksearch-header' }, [
-        h('div', { class: 'header-main' }, [
-          h('div', { class: 'header-title' }, 'Quick Search'),
-          h('div', { class: 'header-stats' }, [
-            h('span', { class: 'stat-item' }, [
-              h('span', { class: 'stat-value' }, props.result.count || props.result.facts.length),
-              h('span', { class: 'stat-label' }, 'Results')
-            ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
-            props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
-          ])
-        ]),
-        props.result.query && h('div', { class: 'header-query' }, [
-          h('span', { class: 'query-label' }, 'Search: '),
-          h('span', { class: 'query-text' }, props.result.query)
-        ])
-      ]),
-      
-      // Tab Navigation (only show if there are edges or nodes)
-      showTabs.value && h('div', { class: 'quicksearch-tabs' }, [
-        h('button', {
-          class: ['quicksearch-tab', { active: activeTab.value === 'facts' }],
-          onClick: () => { activeTab.value = 'facts' }
-        }, [
-          h('span', { class: 'tab-label' }, `Facts (${props.result.facts.length})`)
-        ]),
-        hasEdges.value && h('button', {
-          class: ['quicksearch-tab', { active: activeTab.value === 'edges' }],
-          onClick: () => { activeTab.value = 'edges' }
-        }, [
-          h('span', { class: 'tab-label' }, `Relations (${props.result.edges.length})`)
-        ]),
-        hasNodes.value && h('button', {
-          class: ['quicksearch-tab', { active: activeTab.value === 'nodes' }],
-          onClick: () => { activeTab.value = 'nodes' }
-        }, [
-          h('span', { class: 'tab-label' }, `Nodes (${props.result.nodes.length})`)
-        ])
-      ]),
-      
-      // Content Area
-      h('div', { class: ['quicksearch-content', { 'no-tabs': !showTabs.value }] }, [
-        // Facts (always show if no tabs, or when facts tab is active)
-        ((!showTabs.value) || activeTab.value === 'facts') && h('div', { class: 'facts-panel' }, [
-          !showTabs.value && h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Search Results'),
-            h('span', { class: 'panel-count' }, `${props.result.facts.length} total`)
-          ]),
-          props.result.facts.length > 0 ? h('div', { class: 'facts-list' },
-            (expandedFacts.value ? props.result.facts : props.result.facts.slice(0, INITIAL_SHOW_COUNT)).map((fact, i) => 
-              h('div', { class: 'fact-item', key: i }, [
-                h('span', { class: 'fact-number' }, i + 1),
-                h('div', { class: 'fact-content' }, fact)
-              ])
-            )
-          ) : h('div', { class: 'empty-state' }, 'No results found'),
-          props.result.facts.length > INITIAL_SHOW_COUNT && h('button', {
-            class: 'expand-btn',
-            onClick: () => { expandedFacts.value = !expandedFacts.value }
-          }, expandedFacts.value ? `Collapse ▲` : `Expand all ${props.result.facts.length} ▼`)
-        ]),
-        
-        // Edges Tab
-        activeTab.value === 'edges' && hasEdges.value && h('div', { class: 'edges-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Related Relations'),
-            h('span', { class: 'panel-count' }, `${props.result.edges.length} total`)
-          ]),
-          h('div', { class: 'edges-list' },
-            props.result.edges.map((edge, i) => 
-              h('div', { class: 'edge-item', key: i }, [
-                h('span', { class: 'edge-source' }, edge.source),
-                h('span', { class: 'edge-arrow' }, [
-                  h('span', { class: 'edge-line' }),
-                  h('span', { class: 'edge-label' }, edge.relation),
-                  h('span', { class: 'edge-line' })
-                ]),
-                h('span', { class: 'edge-target' }, edge.target)
-              ])
-            )
-          )
-        ]),
-        
-        // Nodes Tab
-        activeTab.value === 'nodes' && hasNodes.value && h('div', { class: 'nodes-panel' }, [
-          h('div', { class: 'panel-header' }, [
-            h('span', { class: 'panel-title' }, 'Related Nodes'),
-            h('span', { class: 'panel-count' }, `${props.result.nodes.length} total`)
-          ]),
-          h('div', { class: 'nodes-grid' },
-            props.result.nodes.map((node, i) => 
-              h('div', { class: 'node-tag', key: i }, [
-                h('span', { class: 'node-name' }, node.name),
-                node.type && h('span', { class: 'node-type' }, node.type)
-              ])
-            )
-          )
-        ])
-      ])
-    ])
-  }
-}
 
 // Computed
 const statusClass = computed(() => {
@@ -2146,110 +1389,7 @@ const truncateText = (text, maxLen) => {
   return text.substring(0, maxLen) + '...'
 }
 
-const renderMarkdown = (content) => {
-  if (!content) return ''
-  
-  // Remove leading ## header (chapter title shown elsewhere)
-  let processedContent = content.replace(/^##\s+.+\n+/, '')
-  
-  // Handle code blocks
-  let html = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-  
-  // Handle inline code
-  html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-  
-  // 处理标题
-  html = html.replace(/^#### (.+)$/gm, '<h5 class="md-h5">$1</h5>')
-  html = html.replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
-  html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
-  html = html.replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
-  
-  // Handle blockquotes
-  html = html.replace(/^> (.+)$/gm, '<blockquote class="md-quote">$1</blockquote>')
-  
-  // Handle lists - support nested
-  html = html.replace(/^(\s*)- (.+)$/gm, (match, indent, text) => {
-    const level = Math.floor(indent.length / 2)
-    return `<li class="md-li" data-level="${level}">${text}</li>`
-  })
-  html = html.replace(/^(\s*)(\d+)\. (.+)$/gm, (match, indent, num, text) => {
-    const level = Math.floor(indent.length / 2)
-    return `<li class="md-oli" data-level="${level}">${text}</li>`
-  })
 
-  // Wrap unordered lists
-  html = html.replace(/(<li class="md-li"[^>]*>.*?<\/li>\s*)+/g, '<ul class="md-ul">$&</ul>')
-  // Wrap ordered lists
-  html = html.replace(/(<li class="md-oli"[^>]*>.*?<\/li>\s*)+/g, '<ol class="md-ol">$&</ol>')
-
-  // Clean whitespace between list items
-  html = html.replace(/<\/li>\s+<li/g, '</li><li')
-  // Clean whitespace after list start tags
-  html = html.replace(/<ul class="md-ul">\s+/g, '<ul class="md-ul">')
-  html = html.replace(/<ol class="md-ol">\s+/g, '<ol class="md-ol">')
-  // Clean whitespace before list end tags
-  html = html.replace(/\s+<\/ul>/g, '</ul>')
-  html = html.replace(/\s+<\/ol>/g, '</ol>')
-  
-  // Handle bold and italic
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-  html = html.replace(/_(.+?)_/g, '<em>$1</em>')
-  
-  // Handle horizontal rule
-  html = html.replace(/^---$/gm, '<hr class="md-hr">')
-  
-  // Handle line breaks - blank lines become paragraph breaks, single newline becomes <br>
-  html = html.replace(/\n\n/g, '</p><p class="md-p">')
-  html = html.replace(/\n/g, '<br>')
-  
-  // Wrap in paragraphs
-  html = '<p class="md-p">' + html + '</p>'
-  
-  // Clean empty paragraphs
-  html = html.replace(/<p class="md-p"><\/p>/g, '')
-  html = html.replace(/<p class="md-p">(<h[2-5])/g, '$1')
-  html = html.replace(/(<\/h[2-5]>)<\/p>/g, '$1')
-  html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
-  html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
-  // Clean <br> around block elements
-  html = html.replace(/<br>\s*(<ul|<ol|<blockquote)/g, '$1')
-  html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>)\s*<br>/g, '$1')
-  // Clean <p><br> before block elements (from extra blank lines)
-  html = html.replace(/<p class="md-p">(<br>\s*)+(<ul|<ol|<blockquote|<pre|<hr)/g, '$2')
-  // Clean consecutive <br> tags
-  html = html.replace(/(<br>\s*){2,}/g, '<br>')
-  // Clean <br> before paragraph start after block elements
-  html = html.replace(/(<\/ol>|<\/ul>|<\/blockquote>)<br>(<p|<div)/g, '$1$2')
-
-  // Fix non-contiguous ordered list numbering: keep incrementing when single <ol> separated by paragraphs
-  const tokens = html.split(/(<ol class="md-ol">(?:<li class="md-oli"[^>]*>[\s\S]*?<\/li>)+<\/ol>)/g)
-  let olCounter = 0
-  let inSequence = false
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].startsWith('<ol class="md-ol">')) {
-      const liCount = (tokens[i].match(/<li class="md-oli"/g) || []).length
-      if (liCount === 1) {
-        olCounter++
-        if (olCounter > 1) {
-          tokens[i] = tokens[i].replace('<ol class="md-ol">', `<ol class="md-ol" start="${olCounter}">`)
-        }
-        inSequence = true
-      } else {
-        olCounter = 0
-        inSequence = false
-      }
-    } else if (inSequence) {
-      if (/<h[2-5]/.test(tokens[i])) {
-        olCounter = 0
-        inSequence = false
-      }
-    }
-  }
-  html = tokens.join('')
-
-  return DOMPurify.sanitize(html)
-}
 
 const getTimelineItemClass = (log, idx, total) => {
   const isLatest = idx === total - 1 && !isComplete.value
@@ -2380,12 +1520,6 @@ const extractFinalContent = (response) => {
     return finalAnswerMatch[1].trim()
   }
   
-  // 尝试找 最终答案: 后面的内容
-  const chineseFinalMatch = response.match(/Final Answer[:：]\s*\n*([\s\S]*)$/i)
-  if (chineseFinalMatch) {
-    return chineseFinalMatch[1].trim()
-  }
-  
   // If starts with ## or # or >, may be direct markdown
   const trimmedResponse = response.trim()
   if (trimmedResponse.match(/^[#>]/)) {
@@ -2457,12 +1591,84 @@ const groundingSources = computed(() => {
 const groundingClaims = computed(() => groundingData.value?.claims || [])
 const stalenessWarnings = computed(() => groundingData.value?.staleness_warnings || [])
 
+const quantData = computed(() => reportPayload.value?.quant || null)
+const monteCarloData = computed(() => reportPayload.value?.monte_carlo || null)
+const mcComposite = computed(() => monteCarloData.value?.composite || null)
+const mcPerOutcome = computed(() => {
+  const raw = monteCarloData.value?.per_outcome || []
+  return raw.filter(item => item !== null)
+})
+const escalationData = computed(() => quantData.value?.metrics?.escalation_analysis || null)
+const stanceData = computed(() => quantData.value?.positions?.stance_analysis || null)
+const consensusData = computed(() => quantData.value?.positions?.consensus_metrics || null)
+const riskMatrixData = computed(() => quantData.value?.risks?.risk_matrix || null)
+const probabilityData = computed(() => quantData.value?.risks?.probability_assessment || null)
+const stakeholderData = computed(() => quantData.value?.stakeholder_matrix || null)
+const simulationMetrics = computed(() => quantData.value?.metrics?.simulation_metrics || null)
+
+const consistencyWarnings = computed(() => reportPayload.value?.consistency_warnings || [])
+const historicalComparison = computed(() => reportPayload.value?.historical_comparison || null)
+const historicalPrecedents = computed(() => historicalComparison.value?.precedents || [])
+
+const hasQuantData = computed(() => {
+  return !!(escalationData.value || stanceData.value || riskMatrixData.value || stakeholderData.value)
+})
+
 const verdictClass = computed(() => {
   const v = (decisionPayload.value?.verdict || '').toLowerCase().trim()
   if (/\bno[- ]?go\b/.test(v)) return 'verdict-nogo'
   if (/\bgo\b/.test(v)) return 'verdict-go'
   return 'verdict-caution'
 })
+
+const getHistBarHeight = (bin, histogram) => {
+  if (!histogram?.length) return 0
+  const maxCount = Math.max(...histogram.map(b => b.count || 0))
+  return maxCount > 0 ? ((bin.count || 0) / maxCount) * 100 : 0
+}
+
+const getMcBarClass = (bin, cis) => {
+  if (!cis) return 'mc-bar-default'
+  const ci90 = cis['90%']
+  const ci95 = cis['95%']
+  const center = bin.center
+  if (ci90 && center >= ci90[0] && center <= ci90[1]) return 'mc-bar-ci90'
+  if (ci95 && center >= ci95[0] && center <= ci95[1]) return 'mc-bar-ci95'
+  return 'mc-bar-tail'
+}
+
+const getCiBandStyle = (ci, mc) => {
+  if (!ci || !mc?.histogram?.length) return {}
+  const hist = mc.histogram
+  const minVal = hist[0].min
+  const maxVal = hist[hist.length - 1].max
+  const range = maxVal - minVal || 1
+  const left = ((ci[0] - minVal) / range) * 100
+  const width = ((ci[1] - ci[0]) / range) * 100
+  return { left: left + '%', width: width + '%' }
+}
+
+const getMeanMarkerStyle = (mc) => {
+  if (!mc?.histogram?.length) return {}
+  const hist = mc.histogram
+  const minVal = hist[0].min
+  const maxVal = hist[hist.length - 1].max
+  const range = maxVal - minVal || 1
+  return { left: ((mc.mean - minVal) / range) * 100 + '%' }
+}
+
+const getRiskCellClass = (likelihood, impact) => {
+  const score = likelihood * impact
+  if (score >= 16) return 'risk-critical'
+  if (score >= 10) return 'risk-high'
+  if (score >= 5) return 'risk-moderate'
+  return 'risk-low'
+}
+
+const getRisksInCell = (likelihood, impact) => {
+  if (!riskMatrixData.value?.risks) return []
+  return riskMatrixData.value.risks.filter(r => r.likelihood === likelihood && r.impact === impact)
+}
 
 const startPolling = () => {
   if (agentLogTimer || consoleLogTimer) return
@@ -2512,3207 +1718,6 @@ watch(() => props.reportId, (newId) => {
 }, { immediate: true })
 </script>
 
-<style scoped>
-.report-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #F8F9FA;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  overflow: hidden;
-}
 
-/* Main Split Layout */
-.main-split-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
+<style scoped src="./Step4Report.scoped.css"></style>
 
-/* Panel Headers */
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #E5E7EB;
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.header-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #1F2937;
-  box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.15);
-  margin-right: 10px;
-  flex-shrink: 0;
-  animation: pulse-dot 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% {
-    box-shadow: 0 0 0 3px rgba(31, 41, 55, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(31, 41, 55, 0.1);
-  }
-}
-
-.header-index {
-  font-size: 12px;
-  font-weight: 600;
-  color: #9CA3AF;
-  margin-right: 10px;
-  flex-shrink: 0;
-}
-
-.header-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.header-meta {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 600;
-  color: #6B7280;
-  flex-shrink: 0;
-}
-
-/* Panel header status variants */
-.panel-header--active {
-  background: #FAFAFA;
-  border-color: #1F2937;
-}
-
-.panel-header--active .header-index {
-  color: #1F2937;
-}
-
-.panel-header--active .header-title {
-  color: #1F2937;
-}
-
-.panel-header--active .header-meta {
-  color: #1F2937;
-}
-
-.panel-header--done {
-  background: #F9FAFB;
-}
-
-.panel-header--done .header-index {
-  color: #10B981;
-}
-
-.panel-header--todo .header-index,
-.panel-header--todo .header-title {
-  color: #9CA3AF;
-}
-
-/* Left Panel - Report Style */
-.left-panel.report-style {
-  width: 45%;
-  min-width: 450px;
-  background: #FFFFFF;
-  border-right: 1px solid #E5E7EB;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding: 30px 50px 60px 50px;
-}
-
-.left-panel::-webkit-scrollbar {
-  width: 6px;
-}
-
-.left-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.left-panel::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-  transition: background 0.3s ease;
-}
-
-.left-panel:hover::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.left-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-/* Report Header */
-.report-content-wrapper {
-  max-width: 800px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.report-header-block {
-  margin-bottom: 30px;
-}
-
-.report-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.report-tag {
-  background: #000000;
-  color: #FFFFFF;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 8px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.report-id {
-  font-size: 11px;
-  color: #9CA3AF;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.main-title {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 36px;
-  font-weight: 700;
-  color: #111827;
-  line-height: 1.2;
-  margin: 0 0 16px 0;
-  letter-spacing: -0.02em;
-}
-
-.sub-title {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 16px;
-  color: #6B7280;
-  font-style: italic;
-  line-height: 1.6;
-  margin: 0 0 30px 0;
-  font-weight: 400;
-}
-
-.header-divider {
-  height: 1px;
-  background: #E5E7EB;
-  width: 100%;
-}
-
-.report-disclaimer {
-  font-size: 12px;
-  color: #9CA3AF;
-  margin: -16px 0 16px 0;
-  line-height: 1.4;
-}
-
-/* Sections List */
-.sections-list {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.report-section-item {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.section-header-row {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  transition: background-color 0.2s ease;
-  padding: 8px 12px;
-  margin: -8px -12px;
-  border-radius: 8px;
-}
-
-.section-header-row.clickable {
-  cursor: pointer;
-}
-
-.section-header-row.clickable:hover {
-  background-color: #F9FAFB;
-}
-
-.collapse-icon {
-  margin-left: auto;
-  color: #9CA3AF;
-  transition: transform 0.3s ease;
-  flex-shrink: 0;
-  align-self: center;
-}
-
-.collapse-icon.is-collapsed {
-  transform: rotate(-90deg);
-}
-
-.section-number {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 16px;
-  color: #9CA3AF; /* Dark gray, unchanged by state */
-  font-weight: 500;
-}
-
-.section-title {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 24px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0;
-  transition: color 0.3s ease;
-}
-
-/* States */
-.report-section-item.is-pending .section-title {
-  color: #D1D5DB;
-}
-
-.report-section-item.is-active .section-title,
-.report-section-item.is-completed .section-title {
-  color: #111827;
-}
-
-.section-body {
-  padding-left: 28px;
-  overflow: hidden;
-}
-
-/* Generated Content */
-.generated-content {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  line-height: 1.8;
-  color: #374151;
-}
-
-.generated-content :deep(p) {
-  margin-bottom: 1em;
-}
-
-.generated-content :deep(.md-h2),
-.generated-content :deep(.md-h3),
-.generated-content :deep(.md-h4) {
-  font-family: 'Times New Roman', Times, serif;
-  color: #111827;
-  margin-top: 1.5em;
-  margin-bottom: 0.8em;
-  font-weight: 700;
-}
-
-.generated-content :deep(.md-h2) { font-size: 20px; border-bottom: 1px solid #F3F4F6; padding-bottom: 8px; }
-.generated-content :deep(.md-h3) { font-size: 18px; }
-.generated-content :deep(.md-h4) { font-size: 16px; }
-
-.generated-content :deep(.md-ul),
-.generated-content :deep(.md-ol) {
-  padding-left: 24px;
-  margin: 12px 0;
-}
-
-.generated-content :deep(.md-li),
-.generated-content :deep(.md-oli) {
-  margin: 6px 0;
-}
-
-.generated-content :deep(.md-quote) {
-  border-left: 3px solid #E5E7EB;
-  padding-left: 16px;
-  margin: 1.5em 0;
-  color: #6B7280;
-  font-style: italic;
-  font-family: 'Times New Roman', Times, serif;
-}
-
-.generated-content :deep(.code-block) {
-  background: #F9FAFB;
-  padding: 12px;
-  border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  overflow-x: auto;
-  margin: 1em 0;
-  border: 1px solid #E5E7EB;
-}
-
-.generated-content :deep(strong) {
-  font-weight: 600;
-  color: #111827;
-}
-
-/* Loading State */
-.loading-state {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #6B7280;
-  font-size: 14px;
-  margin-top: 4px;
-}
-
-.loading-icon {
-  width: 18px;
-  height: 18px;
-  animation: spin 1s linear infinite;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-text {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 15px;
-  color: #4B5563;
-}
-
-.cursor-blink {
-  display: inline-block;
-  width: 8px;
-  height: 14px;
-  background: #8B5CF6;
-  opacity: 0.5;
-  animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0; }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Content Styles Override for this view */
-.generated-content :deep(.md-h2) {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 18px;
-  margin-top: 0;
-}
-
-
-/* Slide Content Transition */
-.slide-content-enter-active {
-  transition: opacity 0.3s ease-out;
-}
-
-.slide-content-leave-active {
-  transition: opacity 0.2s ease-in;
-}
-
-.slide-content-enter-from,
-.slide-content-leave-to {
-  opacity: 0;
-}
-
-.slide-content-enter-to,
-.slide-content-leave-from {
-  opacity: 1;
-}
-
-/* Waiting Placeholder */
-.waiting-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 40px;
-  color: #9CA3AF;
-}
-
-.waiting-animation {
-  position: relative;
-  width: 48px;
-  height: 48px;
-}
-
-.waiting-ring {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border: 2px solid #E5E7EB;
-  border-radius: 50%;
-  animation: ripple 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.waiting-ring:nth-child(2) {
-  animation-delay: 0.4s;
-}
-
-.waiting-ring:nth-child(3) {
-  animation-delay: 0.8s;
-}
-
-@keyframes ripple {
-  0% { transform: scale(0.5); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
-}
-
-.waiting-text {
-  font-size: 14px;
-}
-
-/* Right Panel */
-.right-panel {
-  flex: 1;
-  background: #FFFFFF;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-
-  /* Functional palette (low saturation, status-based) */
-  --wf-border: #E5E7EB;
-  --wf-divider: #F3F4F6;
-
-  --wf-active-bg: #FAFAFA;
-  --wf-active-border: #1F2937;
-  --wf-active-dot: #1F2937;
-  --wf-active-text: #1F2937;
-
-  --wf-done-bg: #F9FAFB;
-  --wf-done-border: #E5E7EB;
-  --wf-done-dot: #10B981;
-
-  --wf-muted-dot: #D1D5DB;
-  --wf-todo-text: #9CA3AF;
-}
-
-.right-panel::-webkit-scrollbar {
-  width: 6px;
-}
-
-.right-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.right-panel::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-  transition: background 0.3s ease;
-}
-
-.right-panel:hover::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.right-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.mono {
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* Workflow Overview */
-.workflow-overview {
-  padding: 16px 20px 0 20px;
-}
-
-.workflow-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.metric-right {
-  margin-left: auto;
-}
-
-.metric-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.metric-value {
-  font-size: 12px;
-  color: #374151;
-}
-
-.metric-pill {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--wf-border);
-  background: #F9FAFB;
-  color: #6B7280;
-}
-
-.metric-pill.pill--processing {
-  background: var(--wf-active-bg);
-  border-color: var(--wf-active-border);
-  color: var(--wf-active-text);
-}
-
-.metric-pill.pill--completed {
-  background: #ECFDF5;
-  border-color: #A7F3D0;
-  color: #065F46;
-}
-
-.metric-pill.pill--pending {
-  background: transparent;
-  border-style: dashed;
-  color: #6B7280;
-}
-
-.workflow-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-bottom: 10px;
-}
-
-.wf-step {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--wf-divider);
-  border-radius: 8px;
-  background: #FFFFFF;
-}
-
-.wf-step--active {
-  background: var(--wf-active-bg);
-  border-color: var(--wf-active-border);
-}
-
-.wf-step--done {
-  background: var(--wf-done-bg);
-  border-color: var(--wf-done-border);
-}
-
-.wf-step--todo {
-  background: transparent;
-  border-color: var(--wf-border);
-  border-style: dashed;
-}
-
-.wf-step-connector {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 24px;
-  flex-shrink: 0;
-}
-
-.wf-step-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--wf-muted-dot);
-  border: 2px solid #FFFFFF;
-  z-index: 1;
-}
-
-.wf-step-line {
-  width: 2px;
-  flex: 1;
-  background: var(--wf-divider);
-  margin-top: -2px;
-}
-
-.wf-step--active .wf-step-dot {
-  background: var(--wf-active-dot);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
-
-.wf-step--done .wf-step-dot {
-  background: var(--wf-done-dot);
-}
-
-.wf-step-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-
-.wf-step-index {
-  font-size: 11px;
-  font-weight: 700;
-  color: #9CA3AF;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
-}
-
-.wf-step-title {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
-  line-height: 1.35;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wf-step-meta {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--wf-active-text);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-
-.wf-step--todo .wf-step-title,
-.wf-step--todo .wf-step-index {
-  color: var(--wf-todo-text);
-}
-
-.workflow-divider {
-  height: 1px;
-  background: var(--wf-divider);
-  margin: 14px 0 0 0;
-}
-
-/* Workflow Timeline */
-.workflow-timeline {
-  padding: 14px 20px 24px;
-  flex: 1;
-}
-
-.timeline-item {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 12px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  border: 1px solid var(--wf-divider);
-  border-radius: 8px;
-  background: #FFFFFF;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.timeline-item:hover {
-  background: #F9FAFB;
-  border-color: var(--wf-border);
-}
-
-.timeline-item.node--active {
-  background: var(--wf-active-bg);
-  border-color: var(--wf-active-border);
-}
-
-.timeline-item.node--active:hover {
-  background: var(--wf-active-bg);
-  border-color: var(--wf-active-border);
-}
-
-.timeline-item.node--done {
-  background: var(--wf-done-bg);
-  border-color: var(--wf-done-border);
-}
-
-.timeline-item.node--done:hover {
-  background: var(--wf-done-bg);
-  border-color: var(--wf-done-border);
-}
-
-.timeline-connector {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 24px;
-  flex-shrink: 0;
-}
-
-.connector-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--wf-muted-dot);
-  border: 2px solid #FFFFFF;
-  z-index: 1;
-}
-
-.connector-line {
-  width: 2px;
-  flex: 1;
-  background: var(--wf-divider);
-  margin-top: -2px;
-}
-
-/* Connector dot: status only */
-.dot-active {
-  background: var(--wf-active-dot);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
-
-.dot-done {
-  background: var(--wf-done-dot);
-}
-
-.dot-muted {
-  background: var(--wf-muted-dot);
-}
-
-.timeline-content {
-  min-width: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  margin: 0;
-  transition: none;
-}
-
-.timeline-content:hover {
-  box-shadow: none;
-}
-
-.timeline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.action-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.action-time {
-  font-size: 11px;
-  color: #9CA3AF;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.timeline-body {
-  font-size: 13px;
-  color: #4B5563;
-}
-
-.timeline-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #F3F4F6;
-}
-
-.elapsed-placeholder {
-  flex-shrink: 0;
-}
-
-.footer-actions {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.elapsed-badge {
-  font-size: 11px;
-  color: #6B7280;
-  background: #F3F4F6;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* Timeline Body Elements */
-.info-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.info-key {
-  font-size: 11px;
-  color: #9CA3AF;
-  min-width: 80px;
-}
-
-.info-val {
-  color: #374151;
-}
-
-.status-message {
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  border: 1px solid transparent;
-}
-
-.status-message.planning {
-  background: var(--wf-active-bg);
-  border-color: var(--wf-active-border);
-  color: var(--wf-active-text);
-}
-
-.status-message.success {
-  background: #ECFDF5;
-  border-color: #A7F3D0;
-  color: #065F46;
-}
-
-.outline-badge {
-  display: inline-block;
-  margin-top: 8px;
-  padding: 4px 10px;
-  background: #F9FAFB;
-  color: #6B7280;
-  border: 1px solid #E5E7EB;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.section-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: #F9FAFB;
-  border: 1px solid var(--wf-border);
-  border-radius: 6px;
-}
-
-.section-tag.content-ready {
-  background: var(--wf-active-bg);
-  border: 1px dashed var(--wf-active-border);
-}
-
-.section-tag.content-ready svg {
-  color: var(--wf-active-dot);
-}
-
-
-.section-tag.completed {
-  background: #ECFDF5;
-  border: 1px solid #A7F3D0;
-}
-
-.section-tag.completed svg {
-  color: #059669;
-}
-
-.tag-num {
-  font-size: 11px;
-  font-weight: 700;
-  color: #6B7280;
-}
-
-.section-tag.completed .tag-num {
-  color: #059669;
-}
-
-.tag-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.tool-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #F9FAFB;
-  color: #374151;
-  border: 1px solid var(--wf-border);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.tool-icon {
-  flex-shrink: 0;
-}
-
-/* Tool Colors - Purple (Deep Insight) */
-.tool-badge.tool-purple {
-  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
-  border-color: #C4B5FD;
-  color: #6D28D9;
-}
-.tool-badge.tool-purple .tool-icon {
-  stroke: #7C3AED;
-}
-
-/* Tool Colors - Blue (Panorama Search) */
-.tool-badge.tool-blue {
-  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
-  border-color: #93C5FD;
-  color: #1D4ED8;
-}
-.tool-badge.tool-blue .tool-icon {
-  stroke: #2563EB;
-}
-
-/* Tool Colors - Green (Agent Interview) */
-.tool-badge.tool-green {
-  background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
-  border-color: #86EFAC;
-  color: #15803D;
-}
-.tool-badge.tool-green .tool-icon {
-  stroke: #16A34A;
-}
-
-/* Tool Colors - Orange (Quick Search) */
-.tool-badge.tool-orange {
-  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
-  border-color: #FDBA74;
-  color: #C2410C;
-}
-.tool-badge.tool-orange .tool-icon {
-  stroke: #EA580C;
-}
-
-/* Tool Colors - Cyan (Graph Stats) */
-.tool-badge.tool-cyan {
-  background: linear-gradient(135deg, #ECFEFF 0%, #CFFAFE 100%);
-  border-color: #67E8F9;
-  color: #0E7490;
-}
-.tool-badge.tool-cyan .tool-icon {
-  stroke: #0891B2;
-}
-
-/* Tool Colors - Pink (Entity Query) */
-.tool-badge.tool-pink {
-  background: linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%);
-  border-color: #F9A8D4;
-  color: #BE185D;
-}
-.tool-badge.tool-pink .tool-icon {
-  stroke: #DB2777;
-}
-
-/* Tool Colors - Gray (Default) */
-.tool-badge.tool-gray {
-  background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
-  border-color: #D1D5DB;
-  color: #374151;
-}
-.tool-badge.tool-gray .tool-icon {
-  stroke: #6B7280;
-}
-
-.tool-params {
-  margin-top: 10px;
-  background: transparent;
-  border-radius: 0;
-  padding: 10px 0 0 0;
-  border-top: 1px dashed var(--wf-divider);
-  overflow-x: auto;
-}
-
-.tool-params pre {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #4B5563;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  padding: 10px;
-}
-
-/* Unified Action Buttons */
-.action-btn {
-  background: #F3F4F6;
-  border: 1px solid #E5E7EB;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.action-btn:hover {
-  background: #E5E7EB;
-  color: #374151;
-  border-color: #D1D5DB;
-}
-
-/* Result Wrapper */
-.result-wrapper {
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--wf-divider);
-  border-radius: 0;
-  padding: 12px 0 0 0;
-}
-
-.result-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.result-tool {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.result-size {
-  font-size: 10px;
-  color: #6B7280;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.result-raw {
-  margin-top: 10px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.result-raw pre {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #374151;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  padding: 10px;
-  border-radius: 6px;
-}
-
-.raw-preview {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #6B7280;
-}
-
-/* Legacy toggle-raw removed - using unified .action-btn */
-
-/* LLM Response */
-.llm-meta {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.meta-tag {
-  font-size: 11px;
-  padding: 3px 8px;
-  background: #F3F4F6;
-  color: #6B7280;
-  border-radius: 4px;
-}
-
-.meta-tag.active {
-  background: #DBEAFE;
-  color: #1E40AF;
-}
-
-.meta-tag.final-answer {
-  background: #D1FAE5;
-  color: #059669;
-  font-weight: 600;
-}
-
-.final-answer-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px 14px;
-  background: #ECFDF5;
-  border: 1px solid #A7F3D0;
-  border-radius: 6px;
-  color: #065F46;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.final-answer-hint svg {
-  flex-shrink: 0;
-}
-
-.llm-content {
-  margin-top: 10px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.llm-content pre {
-  margin: 0;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #4B5563;
-  background: #F3F4F6;
-  padding: 10px;
-  border-radius: 6px;
-}
-
-/* Complete Banner */
-.complete-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: #ECFDF5;
-  border: 1px solid #A7F3D0;
-  border-radius: 8px;
-  color: #065F46;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.next-step-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: calc(100% - 40px);
-  margin: 4px 20px 0 20px;
-  padding: 14px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #FFFFFF;
-  background: #1F2937;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.next-step-btn:hover {
-  background: #374151;
-}
-
-.next-step-btn svg {
-  transition: transform 0.2s ease;
-}
-
-.next-step-btn:hover svg {
-  transform: translateX(4px);
-}
-
-/* Workflow Empty */
-.workflow-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: #9CA3AF;
-  font-size: 13px;
-}
-
-.empty-pulse {
-  width: 24px;
-  height: 24px;
-  background: #E5E7EB;
-  border-radius: 50%;
-  margin-bottom: 16px;
-  animation: pulse-ring 1.5s infinite;
-}
-
-@keyframes pulse-ring {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.5; }
-}
-
-/* Timeline Transitions */
-.timeline-item-enter-active {
-  transition: all 0.4s ease;
-}
-
-.timeline-item-enter-from {
-  opacity: 0;
-  transform: translateX(-20px);
-}
-
-/* ========== Structured Result Display Components ========== */
-
-/* Common Styles - using :deep() for dynamic components */
-:deep(.stat-row) {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-:deep(.stat-box) {
-  flex: 1;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  padding: 10px 8px;
-  text-align: center;
-}
-
-:deep(.stat-box .stat-num) {
-  display: block;
-  font-size: 20px;
-  font-weight: 700;
-  color: #111827;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-:deep(.stat-box .stat-label) {
-  display: block;
-  font-size: 10px;
-  color: #9CA3AF;
-  margin-top: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-:deep(.stat-box.highlight) {
-  background: #ECFDF5;
-  border-color: #A7F3D0;
-}
-
-:deep(.stat-box.highlight .stat-num) {
-  color: #059669;
-}
-
-:deep(.stat-box.muted) {
-  background: #F9FAFB;
-  border-color: #E5E7EB;
-}
-
-:deep(.stat-box.muted .stat-num) {
-  color: #6B7280;
-}
-
-:deep(.query-display) {
-  background: #F9FAFB;
-  padding: 10px 14px;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #374151;
-  margin-bottom: 12px;
-  border: 1px solid #E5E7EB;
-  line-height: 1.5;
-}
-
-:deep(.expand-details) {
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-:deep(.expand-details:hover) {
-  border-color: #D1D5DB;
-  color: #374151;
-}
-
-:deep(.detail-content) {
-  margin-top: 14px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  padding: 14px;
-}
-
-:deep(.section-label) {
-  font-size: 11px;
-  font-weight: 600;
-  color: #6B7280;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-/* Facts Section */
-:deep(.facts-section) {
-  margin-bottom: 14px;
-}
-
-:deep(.fact-row) {
-  display: flex;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-:deep(.fact-row:last-child) {
-  border-bottom: none;
-}
-
-:deep(.fact-row.active) {
-  background: #ECFDF5;
-  margin: 0 -10px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border-bottom: none;
-}
-
-:deep(.fact-idx) {
-  min-width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #F3F4F6;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #6B7280;
-  flex-shrink: 0;
-}
-
-:deep(.fact-row.active .fact-idx) {
-  background: #A7F3D0;
-  color: #065F46;
-}
-
-:deep(.fact-text) {
-  font-size: 12px;
-  color: #4B5563;
-  line-height: 1.6;
-}
-
-/* Entities Section */
-:deep(.entities-section) {
-  margin-bottom: 14px;
-}
-
-:deep(.entity-chips) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-:deep(.entity-chip) {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  padding: 6px 12px;
-}
-
-:deep(.chip-name) {
-  font-size: 12px;
-  font-weight: 500;
-  color: #111827;
-}
-
-:deep(.chip-type) {
-  font-size: 10px;
-  color: #9CA3AF;
-  background: #E5E7EB;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-/* Relations Section */
-:deep(.relations-section) {
-  margin-bottom: 14px;
-}
-
-:deep(.relation-row) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  flex-wrap: wrap;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-:deep(.relation-row:last-child) {
-  border-bottom: none;
-}
-
-:deep(.rel-node) {
-  font-size: 12px;
-  font-weight: 500;
-  color: #111827;
-  background: #F3F4F6;
-  padding: 4px 10px;
-  border-radius: 4px;
-}
-
-:deep(.rel-edge) {
-  font-size: 10px;
-  font-weight: 600;
-  color: #FFFFFF;
-  background: #4F46E5;
-  padding: 3px 10px;
-  border-radius: 10px;
-}
-
-/* ========== Interview Display - Conversation Style ========== */
-:deep(.interview-display) {
-  padding: 0;
-}
-
-/* Header */
-:deep(.interview-display .interview-header) {
-  padding: 0;
-  background: transparent;
-  border-bottom: none;
-  margin-bottom: 16px;
-}
-
-:deep(.interview-display .header-main) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-:deep(.interview-display .header-title) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
-  letter-spacing: -0.01em;
-}
-
-:deep(.interview-display .header-stats) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-:deep(.interview-display .stat-item) {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-:deep(.interview-display .stat-value) {
-  font-size: 14px;
-  font-weight: 600;
-  color: #4F46E5;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-:deep(.interview-display .stat-label) {
-  font-size: 11px;
-  color: #9CA3AF;
-  text-transform: lowercase;
-}
-
-:deep(.interview-display .stat-divider) {
-  color: #D1D5DB;
-  font-size: 12px;
-}
-
-:deep(.interview-display .stat-size) {
-  font-size: 11px;
-  color: #9CA3AF;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-:deep(.interview-display .header-topic) {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #6B7280;
-  line-height: 1.5;
-}
-
-/* Agent Tabs - Card Style */
-:deep(.interview-display .agent-tabs) {
-  display: flex;
-  gap: 8px;
-  padding: 0 0 14px 0;
-  background: transparent;
-  border-bottom: 1px solid #F3F4F6;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #E5E7EB transparent;
-}
-
-:deep(.interview-display .agent-tabs::-webkit-scrollbar) {
-  height: 4px;
-}
-
-:deep(.interview-display .agent-tabs::-webkit-scrollbar-track) {
-  background: transparent;
-}
-
-:deep(.interview-display .agent-tabs::-webkit-scrollbar-thumb) {
-  background: #E5E7EB;
-  border-radius: 2px;
-}
-
-:deep(.interview-display .agent-tabs::-webkit-scrollbar-thumb:hover) {
-  background: #D1D5DB;
-}
-
-:deep(.interview-display .agent-tab) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-:deep(.interview-display .agent-tab:hover) {
-  background: #F3F4F6;
-  border-color: #D1D5DB;
-  color: #374151;
-}
-
-:deep(.interview-display .agent-tab.active) {
-  background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
-  border-color: #A5B4FC;
-  color: #4338CA;
-  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.1);
-}
-
-:deep(.interview-display .tab-avatar) {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E5E7EB;
-  color: #6B7280;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-:deep(.interview-display .agent-tab:hover .tab-avatar) {
-  background: #D1D5DB;
-}
-
-:deep(.interview-display .agent-tab.active .tab-avatar) {
-  background: #6366F1;
-  color: #FFFFFF;
-}
-
-:deep(.interview-display .tab-name) {
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Interview Detail */
-:deep(.interview-display .interview-detail) {
-  padding: 12px 0;
-  background: transparent;
-}
-
-/* Agent Profile - No card */
-:deep(.interview-display .agent-profile) {
-  display: flex;
-  gap: 12px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  margin-bottom: 16px;
-}
-
-:deep(.interview-display .profile-avatar) {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E5E7EB;
-  color: #6B7280;
-  font-size: 14px;
-  font-weight: 600;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-:deep(.interview-display .profile-info) {
-  flex: 1;
-  min-width: 0;
-}
-
-:deep(.interview-display .profile-name) {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 2px;
-}
-
-:deep(.interview-display .profile-role) {
-  font-size: 11px;
-  color: #6B7280;
-  margin-bottom: 4px;
-}
-
-:deep(.interview-display .profile-bio) {
-  font-size: 11px;
-  color: #9CA3AF;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* Selection Reason */
-:deep(.interview-display .selection-reason) {
-  background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
-}
-
-:deep(.interview-display .reason-label) {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748B;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 6px;
-}
-
-:deep(.interview-display .reason-content) {
-  font-size: 12px;
-  color: #475569;
-  line-height: 1.6;
-}
-
-/* Q&A Thread - Clean list */
-:deep(.interview-display .qa-thread) {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-:deep(.interview-display .qa-pair) {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-}
-
-:deep(.interview-display .qa-question),
-:deep(.interview-display .qa-answer) {
-  display: flex;
-  gap: 12px;
-}
-
-:deep(.interview-display .qa-badge) {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-:deep(.interview-display .q-badge) {
-  background: transparent;
-  color: #9CA3AF;
-  border: 1px solid #E5E7EB;
-}
-
-:deep(.interview-display .a-badge) {
-  background: #4F46E5;
-  color: #FFFFFF;
-  border: 1px solid #4F46E5;
-}
-
-:deep(.interview-display .qa-content) {
-  flex: 1;
-  min-width: 0;
-}
-
-:deep(.interview-display .qa-sender) {
-  font-size: 11px;
-  font-weight: 600;
-  color: #9CA3AF;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-:deep(.interview-display .qa-text) {
-  font-size: 13px;
-  color: #374151;
-  line-height: 1.6;
-}
-
-:deep(.interview-display .qa-answer) {
-  background: transparent;
-  padding: 0;
-  border: none;
-  margin-top: 0;
-}
-
-:deep(.interview-display .answer-placeholder) {
-  opacity: 0.6;
-}
-
-:deep(.interview-display .placeholder-text) {
-  font-style: italic;
-  color: #9CA3AF;
-}
-
-:deep(.interview-display .qa-answer-header) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-/* Platform Switch */
-:deep(.interview-display .platform-switch) {
-  display: flex;
-  gap: 2px;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-}
-
-:deep(.interview-display .platform-btn) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  color: #9CA3AF;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-:deep(.interview-display .platform-btn:hover) {
-  color: #6B7280;
-}
-
-:deep(.interview-display .platform-btn.active) {
-  background: transparent;
-  color: #4F46E5;
-  border-color: #E5E7EB;
-  box-shadow: none;
-}
-
-:deep(.interview-display .platform-icon) {
-  flex-shrink: 0;
-}
-
-:deep(.interview-display .answer-text) {
-  font-size: 13px;
-  color: #111827;
-  line-height: 1.6;
-}
-
-:deep(.interview-display .answer-text strong) {
-  color: #111827;
-  font-weight: 600;
-}
-
-:deep(.interview-display .expand-answer-btn) {
-  display: inline-block;
-  margin-top: 8px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-bottom: 1px dotted #D1D5DB;
-  border-radius: 0;
-  font-size: 11px;
-  font-weight: 500;
-  color: #9CA3AF;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-:deep(.interview-display .expand-answer-btn:hover) {
-  background: transparent;
-  color: #6B7280;
-  border-bottom-style: solid;
-}
-
-/* Quotes Section - Clean list */
-:deep(.interview-display .quotes-section) {
-  background: transparent;
-  border: none;
-  border-top: 1px solid #F3F4F6;
-  border-radius: 0;
-  padding: 16px 0 0 0;
-  margin-top: 16px;
-}
-
-:deep(.interview-display .quotes-header) {
-  font-size: 11px;
-  font-weight: 600;
-  color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 12px;
-}
-
-:deep(.interview-display .quotes-list) {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-:deep(.interview-display .quote-item) {
-  margin: 0;
-  padding: 10px 12px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  font-size: 12px;
-  font-style: italic;
-  color: #4B5563;
-  line-height: 1.5;
-}
-
-/* Summary Section */
-:deep(.interview-display .summary-section) {
-  margin-top: 20px;
-  padding: 16px 0 0 0;
-  background: transparent;
-  border: none;
-  border-top: 1px solid #F3F4F6;
-  border-radius: 0;
-}
-
-:deep(.interview-display .summary-header) {
-  font-size: 11px;
-  font-weight: 600;
-  color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 8px;
-}
-
-:deep(.interview-display .summary-content) {
-  font-size: 13px;
-  color: #374151;
-  line-height: 1.6;
-}
-
-/* Markdown styles in summary */
-:deep(.interview-display .summary-content h2),
-:deep(.interview-display .summary-content h3),
-:deep(.interview-display .summary-content h4),
-:deep(.interview-display .summary-content h5) {
-  margin: 12px 0 8px 0;
-  font-weight: 600;
-  color: #111827;
-}
-
-:deep(.interview-display .summary-content h2) {
-  font-size: 15px;
-}
-
-:deep(.interview-display .summary-content h3) {
-  font-size: 14px;
-}
-
-:deep(.interview-display .summary-content h4),
-:deep(.interview-display .summary-content h5) {
-  font-size: 13px;
-}
-
-:deep(.interview-display .summary-content p) {
-  margin: 8px 0;
-}
-
-:deep(.interview-display .summary-content strong) {
-  font-weight: 600;
-  color: #111827;
-}
-
-:deep(.interview-display .summary-content em) {
-  font-style: italic;
-}
-
-:deep(.interview-display .summary-content ul),
-:deep(.interview-display .summary-content ol) {
-  margin: 8px 0;
-  padding-left: 20px;
-}
-
-:deep(.interview-display .summary-content li) {
-  margin: 4px 0;
-}
-
-:deep(.interview-display .summary-content blockquote) {
-  margin: 8px 0;
-  padding-left: 12px;
-  border-left: 3px solid #E5E7EB;
-  color: #6B7280;
-  font-style: italic;
-}
-
-/* Markdown styles in quotes */
-:deep(.interview-display .quote-item strong) {
-  font-weight: 600;
-  color: #374151;
-}
-
-:deep(.interview-display .quote-item em) {
-  font-style: italic;
-}
-
-/* ========== Enhanced Insight Display Styles ========== */
-:deep(.insight-display) {
-  padding: 0;
-}
-
-:deep(.insight-header) {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
-  border-radius: 8px 8px 0 0;
-  border: 1px solid #C4B5FD;
-  border-bottom: none;
-}
-
-:deep(.insight-header .header-main) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-:deep(.insight-header .header-title) {
-  font-size: 14px;
-  font-weight: 700;
-  color: #6D28D9;
-}
-
-:deep(.insight-header .header-stats) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-}
-
-:deep(.insight-header .stat-item) {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-}
-
-:deep(.insight-header .stat-value) {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  color: #7C3AED;
-}
-
-:deep(.insight-header .stat-label) {
-  color: #8B5CF6;
-  font-size: 10px;
-}
-
-:deep(.insight-header .stat-divider) {
-  color: #C4B5FD;
-  margin: 0 4px;
-}
-
-:deep(.insight-header .stat-size) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #9CA3AF;
-}
-
-:deep(.insight-header .header-topic) {
-  font-size: 13px;
-  color: #5B21B6;
-  line-height: 1.5;
-}
-
-:deep(.insight-header .header-scenario) {
-  margin-top: 6px;
-  font-size: 11px;
-  color: #7C3AED;
-}
-
-:deep(.insight-header .scenario-label) {
-  font-weight: 600;
-}
-
-:deep(.insight-tabs) {
-  display: flex;
-  gap: 2px;
-  padding: 8px 12px;
-  background: #FAFAFA;
-  border: 1px solid #E5E7EB;
-  border-top: none;
-}
-
-:deep(.insight-tab) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-:deep(.insight-tab:hover) {
-  background: #F3F4F6;
-  color: #374151;
-}
-
-:deep(.insight-tab.active) {
-  background: #FFFFFF;
-  color: #7C3AED;
-  border-color: #C4B5FD;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-
-:deep(.insight-content) {
-  padding: 12px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-}
-
-:deep(.insight-display .panel-header) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-:deep(.insight-display .panel-title) {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-
-:deep(.insight-display .panel-count) {
-  font-size: 10px;
-  color: #9CA3AF;
-}
-
-:deep(.insight-display .facts-list),
-:deep(.insight-display .relations-list),
-:deep(.insight-display .subqueries-list) {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-:deep(.insight-display .entities-grid) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-:deep(.insight-display .fact-item) {
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.insight-display .fact-number) {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E5E7EB;
-  border-radius: 50%;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  color: #6B7280;
-}
-
-:deep(.insight-display .fact-content) {
-  flex: 1;
-  font-size: 12px;
-  color: #374151;
-  line-height: 1.6;
-}
-
-/* Entity Tag Styles - Compact multi-column layout */
-:deep(.insight-display .entity-tag) {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  cursor: default;
-  transition: all 0.15s ease;
-}
-
-:deep(.insight-display .entity-tag:hover) {
-  background: #F3F4F6;
-  border-color: #D1D5DB;
-}
-
-:deep(.insight-display .entity-tag .entity-name) {
-  font-size: 12px;
-  font-weight: 500;
-  color: #111827;
-}
-
-:deep(.insight-display .entity-tag .entity-type) {
-  font-size: 9px;
-  color: #7C3AED;
-  background: #EDE9FE;
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
-:deep(.insight-display .entity-tag .entity-fact-count) {
-  font-size: 9px;
-  color: #9CA3AF;
-  margin-left: 2px;
-}
-
-/* Legacy entity card styles for backwards compatibility */
-:deep(.insight-display .entity-card) {
-  padding: 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
-}
-
-:deep(.insight-display .entity-header) {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-:deep(.insight-display .entity-info) {
-  flex: 1;
-}
-
-:deep(.insight-display .entity-card .entity-name) {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111827;
-}
-
-:deep(.insight-display .entity-card .entity-type) {
-  font-size: 10px;
-  color: #7C3AED;
-  background: #EDE9FE;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-top: 2px;
-}
-
-:deep(.insight-display .entity-card .entity-fact-count) {
-  font-size: 10px;
-  color: #9CA3AF;
-  background: #F3F4F6;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-:deep(.insight-display .entity-summary) {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #E5E7EB;
-  font-size: 11px;
-  color: #6B7280;
-  line-height: 1.5;
-}
-
-/* Relation Item Styles */
-:deep(.insight-display .relation-item) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.insight-display .rel-source),
-:deep(.insight-display .rel-target) {
-  padding: 4px 8px;
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #374151;
-}
-
-:deep(.insight-display .rel-arrow) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-}
-
-:deep(.insight-display .rel-line) {
-  flex: 1;
-  height: 1px;
-  background: #D1D5DB;
-}
-
-:deep(.insight-display .rel-label) {
-  padding: 2px 6px;
-  background: #EDE9FE;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  color: #7C3AED;
-  white-space: nowrap;
-}
-
-/* Sub-query Styles */
-:deep(.insight-display .subquery-item) {
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.insight-display .subquery-number) {
-  flex-shrink: 0;
-  padding: 2px 6px;
-  background: #7C3AED;
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  color: #FFFFFF;
-}
-
-:deep(.insight-display .subquery-text) {
-  font-size: 12px;
-  color: #374151;
-  line-height: 1.5;
-}
-
-/* Expand Button */
-:deep(.insight-display .expand-btn),
-:deep(.panorama-display .expand-btn),
-:deep(.quick-search-display .expand-btn) {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: center;
-}
-
-:deep(.insight-display .expand-btn:hover),
-:deep(.panorama-display .expand-btn:hover),
-:deep(.quick-search-display .expand-btn:hover) {
-  background: #F3F4F6;
-  color: #374151;
-  border-color: #D1D5DB;
-}
-
-/* Empty State */
-:deep(.insight-display .empty-state),
-:deep(.panorama-display .empty-state),
-:deep(.quick-search-display .empty-state) {
-  padding: 24px;
-  text-align: center;
-  font-size: 12px;
-  color: #9CA3AF;
-}
-
-/* ========== Enhanced Panorama Display Styles ========== */
-:deep(.panorama-display) {
-  padding: 0;
-}
-
-:deep(.panorama-header) {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
-  border-radius: 8px 8px 0 0;
-  border: 1px solid #93C5FD;
-  border-bottom: none;
-}
-
-:deep(.panorama-header .header-main) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-:deep(.panorama-header .header-title) {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1D4ED8;
-}
-
-:deep(.panorama-header .header-stats) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-}
-
-:deep(.panorama-header .stat-item) {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-}
-
-:deep(.panorama-header .stat-value) {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  color: #2563EB;
-}
-
-:deep(.panorama-header .stat-label) {
-  color: #60A5FA;
-  font-size: 10px;
-}
-
-:deep(.panorama-header .stat-divider) {
-  color: #93C5FD;
-  margin: 0 4px;
-}
-
-:deep(.panorama-header .stat-size) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #9CA3AF;
-}
-
-:deep(.panorama-header .header-topic) {
-  font-size: 13px;
-  color: #1E40AF;
-  line-height: 1.5;
-}
-
-:deep(.panorama-tabs) {
-  display: flex;
-  gap: 2px;
-  padding: 8px 12px;
-  background: #FAFAFA;
-  border: 1px solid #E5E7EB;
-  border-top: none;
-}
-
-:deep(.panorama-tab) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-:deep(.panorama-tab:hover) {
-  background: #F3F4F6;
-  color: #374151;
-}
-
-:deep(.panorama-tab.active) {
-  background: #FFFFFF;
-  color: #2563EB;
-  border-color: #93C5FD;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-
-:deep(.panorama-content) {
-  padding: 12px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-}
-
-:deep(.panorama-display .panel-header) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-:deep(.panorama-display .panel-title) {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-
-:deep(.panorama-display .panel-count) {
-  font-size: 10px;
-  color: #9CA3AF;
-}
-
-:deep(.panorama-display .facts-list) {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-:deep(.panorama-display .fact-item) {
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.panorama-display .fact-item.active) {
-  background: #F9FAFB;
-  border-color: #E5E7EB;
-}
-
-:deep(.panorama-display .fact-item.historical) {
-  background: #F9FAFB;
-  border-color: #E5E7EB;
-}
-
-:deep(.panorama-display .fact-number) {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E5E7EB;
-  border-radius: 50%;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  color: #6B7280;
-}
-
-:deep(.panorama-display .fact-item.active .fact-number) {
-  background: #E5E7EB;
-  color: #6B7280;
-}
-
-:deep(.panorama-display .fact-item.historical .fact-number) {
-  background: #9CA3AF;
-  color: #FFFFFF;
-}
-
-:deep(.panorama-display .fact-content) {
-  flex: 1;
-  font-size: 12px;
-  color: #374151;
-  line-height: 1.6;
-}
-
-:deep(.panorama-display .fact-time) {
-  display: block;
-  font-size: 10px;
-  color: #9CA3AF;
-  margin-bottom: 4px;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-:deep(.panorama-display .fact-text) {
-  display: block;
-}
-
-/* Entities Grid */
-:deep(.panorama-display .entities-grid) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-:deep(.panorama-display .entity-tag) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.panorama-display .entity-name) {
-  font-size: 12px;
-  font-weight: 500;
-  color: #374151;
-}
-
-:deep(.panorama-display .entity-type) {
-  font-size: 10px;
-  color: #2563EB;
-  background: #DBEAFE;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-/* ========== Enhanced Quick Search Display Styles ========== */
-:deep(.quick-search-display) {
-  padding: 0;
-}
-
-:deep(.quicksearch-header) {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
-  border-radius: 8px 8px 0 0;
-  border: 1px solid #FDBA74;
-  border-bottom: none;
-}
-
-:deep(.quicksearch-header .header-main) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-:deep(.quicksearch-header .header-title) {
-  font-size: 14px;
-  font-weight: 700;
-  color: #C2410C;
-}
-
-:deep(.quicksearch-header .header-stats) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-}
-
-:deep(.quicksearch-header .stat-item) {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-}
-
-:deep(.quicksearch-header .stat-value) {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  color: #EA580C;
-}
-
-:deep(.quicksearch-header .stat-label) {
-  color: #FB923C;
-  font-size: 10px;
-}
-
-:deep(.quicksearch-header .stat-divider) {
-  color: #FDBA74;
-  margin: 0 4px;
-}
-
-:deep(.quicksearch-header .stat-size) {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #9CA3AF;
-}
-
-:deep(.quicksearch-header .header-query) {
-  font-size: 13px;
-  color: #9A3412;
-  line-height: 1.5;
-}
-
-:deep(.quicksearch-header .query-label) {
-  font-weight: 600;
-}
-
-:deep(.quicksearch-tabs) {
-  display: flex;
-  gap: 2px;
-  padding: 8px 12px;
-  background: #FAFAFA;
-  border: 1px solid #E5E7EB;
-  border-top: none;
-}
-
-:deep(.quicksearch-tab) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-:deep(.quicksearch-tab:hover) {
-  background: #F3F4F6;
-  color: #374151;
-}
-
-:deep(.quicksearch-tab.active) {
-  background: #FFFFFF;
-  color: #EA580C;
-  border-color: #FDBA74;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-
-:deep(.quicksearch-content) {
-  padding: 12px;
-  background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-}
-
-/* When there are no tabs, content connects directly to header */
-:deep(.quicksearch-content.no-tabs) {
-  border-top: none;
-}
-
-:deep(.quick-search-display .panel-header) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #F3F4F6;
-}
-
-:deep(.quick-search-display .panel-title) {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-
-:deep(.quick-search-display .panel-count) {
-  font-size: 10px;
-  color: #9CA3AF;
-}
-
-:deep(.quick-search-display .facts-list) {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-:deep(.quick-search-display .fact-item) {
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.quick-search-display .fact-item.active) {
-  background: #F9FAFB;
-  border-color: #E5E7EB;
-}
-
-:deep(.quick-search-display .fact-number) {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #E5E7EB;
-  border-radius: 50%;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 700;
-  color: #6B7280;
-}
-
-:deep(.quick-search-display .fact-item.active .fact-number) {
-  background: #E5E7EB;
-  color: #6B7280;
-}
-
-:deep(.quick-search-display .fact-content) {
-  flex: 1;
-  font-size: 12px;
-  color: #374151;
-  line-height: 1.6;
-}
-
-/* Edges Panel */
-:deep(.quick-search-display .edges-list) {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-:deep(.quick-search-display .edge-item) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.quick-search-display .edge-source),
-:deep(.quick-search-display .edge-target) {
-  padding: 4px 8px;
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #374151;
-}
-
-:deep(.quick-search-display .edge-arrow) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-}
-
-:deep(.quick-search-display .edge-line) {
-  flex: 1;
-  height: 1px;
-  background: #D1D5DB;
-}
-
-:deep(.quick-search-display .edge-label) {
-  padding: 2px 6px;
-  background: #FFEDD5;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  color: #C2410C;
-  white-space: nowrap;
-}
-
-/* Nodes Grid */
-:deep(.quick-search-display .nodes-grid) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-:deep(.quick-search-display .node-tag) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-}
-
-:deep(.quick-search-display .node-name) {
-  font-size: 12px;
-  font-weight: 500;
-  color: #374151;
-}
-
-:deep(.quick-search-display .node-type) {
-  font-size: 10px;
-  color: #EA580C;
-  background: #FFEDD5;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-/* Console Logs - consistent with Step3Simulation.vue */
-.console-logs {
-  background: #000;
-  color: #DDD;
-  padding: 16px;
-  font-family: 'JetBrains Mono', monospace;
-  border-top: 1px solid #222;
-  flex-shrink: 0;
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px solid #333;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  font-size: 10px;
-  color: #666;
-}
-
-.log-title {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.log-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  height: 100px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.log-content::-webkit-scrollbar { width: 4px; }
-.log-content::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
-
-.log-line {
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.log-msg {
-  color: #BBB;
-  word-break: break-all;
-}
-
-.log-msg.error { color: #EF5350; }
-.log-msg.warning { color: #FFA726; }
-.log-msg.success { color: #66BB6A; }
-
-/* Decision Recommendation Card */
-.decision-recommendation-card {
-  margin: 24px 0;
-  border: 1px solid var(--accent, #00b894);
-  border-radius: 12px;
-  background: rgba(0, 184, 148, 0.04);
-  overflow: hidden;
-}
-.decision-card-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-}
-.decision-card-body { padding: 20px; }
-.verdict-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.verdict-label { font-size: 12px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 1px; }
-.verdict-value { font-size: 20px; font-weight: 700; }
-.verdict-go { color: #00b894; }
-.verdict-nogo { color: #e17055; }
-.verdict-caution { color: #fdcb6e; }
-.confidence-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 11px; padding: 2px 8px; border-radius: 4px;
-  background: rgba(255,255,255,0.06); border: 1px solid var(--border);
-  text-transform: capitalize;
-}
-.conf-dots { display: inline-flex; gap: 3px; }
-.conf-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2);
-}
-.conf-dot.filled { background: currentColor; border-color: currentColor; }
-.conf-high { color: #00b894; }
-.conf-moderate { color: #fdcb6e; }
-.conf-low { color: #e17055; }
-.verdict-reasoning { color: var(--text-secondary); font-size: 14px; line-height: 1.6; margin-bottom: 16px; }
-.confidence-rationale {
-  font-size: 12px; color: var(--text-secondary); font-style: italic;
-  margin: -10px 0 16px; opacity: 0.8;
-}
-.decision-section { margin-bottom: 16px; }
-.decision-section h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; color: var(--text-primary); }
-.decision-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.decision-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-weight: 500; }
-.decision-table td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-.dir-positive { color: #00b894; }
-.dir-negative { color: #e17055; }
-.dir-neutral { color: var(--text-secondary); }
-.flip-list { margin: 0; padding-left: 20px; }
-.flip-list li { font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
-
-/* Financial Summary */
-.financial-section {
-  margin-top: 20px; padding-top: 16px;
-  border-top: 1px solid rgba(0, 184, 148, 0.15);
-}
-.financial-table .profit-low { color: #e17055; }
-.financial-table .profit-high { color: #00b894; }
-.financial-meta {
-  display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap;
-}
-.financial-tag {
-  font-size: 12px; padding: 4px 10px; border-radius: 5px;
-  background: rgba(0, 184, 148, 0.08); border: 1px solid rgba(0, 184, 148, 0.2);
-  color: var(--text-primary);
-}
-
-/* Causal Chain */
-.causal-chain { display: flex; flex-direction: column; gap: 2px; }
-.causal-link { display: flex; flex-direction: column; align-items: flex-start; }
-.causal-node {
-  padding: 8px 14px; border-radius: 6px; font-size: 13px;
-  line-height: 1.5; max-width: 100%;
-}
-.cause-node {
-  background: rgba(108, 92, 231, 0.08); border: 1px solid rgba(108, 92, 231, 0.2);
-}
-.effect-node {
-  background: rgba(0, 184, 148, 0.06); border: 1px solid rgba(0, 184, 148, 0.15);
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-}
-.causal-arrow {
-  padding: 2px 0 2px 16px; color: var(--text-secondary); opacity: 0.5;
-}
-.causal-text { color: var(--text-primary); }
-.causal-conf {
-  font-size: 10px; padding: 1px 6px; border-radius: 3px;
-  text-transform: uppercase; letter-spacing: 0.5px;
-}
-.causal-conf.conf-high { background: rgba(0,184,148,0.12); color: #00b894; }
-.causal-conf.conf-moderate { background: rgba(253,203,110,0.12); color: #fdcb6e; }
-.causal-conf.conf-low { background: rgba(225,112,85,0.12); color: #e17055; }
-
-/* Scenario Outcomes */
-.scenario-outcomes { display: flex; flex-direction: column; gap: 12px; }
-.scenario-outcome-card {
-  padding: 14px 16px; border-radius: 8px;
-  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
-}
-.scenario-outcome-header {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
-}
-.scenario-outcome-name {
-  font-size: 14px; font-weight: 600; color: var(--text-primary);
-}
-.qualitative-tag {
-  font-size: 10px; padding: 1px 6px; border-radius: 3px;
-  background: rgba(253,203,110,0.1); color: #fdcb6e;
-  text-transform: uppercase; letter-spacing: 0.3px;
-}
-.probability-bar-container { margin-bottom: 8px; }
-.probability-bar {
-  display: flex; height: 6px; border-radius: 3px; overflow: hidden;
-  background: rgba(255,255,255,0.05);
-}
-.prob-segment { height: 100%; }
-.prob-low { background: rgba(225,112,85,0.5); }
-.prob-mid { background: rgba(253,203,110,0.5); }
-.prob-high { background: rgba(0,184,148,0.4); }
-.probability-labels {
-  display: flex; justify-content: space-between; margin-top: 4px;
-  font-size: 10px; color: var(--text-secondary);
-}
-.scenario-outcome-narrative {
-  font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 0;
-}
-
-/* Grounding Panel */
-.grounding-panel {
-  margin: 24px 0; border: 1px solid var(--border); border-radius: 12px;
-  background: rgba(108, 92, 231, 0.03); overflow: hidden;
-}
-.grounding-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 20px; cursor: pointer; transition: background 0.2s;
-}
-.grounding-header:hover { background: rgba(108, 92, 231, 0.06); }
-.grounding-title {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0;
-}
-.grounding-chevron {
-  transition: transform 0.2s; color: var(--text-secondary);
-}
-.grounding-chevron.is-open { transform: rotate(180deg); }
-.grounding-body { padding: 0 20px 20px; }
-.grounding-subsection { margin-bottom: 16px; }
-.grounding-subsection h4 {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--text-secondary); margin: 0 0 8px;
-}
-.source-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.source-badge {
-  font-size: 11px; padding: 3px 10px; border-radius: 4px;
-  background: rgba(108, 92, 231, 0.1); border: 1px solid rgba(108, 92, 231, 0.2);
-  color: var(--text-primary);
-}
-.claims-list { list-style: none; margin: 0; padding: 0; }
-.claim-item {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
-  font-size: 13px;
-}
-.claim-badge {
-  flex-shrink: 0; font-size: 10px; padding: 2px 8px; border-radius: 3px;
-  text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px;
-}
-.badge-user { background: rgba(116, 185, 255, 0.12); color: #74b9ff; }
-.badge-research { background: rgba(0, 184, 148, 0.12); color: #00b894; }
-.claim-text { color: var(--text-secondary); line-height: 1.5; }
-.staleness-list { display: flex; flex-direction: column; gap: 6px; }
-.staleness-badge {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; padding: 6px 10px; border-radius: 6px;
-  background: rgba(253, 203, 110, 0.08); border: 1px solid rgba(253, 203, 110, 0.2);
-  color: #fdcb6e;
-}
-.grounding-empty {
-  font-size: 13px; color: var(--text-secondary); font-style: italic; margin: 0;
-}
-
-/* Follow-Up Suggestions */
-.followup-section {
-  margin-top: 40px; padding: 28px; border-radius: 12px;
-  background: linear-gradient(135deg, rgba(0,200,83,0.04), rgba(0,200,83,0.01));
-  border: 1px solid rgba(0,200,83,0.15);
-}
-.followup-header { margin-bottom: 20px; }
-.followup-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
-.followup-desc { font-size: 13px; color: var(--text-secondary); margin: 0; }
-.followup-cards { display: flex; flex-direction: column; gap: 10px; }
-.followup-card {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 16px 20px; border-radius: 8px;
-  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
-  cursor: pointer; transition: all 0.2s;
-}
-.followup-card:hover { border-color: #00c853; background: rgba(0,200,83,0.06); }
-.followup-card-top { margin-bottom: 6px; }
-.variation-badge {
-  display: inline-block; font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.5px;
-  padding: 2px 8px; border-radius: 4px;
-}
-.vtype-cost { background: rgba(225, 112, 85, 0.15); color: #e17055; border: 1px solid rgba(225, 112, 85, 0.3); }
-.vtype-timing { background: rgba(108, 92, 231, 0.15); color: #a29bfe; border: 1px solid rgba(108, 92, 231, 0.3); }
-.vtype-external { background: rgba(253, 203, 110, 0.15); color: #fdcb6e; border: 1px solid rgba(253, 203, 110, 0.3); }
-.vtype-scale { background: rgba(0, 184, 148, 0.15); color: #00b894; border: 1px solid rgba(0, 184, 148, 0.3); }
-.followup-card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }
-.followup-card-change { font-size: 12px; color: var(--text-secondary); margin: 0; }
-.followup-run-btn {
-  white-space: nowrap; font-size: 12px; font-weight: 600; color: #00c853;
-  padding: 6px 14px; border-radius: 5px; border: 1px solid rgba(0,200,83,0.3);
-  background: transparent; transition: all 0.2s;
-}
-.followup-card:hover .followup-run-btn { background: #00c853; color: #000; }
-.followup-loading {
-  display: flex; align-items: center; gap: 10px; margin-top: 24px;
-  font-size: 13px; color: var(--text-secondary);
-}
-.followup-spinner {
-  width: 16px; height: 16px; border: 2px solid var(--border);
-  border-top-color: #00c853; border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-/* Recurring Prompts */
-.recurring-section {
-  margin-top: 24px; padding: 20px 24px; border-radius: 10px;
-  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
-}
-.recurring-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 14px; }
-.recurring-actions { display: flex; flex-direction: column; gap: 8px; }
-.recurring-btn {
-  display: flex; align-items: center; gap: 8px; padding: 10px 16px;
-  border-radius: 6px; background: transparent; border: 1px solid var(--border);
-  color: var(--text-secondary); font-size: 13px; cursor: pointer; transition: all 0.2s;
-  text-align: left;
-}
-.recurring-btn:hover { border-color: #00c853; color: var(--text-primary); }
-.reminder-confirm {
-  margin-top: 10px; font-size: 12px; color: #00c853; padding: 6px 0;
-}
-</style>

@@ -29,12 +29,13 @@ from typing import Dict, Any, List, Optional
 _shutdown_event = None
 _cleanup_done = False
 
-# 添加项目路径
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
-_project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
-sys.path.insert(0, _scripts_dir)
-sys.path.insert(0, _backend_dir)
+# 添加项目路径（shared with other runners — see scripts/lib/paths.py）
+_lib = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib')
+if _lib not in sys.path:
+    sys.path.insert(0, _lib)
+from paths import init_script_paths
+
+_scripts_dir, _backend_dir, _project_root = init_script_paths(__file__)
 
 # 加载项目根目录的 .env 文件（包含 LLM_API_KEY 等配置）
 from dotenv import load_dotenv
@@ -480,8 +481,8 @@ class TwitterSimulationRunner:
         agent_configs = self.config.get("agent_configs", [])
         
         # 基础激活数量
-        base_min = time_config.get("agents_per_hour_min", 5)
-        base_max = time_config.get("agents_per_hour_max", 20)
+        base_min = time_config.get("agents_per_round_min", time_config.get("agents_per_hour_min", 5))
+        base_max = time_config.get("agents_per_round_max", time_config.get("agents_per_hour_max", 20))
         
         # 根据时段调整
         peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
@@ -589,11 +590,12 @@ class TwitterSimulationRunner:
         
         # 创建环境
         print("创建OASIS环境...")
+        llm_semaphore = int(os.environ.get("OASIS_LLM_SEMAPHORE", "5"))
         self.env = oasis.make(
             agent_graph=self.agent_graph,
             platform=oasis.DefaultPlatformType.TWITTER,
             database_path=db_path,
-            semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+            semaphore=llm_semaphore,
         )
         
         await self.env.reset()

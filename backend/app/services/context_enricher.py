@@ -15,15 +15,14 @@ from ..config import Config
 from ..utils.logger import get_logger
 from .grounding_bundle import sync_grounding_sources_from_project, ingest_dossier_sources
 
-logger = get_logger('glas.context_enricher')
+logger = get_logger("glas.context_enricher")
 
 
 @runtime_checkable
 class ContextEnricher(Protocol):
     """Refresh project grounding / external snapshots."""
 
-    def refresh(self, project) -> None:
-        ...
+    def refresh(self, project) -> None: ...
 
 
 class DefaultContextEnricher:
@@ -39,10 +38,10 @@ class DeepResearchContextEnricher(DefaultContextEnricher):
 
     def refresh(self, project) -> None:
         super().refresh(project)
-        dossier_path = getattr(project, 'research_dossier_path', None)
+        dossier_path = getattr(project, "research_dossier_path", None)
         if dossier_path and os.path.isfile(dossier_path):
             try:
-                with open(dossier_path, 'r', encoding='utf-8') as f:
+                with open(dossier_path, encoding="utf-8") as f:
                     dossier = json.load(f)
                 ingest_dossier_sources(project, dossier)
                 logger.info(
@@ -60,8 +59,7 @@ class StubWebContextEnricher(DefaultContextEnricher):
         super().refresh(project)
         if Config.ENABLE_WEB_ENRICHER:
             logger.warning(
-                "ENABLE_WEB_ENRICHER is set but no network adapter is configured; "
-                "only upload grounding applied."
+                "ENABLE_WEB_ENRICHER is set but no network adapter is configured; only upload grounding applied."
             )
 
 

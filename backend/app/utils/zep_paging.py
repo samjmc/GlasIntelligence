@@ -16,7 +16,7 @@ from zep_cloud.client import Zep
 
 from .logger import get_logger
 
-logger = get_logger('glas.zep_paging')
+logger = get_logger("glas.zep_paging")
 
 _DEFAULT_PAGE_SIZE = 100
 _MAX_NODES = 2000

@@ -81,13 +81,13 @@ from typing import Dict, Any, List, Optional, Tuple
 _shutdown_event = None
 _cleanup_done = False
 
-# 添加 backend 目录到路径
-# 脚本固定位于 backend/scripts/ 目录
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
-_project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
-sys.path.insert(0, _scripts_dir)
-sys.path.insert(0, _backend_dir)
+# 添加 backend 目录到路径（shared bootstrap — see scripts/lib/paths.py）
+_lib = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lib')
+if _lib not in sys.path:
+    sys.path.insert(0, _lib)
+from paths import init_script_paths
+
+_scripts_dir, _backend_dir, _project_root = init_script_paths(__file__)
 
 # 加载项目根目录的 .env 文件（包含 LLM_API_KEY 等配置）
 from dotenv import load_dotenv
@@ -168,10 +168,29 @@ try:
         generate_twitter_agent_graph,
         generate_reddit_agent_graph
     )
+    from oasis.social_agent import SocialAgent
+    try:
+        from oasis.social_agent import AgentGraph
+    except ImportError:
+        from oasis.social_agent.agent_graph import AgentGraph
+    try:
+        from oasis.social_platform.config import UserInfo
+    except ImportError:
+        from oasis.social_platform.typing import UserInfo
 except ImportError as e:
     print(f"错误: 缺少依赖 {e}")
     print("请先安装: pip install oasis-ai camel-ai")
     sys.exit(1)
+
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from app.services.simulation_tools import ToolRegistry, ToolCallLogger, set_effect_engine
+    from app.services.simulation_effects import EffectEngine
+except ImportError:
+    ToolRegistry = None
+    ToolCallLogger = None
+    EffectEngine = None
+    set_effect_engine = None
 
 
 # Twitter可用动作（不包含INTERVIEW，INTERVIEW只能通过ManualAction手动触发）
@@ -200,6 +219,110 @@ REDDIT_ACTIONS = [
     ActionType.FOLLOW,
     ActionType.MUTE,
 ]
+
+
+# ---------------------------------------------------------------------------
+# Custom agent graph builders (mirrors OASIS's generate_*_agent_graph but
+# adds per-agent tool assignment via ToolRegistry)
+# ---------------------------------------------------------------------------
+
+async def generate_twitter_agent_graph_with_tools(
+    profile_path: str,
+    model,
+    available_actions,
+    tool_registry=None,
+):
+    """Build a Twitter agent graph with optional per-agent tools.
+
+    When tool_registry is None (or ToolRegistry not available), this
+    behaves identically to OASIS's generate_twitter_agent_graph.
+    """
+    import pandas as pd
+
+    agent_info = pd.read_csv(profile_path)
+    agent_graph = AgentGraph()
+
+    for agent_id in range(len(agent_info)):
+        profile = {"nodes": [], "edges": [], "other_info": {}}
+        profile["other_info"]["user_profile"] = agent_info["user_char"][agent_id]
+
+        user_info = UserInfo(
+            name=agent_info["username"][agent_id],
+            description=agent_info["description"][agent_id],
+            profile=profile,
+            recsys_type="twitter",
+        )
+
+        agent_kwargs = dict(
+            agent_id=agent_id,
+            user_info=user_info,
+            model=model,
+            agent_graph=agent_graph,
+            available_actions=available_actions,
+        )
+
+        if tool_registry is not None:
+            agent_tools = tool_registry.get_tools_for_agent(agent_id, platform="twitter")
+            if agent_tools:
+                agent_kwargs["tools"] = agent_tools
+                agent_kwargs["max_iteration"] = tool_registry.get_max_iterations(agent_id)
+
+        agent = SocialAgent(**agent_kwargs)
+        agent_graph.add_agent(agent)
+
+    return agent_graph
+
+
+async def generate_reddit_agent_graph_with_tools(
+    profile_path: str,
+    model,
+    available_actions,
+    tool_registry=None,
+):
+    """Build a Reddit agent graph with optional per-agent tools.
+
+    When tool_registry is None (or ToolRegistry not available), this
+    behaves identically to OASIS's generate_reddit_agent_graph.
+    """
+    agent_graph = AgentGraph()
+    with open(profile_path, "r", encoding="utf-8") as f:
+        agent_info = json.load(f)
+
+    async def process_agent(i):
+        profile = {"nodes": [], "edges": [], "other_info": {}}
+        profile["other_info"]["user_profile"] = agent_info[i]["persona"]
+        profile["other_info"]["mbti"] = agent_info[i]["mbti"]
+        profile["other_info"]["gender"] = agent_info[i]["gender"]
+        profile["other_info"]["age"] = agent_info[i]["age"]
+        profile["other_info"]["country"] = agent_info[i]["country"]
+
+        user_info = UserInfo(
+            name=agent_info[i]["username"],
+            description=agent_info[i]["bio"],
+            profile=profile,
+            recsys_type="reddit",
+        )
+
+        agent_kwargs = dict(
+            agent_id=i,
+            user_info=user_info,
+            agent_graph=agent_graph,
+            model=model,
+            available_actions=available_actions,
+        )
+
+        if tool_registry is not None:
+            agent_tools = tool_registry.get_tools_for_agent(i, platform="reddit")
+            if agent_tools:
+                agent_kwargs["tools"] = agent_tools
+                agent_kwargs["max_iteration"] = tool_registry.get_max_iterations(i)
+
+        agent = SocialAgent(**agent_kwargs)
+        agent_graph.add_agent(agent)
+
+    tasks = [process_agent(i) for i in range(len(agent_info))]
+    await asyncio.gather(*tasks)
+    return agent_graph
 
 
 # IPC相关常量
@@ -629,6 +752,41 @@ ACTION_TYPE_MAP = {
     'interview': 'INTERVIEW',
 }
 
+# Tool action type prefix (tool calls logged via side-channel)
+TOOL_ACTION_PREFIX = "TOOL_"
+
+def fetch_new_tool_calls(simulation_dir: str, agent_names: Dict[int, str], platform: str = "default") -> List[Dict[str, Any]]:
+    """Fetch tool calls from the side-channel logger and format as action dicts.
+
+    Each platform passes its own reader_id so Twitter and Reddit loops
+    independently consume the shared log. Tool calls are filtered to
+    only include entries matching the requested platform.
+    """
+    if ToolCallLogger is None:
+        return []
+    tcl = ToolCallLogger.get_active()
+    if tcl is None:
+        return []
+    raw_calls = tcl.fetch_new(reader_id=platform)
+    actions = []
+    for tc in raw_calls:
+        if tc.get("platform") and tc["platform"] != platform:
+            continue
+        tool_name = tc.get("tool_name", "unknown")
+        agent_id = tc.get("agent_id", -1)
+        action_type = f"{TOOL_ACTION_PREFIX}{tool_name.upper()}"
+        actions.append({
+            'agent_id': agent_id,
+            'agent_name': agent_names.get(agent_id, f'Agent_{agent_id}'),
+            'action_type': action_type,
+            'action_args': {
+                'tool_name': tool_name,
+                'tool_args': tc.get("tool_args", {}),
+                'tool_result': tc.get("tool_result", ""),
+            },
+        })
+    return actions
+
 
 def get_agent_names_from_config(config: Dict[str, Any]) -> Dict[int, str]:
     """
@@ -1037,48 +1195,122 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     )
 
 
+def compute_time_label(round_num: int, time_scale: Dict[str, Any]) -> Dict[str, str]:
+    """Build a human-readable time label for the current round.
+
+    Returns a dict with 'label' (combined), 'relative', and 'anchor' keys.
+    """
+    from dateutil.relativedelta import relativedelta
+    from datetime import datetime as _dt
+
+    unit = time_scale.get("unit", "hour")
+    per_round = max(1, time_scale.get("per_round", 1))
+    start_date_str = time_scale.get("start_date", "")
+    elapsed = round_num * per_round
+
+    unit_label = unit.title()
+    relative = f"{unit_label} {elapsed}"
+
+    anchor = ""
+    if start_date_str:
+        try:
+            base = _dt.fromisoformat(start_date_str)
+            delta_map = {
+                "hour": {"hours": elapsed},
+                "day": {"days": elapsed},
+                "week": {"weeks": elapsed},
+                "month": {"months": elapsed},
+                "year": {"years": elapsed},
+            }
+            delta_kwargs = delta_map.get(unit, {"hours": elapsed})
+            target = base + relativedelta(**delta_kwargs)
+
+            fmt_map = {
+                "hour": target.strftime("%b %d %Y, %H:%M"),
+                "day": target.strftime("%b %d, %Y"),
+                "week": f"w/c {target.strftime('%b %d, %Y')}",
+                "month": target.strftime("%B %Y"),
+                "year": target.strftime("%Y"),
+            }
+            anchor = fmt_map.get(unit, target.isoformat())
+            return {"label": f"{relative} ({anchor})", "relative": relative, "anchor": anchor}
+        except Exception:
+            pass
+
+    return {"label": relative, "relative": relative, "anchor": anchor}
+
+
+def get_phase_multiplier(round_num: int, phases: List[Dict[str, Any]]) -> float:
+    """Return the activity multiplier for the current round based on scenario phases."""
+    for phase in phases:
+        if phase.get("start_round", 0) <= round_num + 1 <= phase.get("end_round", 0):
+            return phase.get("activity_multiplier", 1.0)
+    return 1.0
+
+
 def get_active_agents_for_round(
     env,
     config: Dict[str, Any],
     current_hour: int,
     round_num: int
 ) -> List:
-    """根据时间和配置决定本轮激活哪些Agent"""
+    """根据时间和配置决定本轮激活哪些Agent
+
+    Supports two modes:
+    - Hour-based (unit == "hour"): uses active_hours, peak/off-peak multipliers
+    - Phase-based (unit != "hour"): skips active_hours, uses ScenarioPhase multipliers
+    """
     time_config = config.get("time_config", {})
     agent_configs = config.get("agent_configs", [])
-    
-    base_min = time_config.get("agents_per_hour_min", 5)
-    base_max = time_config.get("agents_per_hour_max", 20)
-    
-    peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
-    off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-    
-    if current_hour in peak_hours:
-        multiplier = time_config.get("peak_activity_multiplier", 1.5)
-    elif current_hour in off_peak_hours:
-        multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
+
+    base_min = time_config.get("agents_per_round_min", time_config.get("agents_per_hour_min", 5))
+    base_max = time_config.get("agents_per_round_max", time_config.get("agents_per_hour_max", 20))
+
+    time_scale = time_config.get("time_scale", {})
+    unit = time_scale.get("unit", "hour")
+
+    if unit != "hour":
+        # Phase-based scheduling: no hour-of-day filtering
+        phases = time_config.get("phases", [])
+        multiplier = get_phase_multiplier(round_num, phases)
+
+        candidates = []
+        for cfg in agent_configs:
+            if random.random() < cfg.get("activity_level", 0.5):
+                candidates.append(cfg.get("agent_id", 0))
+
+        target_count = int(random.uniform(base_min, base_max) * multiplier)
     else:
-        multiplier = 1.0
-    
-    target_count = int(random.uniform(base_min, base_max) * multiplier)
-    
-    candidates = []
-    for cfg in agent_configs:
-        agent_id = cfg.get("agent_id", 0)
-        active_hours = cfg.get("active_hours", list(range(8, 23)))
-        activity_level = cfg.get("activity_level", 0.5)
-        
-        if current_hour not in active_hours:
-            continue
-        
-        if random.random() < activity_level:
-            candidates.append(agent_id)
-    
+        # Hour-based scheduling (existing logic)
+        peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
+        off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
+
+        if current_hour in peak_hours:
+            multiplier = time_config.get("peak_activity_multiplier", 1.5)
+        elif current_hour in off_peak_hours:
+            multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
+        else:
+            multiplier = 1.0
+
+        target_count = int(random.uniform(base_min, base_max) * multiplier)
+
+        candidates = []
+        for cfg in agent_configs:
+            agent_id = cfg.get("agent_id", 0)
+            active_hours = cfg.get("active_hours", list(range(8, 23)))
+            activity_level = cfg.get("activity_level", 0.5)
+
+            if current_hour not in active_hours:
+                continue
+
+            if random.random() < activity_level:
+                candidates.append(agent_id)
+
     selected_ids = random.sample(
-        candidates, 
+        candidates,
         min(target_count, len(candidates))
     ) if candidates else []
-    
+
     active_agents = []
     for agent_id in selected_ids:
         try:
@@ -1086,7 +1318,7 @@ def get_active_agents_for_round(
             active_agents.append((agent_id, agent))
         except Exception:
             pass
-    
+
     return active_agents
 
 
@@ -1103,7 +1335,9 @@ async def run_twitter_simulation(
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    tool_registry=None,
+    effect_engine=None,
 ) -> PlatformSimulation:
     """运行Twitter模拟
     
@@ -1135,11 +1369,17 @@ async def run_twitter_simulation(
         log_info(f"错误: Profile文件不存在: {profile_path}")
         return result
     
-    result.agent_graph = await generate_twitter_agent_graph(
+    result.agent_graph = await generate_twitter_agent_graph_with_tools(
         profile_path=profile_path,
         model=model,
         available_actions=TWITTER_ACTIONS,
+        tool_registry=tool_registry,
     )
+    
+    if tool_registry is not None:
+        role_map = tool_registry.role_map
+        tool_count = sum(1 for r in role_map.values() if r != "none")
+        log_info(f"Tool-enhanced agents: {tool_count}/{result.agent_graph.get_num_nodes()}")
     
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
@@ -1152,29 +1392,31 @@ async def run_twitter_simulation(
     if os.path.exists(db_path):
         os.remove(db_path)
     
+    llm_semaphore = int(os.environ.get("OASIS_LLM_SEMAPHORE", "5"))
     result.env = oasis.make(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.TWITTER,
         database_path=db_path,
-        semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+        semaphore=llm_semaphore,
     )
     
     await result.env.reset()
     log_info("环境已启动")
+
+    if effect_engine:
+        effect_engine.set_env(result.env, result.agent_graph, "twitter")
     
     if action_logger:
         action_logger.log_simulation_start(config)
     
     total_actions = 0
-    last_rowid = 0  # 跟踪数据库中最后处理的行号（使用 rowid 避免 created_at 格式差异）
+    last_rowid = 0
     
-    # 执行初始事件
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
     
-    # 记录 round 0 开始（初始事件阶段）
     if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
+        action_logger.log_round_start(0, 0)
     
     initial_action_count = 0
     if initial_posts:
@@ -1206,60 +1448,87 @@ async def run_twitter_simulation(
             await result.env.step(initial_actions)
             log_info(f"已发布 {len(initial_actions)} 条初始帖子")
     
-    # 记录 round 0 结束
     if action_logger:
         action_logger.log_round_end(0, initial_action_count)
     
-    # 主模拟循环
     time_config = config.get("time_config", {})
-    total_hours = time_config.get("total_simulation_hours", 72)
-    minutes_per_round = time_config.get("minutes_per_round", 30)
-    total_rounds = (total_hours * 60) // minutes_per_round
-    
-    # 如果指定了最大轮数，则截断
+    time_scale = time_config.get("time_scale", {})
+    ts_unit = time_scale.get("unit", "hour")
+
+    if ts_unit != "hour":
+        total_rounds = time_scale.get("total_duration", 60) // max(1, time_scale.get("per_round", 1))
+    else:
+        total_hours = time_config.get("total_simulation_hours", 72)
+        minutes_per_round = time_config.get("minutes_per_round", 30)
+        total_rounds = (total_hours * 60) // minutes_per_round
+
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
+    minutes_per_round = time_config.get("minutes_per_round", 30)
     start_time = datetime.now()
-    
+
     for round_num in range(total_rounds):
-        # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
+        time_label = compute_time_label(round_num, time_scale)
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
-        # 无论是否有活跃agent，都记录round开始
+
         if action_logger:
-            action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+            action_logger.log_round_start(round_num + 1, simulated_hour, time_label=time_label)
+
+        elapsed_sim_hours = (
+            simulated_minutes / 60 if ts_unit == "hour" else 0
+        )
+
         if not active_agents:
-            # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(round_num + 1, 0, time_label=time_label, simulated_hours=elapsed_sim_hours)
             continue
-        
+
+        # Inject time context into agent system messages
+        for _, agent in active_agents:
+            if hasattr(agent, 'system_message') and agent.system_message is not None:
+                if not hasattr(agent, '_original_system_content'):
+                    agent._original_system_content = agent.system_message.content
+                agent.system_message.content = (
+                    f"[CURRENT SIMULATED TIME: {time_label['label']}]\n\n"
+                    + agent._original_system_content
+                )
+
         actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
-        # 从数据库获取实际执行的动作并记录
+
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
+        tool_actions = fetch_new_tool_calls(simulation_dir, agent_names, platform="twitter")
+        actual_actions = tool_actions + actual_actions
+
+        if effect_engine:
+            applied = effect_engine.apply_pending(round_num + 1, "twitter")
+            if applied:
+                state_actions = effect_engine.to_action_dicts(applied, agent_names)
+                actual_actions.extend(state_actions)
+                log_info(f"Round {round_num + 1}: Applied {len(applied)} state effects")
+
         round_action_count = 0
         for action_data in actual_actions:
+            action_data["time_label"] = time_label.get("label", "")
             if action_logger:
                 action_logger.log_action(
                     round_num=round_num + 1,
@@ -1270,23 +1539,24 @@ async def run_twitter_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
-        
+            action_logger.log_round_end(round_num + 1, round_action_count, time_label=time_label, simulated_hours=elapsed_sim_hours)
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
-            log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
-    # 注意：不关闭环境，保留给Interview使用
-    
+            if ts_unit != "hour":
+                log_info(f"{time_label['label']} - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
+            else:
+                log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
-    
+
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"模拟循环完成! 耗时: {elapsed:.1f}秒, 总动作: {total_actions}")
-    
+
     return result
 
 
@@ -1295,7 +1565,9 @@ async def run_reddit_simulation(
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    tool_registry=None,
+    effect_engine=None,
 ) -> PlatformSimulation:
     """运行Reddit模拟
     
@@ -1326,11 +1598,17 @@ async def run_reddit_simulation(
         log_info(f"错误: Profile文件不存在: {profile_path}")
         return result
     
-    result.agent_graph = await generate_reddit_agent_graph(
+    result.agent_graph = await generate_reddit_agent_graph_with_tools(
         profile_path=profile_path,
         model=model,
         available_actions=REDDIT_ACTIONS,
+        tool_registry=tool_registry,
     )
+    
+    if tool_registry is not None:
+        role_map = tool_registry.role_map
+        tool_count = sum(1 for r in role_map.values() if r != "none")
+        log_info(f"Tool-enhanced agents: {tool_count}/{result.agent_graph.get_num_nodes()}")
     
     # 从配置文件获取 Agent 真实名称映射（使用 entity_name 而非默认的 Agent_X）
     agent_names = get_agent_names_from_config(config)
@@ -1343,29 +1621,31 @@ async def run_reddit_simulation(
     if os.path.exists(db_path):
         os.remove(db_path)
     
+    llm_semaphore = int(os.environ.get("OASIS_LLM_SEMAPHORE", "5"))
     result.env = oasis.make(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.REDDIT,
         database_path=db_path,
-        semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+        semaphore=llm_semaphore,
     )
     
     await result.env.reset()
     log_info("环境已启动")
+
+    if effect_engine:
+        effect_engine.set_env(result.env, result.agent_graph, "reddit")
     
     if action_logger:
         action_logger.log_simulation_start(config)
     
     total_actions = 0
-    last_rowid = 0  # 跟踪数据库中最后处理的行号（使用 rowid 避免 created_at 格式差异）
+    last_rowid = 0
     
-    # 执行初始事件
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
     
-    # 记录 round 0 开始（初始事件阶段）
     if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
+        action_logger.log_round_start(0, 0)
     
     initial_action_count = 0
     if initial_posts:
@@ -1405,60 +1685,86 @@ async def run_reddit_simulation(
             await result.env.step(initial_actions)
             log_info(f"已发布 {len(initial_actions)} 条初始帖子")
     
-    # 记录 round 0 结束
     if action_logger:
         action_logger.log_round_end(0, initial_action_count)
     
-    # 主模拟循环
     time_config = config.get("time_config", {})
-    total_hours = time_config.get("total_simulation_hours", 72)
-    minutes_per_round = time_config.get("minutes_per_round", 30)
-    total_rounds = (total_hours * 60) // minutes_per_round
-    
-    # 如果指定了最大轮数，则截断
+    time_scale = time_config.get("time_scale", {})
+    ts_unit = time_scale.get("unit", "hour")
+
+    if ts_unit != "hour":
+        total_rounds = time_scale.get("total_duration", 60) // max(1, time_scale.get("per_round", 1))
+    else:
+        total_hours = time_config.get("total_simulation_hours", 72)
+        minutes_per_round = time_config.get("minutes_per_round", 30)
+        total_rounds = (total_hours * 60) // minutes_per_round
+
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
+    minutes_per_round = time_config.get("minutes_per_round", 30)
     start_time = datetime.now()
-    
+
     for round_num in range(total_rounds):
-        # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
+        time_label = compute_time_label(round_num, time_scale)
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
-        # 无论是否有活跃agent，都记录round开始
+
         if action_logger:
-            action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+            action_logger.log_round_start(round_num + 1, simulated_hour, time_label=time_label)
+
+        elapsed_sim_hours = (
+            simulated_minutes / 60 if ts_unit == "hour" else 0
+        )
+
         if not active_agents:
-            # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(round_num + 1, 0, time_label=time_label, simulated_hours=elapsed_sim_hours)
             continue
-        
+
+        for _, agent in active_agents:
+            if hasattr(agent, 'system_message') and agent.system_message is not None:
+                if not hasattr(agent, '_original_system_content'):
+                    agent._original_system_content = agent.system_message.content
+                agent.system_message.content = (
+                    f"[CURRENT SIMULATED TIME: {time_label['label']}]\n\n"
+                    + agent._original_system_content
+                )
+
         actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
-        # 从数据库获取实际执行的动作并记录
+
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
+        tool_actions = fetch_new_tool_calls(simulation_dir, agent_names, platform="reddit")
+        actual_actions = tool_actions + actual_actions
+
+        if effect_engine:
+            applied = effect_engine.apply_pending(round_num + 1, "reddit")
+            if applied:
+                state_actions = effect_engine.to_action_dicts(applied, agent_names)
+                actual_actions.extend(state_actions)
+                log_info(f"Round {round_num + 1}: Applied {len(applied)} state effects")
+
         round_action_count = 0
         for action_data in actual_actions:
+            action_data["time_label"] = time_label.get("label", "")
             if action_logger:
                 action_logger.log_action(
                     round_num=round_num + 1,
@@ -1469,23 +1775,24 @@ async def run_reddit_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
-        
+            action_logger.log_round_end(round_num + 1, round_action_count, time_label=time_label, simulated_hours=elapsed_sim_hours)
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
-            log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
-    # 注意：不关闭环境，保留给Interview使用
-    
+            if ts_unit != "hour":
+                log_info(f"{time_label['label']} - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
+            else:
+                log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
-    
+
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"模拟循环完成! 耗时: {elapsed:.1f}秒, 总动作: {total_actions}")
-    
+
     return result
 
 
@@ -1550,14 +1857,28 @@ async def main():
     log_manager.info("=" * 60)
     
     time_config = config.get("time_config", {})
-    total_hours = time_config.get('total_simulation_hours', 72)
-    minutes_per_round = time_config.get('minutes_per_round', 30)
-    config_total_rounds = (total_hours * 60) // minutes_per_round
-    
-    log_manager.info(f"模拟参数:")
-    log_manager.info(f"  - 总模拟时长: {total_hours}小时")
-    log_manager.info(f"  - 每轮时间: {minutes_per_round}分钟")
-    log_manager.info(f"  - 配置总轮数: {config_total_rounds}")
+    time_scale = time_config.get("time_scale", {})
+    ts_unit = time_scale.get("unit", "hour")
+
+    if ts_unit != "hour":
+        config_total_rounds = time_scale.get("total_duration", 60) // max(1, time_scale.get("per_round", 1))
+        log_manager.info(f"模拟参数:")
+        log_manager.info(f"  - 时间尺度: 1 round = {time_scale.get('per_round', 1)} {ts_unit}(s)")
+        log_manager.info(f"  - 总持续时间: {time_scale.get('total_duration', 60)} {ts_unit}s")
+        log_manager.info(f"  - 配置总轮数: {config_total_rounds}")
+        phases = time_config.get("phases", [])
+        if phases:
+            for p in phases:
+                if isinstance(p, dict):
+                    log_manager.info(f"  - Phase: {p.get('name','')} (R{p.get('start_round','?')}-R{p.get('end_round','?')}) x{p.get('activity_multiplier', 1.0)}")
+    else:
+        total_hours = time_config.get('total_simulation_hours', 72)
+        minutes_per_round = time_config.get('minutes_per_round', 30)
+        config_total_rounds = (total_hours * 60) // minutes_per_round
+        log_manager.info(f"模拟参数:")
+        log_manager.info(f"  - 总模拟时长: {total_hours}小时")
+        log_manager.info(f"  - 每轮时间: {minutes_per_round}分钟")
+        log_manager.info(f"  - 配置总轮数: {config_total_rounds}")
     if args.max_rounds:
         log_manager.info(f"  - 最大轮数限制: {args.max_rounds}")
         if args.max_rounds < config_total_rounds:
@@ -1570,21 +1891,61 @@ async def main():
     log_manager.info(f"  - Reddit动作: reddit/actions.jsonl")
     log_manager.info("=" * 60)
     
+    # Build tool registry (opt-in: only if ToolRegistry is available and
+    # the config contains a simulation_requirement)
+    tool_reg = None
+    effect_eng = None
+    if ToolRegistry is not None:
+        enable_tools = config.get("enable_agent_tools", True)
+        sim_req = config.get("simulation_requirement", "")
+        if enable_tools and sim_req:
+            log_manager.info("Building agent tool registry...")
+            tool_reg = ToolRegistry(config, sim_req, enable_tools=True)
+            tool_reg.build(progress_callback=lambda msg: log_manager.info(f"  [Tools] {msg}"))
+            tool_info = tool_reg.to_dict()
+            log_manager.info(f"  Scenario tools: {[t['name'] for t in tool_info['scenario_tools']]}")
+            log_manager.info(f"  Role assignments: {tool_info['role_assignments']}")
+            tools_path = os.path.join(simulation_dir, "tool_registry.json")
+            with open(tools_path, "w", encoding="utf-8") as f:
+                json.dump(tool_info, f, ensure_ascii=False, indent=2)
+            if ToolCallLogger is not None:
+                ToolCallLogger.clear_instances()
+                ToolCallLogger.get_or_create(simulation_dir)
+                ToolCallLogger.set_active(simulation_dir)
+            if set_effect_engine is not None:
+                set_effect_engine(None)
+
+            # Initialize effect engine for write-back tool effects
+            if EffectEngine is not None:
+                agent_names = get_agent_names_from_config(config)
+                effect_eng = EffectEngine(config, agent_names, simulation_dir)
+                if set_effect_engine is not None:
+                    set_effect_engine(effect_eng)
+                has_effects = any(
+                    t.get("effects") for t in tool_info.get("scenario_tools", [])
+                )
+                log_manager.info(f"  Effect engine: initialized (tools with effects: {has_effects})")
+    
     start_time = datetime.now()
     
     # 存储两个平台的模拟结果
     twitter_result: Optional[PlatformSimulation] = None
     reddit_result: Optional[PlatformSimulation] = None
     
+    run_sequential = os.environ.get("OASIS_SEQUENTIAL_PLATFORMS", "1") == "1"
+
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds)
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
+    elif run_sequential:
+        log_manager.info("Running platforms sequentially to stay within API rate limits")
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
     else:
-        # 并行运行（每个平台使用独立的日志记录器）
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
+            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
         )
         twitter_result, reddit_result = results
     

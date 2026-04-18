@@ -8,6 +8,15 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           Dashboard
         </button>
+        <button
+          v-if="bundleReturnId"
+          type="button"
+          class="nav-btn bundle-back"
+          @click="router.push({ name: 'BundleResults', params: { bundleId: bundleReturnId } })"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Bundle analysis
+        </button>
       </div>
       
       <div class="header-center">
@@ -27,7 +36,7 @@
       <div class="header-right">
         <div class="workflow-step">
           <span class="step-num">Step 3/5</span>
-          <span class="step-name">Run Simulation</span>
+          <span class="step-name">{{ reviewMode ? 'Simulation results' : 'Run Simulation' }}</span>
         </div>
         <div class="step-divider"></div>
         <span class="status-indicator" :class="statusClass">
@@ -43,9 +52,10 @@
       <div class="panel-wrapper left" :style="leftPanelStyle">
         <GraphPanel 
           :graphData="graphData"
-          :loading="graphLoading"
+          :loading="graphLoading || graphRefreshing"
           :currentPhase="3"
           :isSimulating="isSimulating"
+          :graph-load-error="graphLoadError"
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
@@ -57,9 +67,11 @@
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
           :minutesPerRound="minutesPerRound"
+          :start-time-config="startTimeConfigForRun"
           :projectData="projectData"
           :graphData="graphData"
           :systemLogs="systemLogs"
+          :review-mode="reviewMode"
           @go-back="handleGoBack"
           @next-step="handleNextStep"
           @add-log="addLog"
@@ -76,10 +88,20 @@ import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
 import { getProject, getGraphData } from '../api/graph'
+import { graphPollWhileSimulatingMs, graphSkipPollWhenDocumentHidden } from '../config/zepFootprint'
 import { getSimulation, getSimulationConfig, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
 
 const route = useRoute()
 const router = useRouter()
+
+/** From bundle comparison "Details" — load saved run, do not POST /start again */
+const reviewMode = computed(() => route.query.review === '1')
+
+/** Return to decision bundle progress / results */
+const bundleReturnId = computed(() => {
+  const b = route.query.bundle
+  return typeof b === 'string' && b.length > 0 ? b : null
+})
 
 // Props
 const props = defineProps({
@@ -94,9 +116,30 @@ const currentSimulationId = ref(route.params.simulationId)
 // Get maxRounds from query params at init so child component receives it immediately
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
 const minutesPerRound = ref(30) // Default 30 minutes per round
+
+// Keep in sync with SimulationView.vue (scoped by simulation id below).
+const START_TIME_CFG_KEY = 'glas_sim_start_time_config'
+const startTimeConfigForRun = ref(null)
+if (currentSimulationId.value) {
+  const timeCfgStorageKey = `${START_TIME_CFG_KEY}_${currentSimulationId.value}`
+  try {
+    const raw = sessionStorage.getItem(timeCfgStorageKey)
+    if (raw) {
+      startTimeConfigForRun.value = JSON.parse(raw)
+      sessionStorage.removeItem(timeCfgStorageKey)
+    }
+  } catch (e) {
+    console.warn('Failed to parse start time config:', e)
+    try {
+      sessionStorage.removeItem(timeCfgStorageKey)
+    } catch { /* ignore */ }
+  }
+}
 const projectData = ref(null)
 const graphData = ref(null)
+const graphLoadError = ref('')
 const graphLoading = ref(false)
+const graphRefreshing = ref(false)
 const systemLogs = ref([])
 const currentStatus = ref('processing') // processing | completed | error
 
@@ -220,7 +263,12 @@ const loadSimulationData = async () => {
           addLog(`Time config: ${minutesPerRound.value} minutes per round`)
         }
       } catch (configErr) {
-        addLog(`Failed to get time config, using default: ${minutesPerRound.value} min/round`)
+        const why =
+          configErr.response?.data?.error ||
+          configErr.response?.data?.detail ||
+          configErr.message ||
+          'unknown'
+        addLog(`Failed to get time config (${why}), using default: ${minutesPerRound.value} min/round`)
       }
       
       // Get project info
@@ -244,31 +292,57 @@ const loadSimulationData = async () => {
   }
 }
 
-const loadGraph = async (graphId) => {
+const loadGraph = async (graphId, options = {}) => {
   // When simulating, auto-refresh does not show full-screen loading to avoid flicker
   // Manual refresh or initial load shows loading
   if (!isSimulating.value) {
     graphLoading.value = true
   }
+  graphLoadError.value = ''
   
   try {
-    const res = await getGraphData(graphId)
+    const res = await getGraphData(graphId, { refresh: !!options.refresh })
     if (res.success) {
       graphData.value = res.data
       if (!isSimulating.value) {
         addLog('Graph data loaded')
       }
+    } else {
+      const msg = res.error || 'Unknown error'
+      graphLoadError.value = msg
+      addLog(`Failed to load graph: ${msg}`)
     }
   } catch (err) {
-    addLog(`Failed to load graph: ${err.message}`)
+    const detail = err.response?.data?.detail || err.response?.data?.error || err.message
+    graphLoadError.value = String(detail)
+    addLog(`Failed to load graph: ${detail}`)
   } finally {
     graphLoading.value = false
   }
 }
 
-const refreshGraph = () => {
+const refreshGraph = async () => {
+  if (!projectData.value?.graph_id) return
+  if (graphRefreshing.value) return
+  graphRefreshing.value = true
+  try {
+    addLog('Manual graph refresh (bypasses server cache)')
+    await loadGraph(projectData.value.graph_id, { refresh: true })
+  } finally {
+    graphRefreshing.value = false
+  }
+}
+
+const pollGraphFromCache = () => {
+  if (graphSkipPollWhenDocumentHidden && document.hidden) return
   if (projectData.value?.graph_id) {
-    loadGraph(projectData.value.graph_id)
+    loadGraph(projectData.value.graph_id, { refresh: false })
+  }
+}
+
+const onGraphVisibilityChange = () => {
+  if (!document.hidden && graphRefreshTimer != null && projectData.value?.graph_id) {
+    loadGraph(projectData.value.graph_id, { refresh: false })
   }
 }
 
@@ -277,9 +351,10 @@ let graphRefreshTimer = null
 
 const startGraphRefresh = () => {
   if (graphRefreshTimer) return
-  addLog('Started graph auto-refresh (30s)')
-  // Refresh immediately, then every 30 seconds
-  graphRefreshTimer = setInterval(refreshGraph, 30000)
+  const ms = graphPollWhileSimulatingMs
+  if (!ms || ms <= 0) return
+  addLog(`Started graph auto-refresh (${ms}ms, server snapshot cache)`)
+  graphRefreshTimer = setInterval(pollGraphFromCache, ms)
 }
 
 const stopGraphRefresh = () => {
@@ -299,6 +374,7 @@ watch(isSimulating, (newValue) => {
 }, { immediate: true })
 
 onMounted(() => {
+  document.addEventListener('visibilitychange', onGraphVisibilityChange)
   addLog('SimulationRunView initialized')
   
   // Log maxRounds config (value already obtained from query params at init)
@@ -310,6 +386,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onGraphVisibilityChange)
   stopGraphRefresh()
 })
 </script>

@@ -4,7 +4,7 @@ import requests
 from ..config import Config
 from ..utils.logger import get_logger
 
-logger = get_logger('glas.email')
+logger = get_logger("glas.email")
 
 RESEND_API_URL = "https://api.resend.com/emails"
 

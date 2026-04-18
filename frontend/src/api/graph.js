@@ -48,11 +48,15 @@ export function getTaskStatus(taskId) {
 /**
  * Get graph data
  * @param {String} graphId - Graph ID
+ * @param {{ refresh?: boolean }} [options] - refresh=true bypasses server snapshot cache (re-fetch from Zep)
  * @returns {Promise}
  */
-export function getGraphData(graphId) {
+export function getGraphData(graphId, options = {}) {
+  const params = new URLSearchParams()
+  if (options.refresh) params.set('refresh', 'true')
+  const q = params.toString()
   return service({
-    url: `/api/graph/data/${graphId}`,
+    url: `/api/graph/data/${graphId}${q ? `?${q}` : ''}`,
     method: 'get'
   })
 }

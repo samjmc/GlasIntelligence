@@ -139,23 +139,29 @@
             <div class="config-block">
               <div class="config-grid">
                 <div class="config-item">
-                  <span class="config-item-label">Simulation Duration</span>
-                  <span class="config-item-value">{{ simulationConfig.time_config?.total_simulation_hours || '-' }} hours</span>
+                  <span class="config-item-label">Time Scale</span>
+                  <span class="config-item-value">{{ timeScaleUnit }} per round</span>
                 </div>
                 <div class="config-item">
-                  <span class="config-item-label">Round Duration</span>
-                  <span class="config-item-value">{{ simulationConfig.time_config?.minutes_per_round || '-' }} minutes</span>
+                  <span class="config-item-label">Simulation Duration</span>
+                  <span class="config-item-value">{{ timeScaleDuration }}</span>
                 </div>
                 <div class="config-item">
                   <span class="config-item-label">Total Rounds</span>
-                  <span class="config-item-value">{{ Math.floor((simulationConfig.time_config?.total_simulation_hours * 60 / simulationConfig.time_config?.minutes_per_round)) || '-' }} rounds</span>
+                  <span class="config-item-value">{{ computedTotalRounds || '-' }} rounds</span>
                 </div>
                 <div class="config-item">
-                  <span class="config-item-label">Active Per Hour</span>
-                  <span class="config-item-value">{{ simulationConfig.time_config?.agents_per_hour_min }}-{{ simulationConfig.time_config?.agents_per_hour_max }}</span>
+                  <span class="config-item-label">Active Per Round</span>
+                  <span class="config-item-value">{{ simulationConfig.time_config?.agents_per_round_min ?? simulationConfig.time_config?.agents_per_hour_min }}-{{ simulationConfig.time_config?.agents_per_round_max ?? simulationConfig.time_config?.agents_per_hour_max }}</span>
+                </div>
+                <div v-if="timeScaleStartDate" class="config-item">
+                  <span class="config-item-label">Start Date</span>
+                  <span class="config-item-value">{{ timeScaleStartDate }}</span>
                 </div>
               </div>
-              <div class="time-periods">
+
+              <!-- Hour-based: show peak/off-peak periods -->
+              <div v-if="isHourlyScale" class="time-periods">
                 <div class="period-item">
                   <span class="period-label">Peak Hours</span>
                   <span class="period-hours">{{ simulationConfig.time_config?.peak_hours?.join(':00, ') }}:00</span>
@@ -175,6 +181,15 @@
                   <span class="period-label">Off-Peak Hours</span>
                   <span class="period-hours">{{ simulationConfig.time_config?.off_peak_hours?.[0] }}:00-{{ simulationConfig.time_config?.off_peak_hours?.slice(-1)[0] }}:00</span>
                   <span class="period-multiplier">×{{ simulationConfig.time_config?.off_peak_activity_multiplier }}</span>
+                </div>
+              </div>
+
+              <!-- Coarse scale: show scenario phases -->
+              <div v-else-if="scenarioPhases.length > 0" class="time-periods">
+                <div v-for="(phase, idx) in scenarioPhases" :key="idx" class="period-item">
+                  <span class="period-label">{{ phase.name }}</span>
+                  <span class="period-hours">Rounds {{ phase.start_round }}–{{ phase.end_round }}</span>
+                  <span class="period-multiplier">×{{ phase.activity_multiplier }}</span>
                 </div>
               </div>
             </div>
@@ -202,7 +217,7 @@
                     </div>
                   </div>
                   
-                  <div class="agent-timeline">
+                  <div v-if="isHourlyScale" class="agent-timeline">
                     <span class="timeline-label">Active Hours</span>
                     <div class="mini-timeline">
                       <div 
@@ -225,12 +240,12 @@
                   <div class="agent-params">
                     <div class="param-group">
                       <div class="param-item">
-                        <span class="param-label">Posts/hr</span>
-                        <span class="param-value">{{ agent.posts_per_hour }}</span>
+                        <span class="param-label">Posts/rnd</span>
+                        <span class="param-value">{{ agent.posts_per_round ?? agent.posts_per_hour }}</span>
                       </div>
                       <div class="param-item">
-                        <span class="param-label">Comments/hr</span>
-                        <span class="param-value">{{ agent.comments_per_hour }}</span>
+                        <span class="param-label">Comments/rnd</span>
+                        <span class="param-value">{{ agent.comments_per_round ?? agent.comments_per_hour }}</span>
                       </div>
                       <div class="param-item">
                         <span class="param-label">Response Delay</span>
@@ -338,6 +353,13 @@
               </div>
             </div>
           </div>
+
+          <div v-if="prepareWarnings.length > 0" class="prepare-warnings">
+            <div v-for="(w, idx) in prepareWarnings" :key="idx" class="prepare-warning-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span>{{ w }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -435,7 +457,7 @@
                   Fixed for your <span class="desc-highlight">{{ userPlan }}</span> plan — {{ planAgentLimit }} agents, {{ planRoundLimit }} rounds
                 </span>
                 <span class="section-desc" v-else>
-                  Enterprise: <span class="desc-highlight">{{ simulationConfig?.time_config?.total_simulation_hours || '-' }}</span> hours; each round = <span class="desc-highlight">{{ simulationConfig?.time_config?.minutes_per_round || '-' }}</span> min elapsed
+                  Enterprise: <span class="desc-highlight">{{ timeScaleDuration }}</span>; each round = <span class="desc-highlight">1 {{ timeScaleUnit }}</span>
                 </span>
               </div>
               <label v-if="isEnterprise" class="switch-control">
@@ -523,7 +545,7 @@
             <button 
               class="action-btn primary"
               :disabled="phase < 4"
-              @click="handleStartSimulation"
+              @click="openTimelineConfirm"
             >
               Start Simulation ➝
             </button>
@@ -531,6 +553,84 @@
         </div>
       </div>
     </div>
+
+    <!-- Confirm timeline before run -->
+    <Transition name="modal">
+      <div
+        v-if="showTimelineConfirm"
+        class="timeline-confirm-overlay"
+        @click.self="showTimelineConfirm = false"
+      >
+        <div class="timeline-confirm-modal" role="dialog" aria-labelledby="timeline-confirm-title">
+          <div class="timeline-confirm-header">
+            <h3 id="timeline-confirm-title">Confirm time scale &amp; rounds</h3>
+            <button type="button" class="close-btn" aria-label="Close" @click="showTimelineConfirm = false">×</button>
+          </div>
+          <p class="timeline-confirm-intro">
+            The engine steps through discrete rounds. Adjust how much simulated time each round covers and how many rounds run
+            (your plan still applies a maximum).
+          </p>
+
+          <div class="timeline-mode-toggle">
+            <label class="mode-option">
+              <input v-model="timelineModeHour" type="radio" :value="true" />
+              <span>Compressed (hours / minutes per round)</span>
+            </label>
+            <label class="mode-option">
+              <input v-model="timelineModeHour" type="radio" :value="false" />
+              <span>Calendar (days, weeks, months, years)</span>
+            </label>
+          </div>
+
+          <div v-if="timelineModeHour" class="timeline-fields">
+            <label class="tf-row">
+              <span>Total simulated hours</span>
+              <input v-model.number="confirmTotalHours" type="number" min="1" max="8760" class="tf-input" />
+            </label>
+            <label class="tf-row">
+              <span>Minutes per round</span>
+              <input v-model.number="confirmMinutesPerRound" type="number" min="1" max="1440" class="tf-input" />
+            </label>
+            <p class="timeline-preview mono">
+              ≈ {{ previewRoundsFromHour }} rounds (before plan cap)
+            </p>
+          </div>
+
+          <div v-else class="timeline-fields">
+            <label class="tf-row">
+              <span>Time unit</span>
+              <select v-model="confirmUnit" class="tf-input">
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+                <option value="year">Year</option>
+              </select>
+            </label>
+            <label class="tf-row">
+              <span>Simulated time per round (in that unit)</span>
+              <input v-model.number="confirmPerRound" type="number" min="1" max="520" class="tf-input" />
+            </label>
+            <label class="tf-row">
+              <span>Number of rounds</span>
+              <input v-model.number="confirmNumRounds" type="number" min="1" max="500" class="tf-input" />
+            </label>
+            <p class="timeline-preview mono">
+              Span: {{ confirmNumRounds * confirmPerRound }} {{ confirmUnit }}(s) ·
+              {{ previewRoundsCalendar }} rounds (before plan cap)
+            </p>
+          </div>
+
+          <p v-if="planRoundLimit" class="timeline-plan-note">
+            Your plan allows up to <strong>{{ planRoundLimit }}</strong> rounds per run; longer timelines may be truncated.
+          </p>
+
+          <div class="timeline-confirm-actions">
+            <button type="button" class="action-btn secondary" @click="showTimelineConfirm = false">Cancel</button>
+            <button type="button" class="action-btn primary" @click="confirmTimelineAndStart">Confirm &amp; continue</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Profile Detail Modal -->
     <Transition name="modal">
@@ -639,6 +739,7 @@ import {
   getSimulationConfig,
   getSimulationConfigRealtime 
 } from '../api/simulation'
+import { createAdaptiveStepPoll } from '../composables/useAdaptiveStepPolling'
 
 const props = defineProps({
   simulationId: String,
@@ -660,6 +761,7 @@ const profiles = ref([])
 const entityTypes = ref([])
 const expectedTotal = ref(null)
 const simulationConfig = ref(null)
+const prepareWarnings = ref([])
 const selectedProfile = ref(null)
 const showProfilesDetail = ref(true)
 
@@ -669,6 +771,14 @@ let lastLoggedConfigStage = ''
 
 const useCustomRounds = ref(false)
 const customMaxRounds = ref(40)
+
+const showTimelineConfirm = ref(false)
+const timelineModeHour = ref(true)
+const confirmTotalHours = ref(72)
+const confirmMinutesPerRound = ref(60)
+const confirmUnit = ref('month')
+const confirmPerRound = ref(1)
+const confirmNumRounds = ref(6)
 
 const isEnterprise = computed(() => props.userPlan === 'enterprise')
 
@@ -699,7 +809,7 @@ watch(currentStage, (newStage) => {
     phase.value = 1
   } else if (newStage === 'Generating Simulation Config' || newStage === 'generating_config') {
     phase.value = 2
-    if (!configTimer) {
+    if (!configPoll.isActive) {
       addLog('Generating simulation config...')
       startConfigPolling()
     }
@@ -708,23 +818,56 @@ watch(currentStage, (newStage) => {
   }
 })
 
-const autoGeneratedRounds = computed(() => {
-  if (!simulationConfig.value?.time_config) {
-    return null
+const timeScale = computed(() => simulationConfig.value?.time_config?.time_scale || { unit: 'hour', per_round: 1 })
+const isHourlyScale = computed(() => (timeScale.value.unit || 'hour') === 'hour')
+const timeScaleUnit = computed(() => {
+  const u = timeScale.value.unit || 'hour'
+  const pr = timeScale.value.per_round || 1
+  if (pr === 1) return u
+  return `${pr} ${u}s`
+})
+const timeScaleDuration = computed(() => {
+  if (isHourlyScale.value) {
+    return `${simulationConfig.value?.time_config?.total_simulation_hours || '-'} hours`
+  }
+  const dur = timeScale.value.total_duration || '-'
+  const u = timeScale.value.unit || 'unit'
+  return `${dur} ${u}s`
+})
+const timeScaleStartDate = computed(() => timeScale.value.start_date || '')
+const scenarioPhases = computed(() => simulationConfig.value?.time_config?.phases || [])
+const computedTotalRounds = computed(() => {
+  if (!simulationConfig.value?.time_config) return null
+  if (!isHourlyScale.value) {
+    const dur = timeScale.value.total_duration || 0
+    const pr = Math.max(timeScale.value.per_round || 1, 1)
+    return Math.floor(dur / pr)
   }
   const totalHours = simulationConfig.value.time_config.total_simulation_hours
   const minutesPerRound = simulationConfig.value.time_config.minutes_per_round
-  if (!totalHours || !minutesPerRound) {
-    return null
-  }
-  const calculatedRounds = Math.floor((totalHours * 60) / minutesPerRound)
-  return Math.max(calculatedRounds, 40)
+  if (!totalHours || !minutesPerRound) return null
+  return Math.floor((totalHours * 60) / minutesPerRound)
 })
 
-// Polling timer
-let pollTimer = null
-let profilesTimer = null
-let configTimer = null
+const autoGeneratedRounds = computed(() => {
+  const r = computedTotalRounds.value
+  if (!r) return null
+  return Math.max(r, 40)
+})
+
+const previewRoundsFromHour = computed(() => {
+  const h = Math.max(1, Number(confirmTotalHours.value) || 1)
+  const m = Math.max(1, Number(confirmMinutesPerRound.value) || 1)
+  return Math.max(1, Math.floor((h * 60) / m))
+})
+
+const previewRoundsCalendar = computed(() => {
+  return Math.max(1, Math.floor(Number(confirmNumRounds.value) || 1))
+})
+
+const preparePoll = createAdaptiveStepPoll()
+const profilesPoll = createAdaptiveStepPoll()
+const configPoll = createAdaptiveStepPoll()
 
 // Computed
 const displayProfiles = computed(() => {
@@ -753,10 +896,49 @@ const addLog = (msg) => {
   emit('add-log', msg)
 }
 
-const handleStartSimulation = () => {
-  const params = { maxRounds: effectiveRounds.value }
-  addLog(`Starting simulation: ${effectiveRounds.value} rounds (${props.userPlan} plan)`)
-  emit('next-step', params)
+function openTimelineConfirm() {
+  const tc = simulationConfig.value?.time_config || {}
+  const ts = tc.time_scale || {}
+  const u = ts.unit || 'hour'
+  if (u === 'hour') {
+    timelineModeHour.value = true
+    confirmTotalHours.value = Math.max(1, tc.total_simulation_hours || 72)
+    confirmMinutesPerRound.value = Math.max(1, tc.minutes_per_round || 60)
+  } else {
+    timelineModeHour.value = false
+    confirmUnit.value = ['day', 'week', 'month', 'year'].includes(u) ? u : 'month'
+    confirmPerRound.value = Math.max(1, ts.per_round || 1)
+    const dur = Math.max(0, ts.total_duration || 0)
+    const pr = confirmPerRound.value
+    confirmNumRounds.value = Math.max(1, pr > 0 ? Math.floor(dur / pr) : 6)
+  }
+  showTimelineConfirm.value = true
+}
+
+function confirmTimelineAndStart() {
+  let timeConfig = {}
+  if (timelineModeHour.value) {
+    timeConfig = {
+      total_simulation_hours: Math.max(1, Math.min(8760, Number(confirmTotalHours.value) || 72)),
+      minutes_per_round: Math.max(1, Math.min(1440, Number(confirmMinutesPerRound.value) || 60)),
+      time_scale: { unit: 'hour', per_round: 1, total_duration: 0 },
+    }
+  } else {
+    const pr = Math.max(1, Math.min(520, Number(confirmPerRound.value) || 1))
+    const nr = Math.max(1, Math.min(500, Number(confirmNumRounds.value) || 1))
+    const prevStart = simulationConfig.value?.time_config?.time_scale?.start_date
+    timeConfig = {
+      time_scale: {
+        unit: confirmUnit.value,
+        per_round: pr,
+        total_duration: nr * pr,
+        ...(prevStart ? { start_date: prevStart } : {}),
+      },
+    }
+  }
+  showTimelineConfirm.value = false
+  addLog(`Timeline confirmed for run (${timelineModeHour.value ? 'hour' : 'calendar'} scale)`)
+  emit('next-step', { maxRounds: effectiveRounds.value, timeConfig })
 }
 
 const truncateBio = (bio) => {
@@ -822,26 +1004,18 @@ const startPrepareSimulation = async () => {
 }
 
 const startPolling = () => {
-  pollTimer = setInterval(pollPrepareStatus, 2000)
+  preparePoll.stop()
+  preparePoll.start(() => pollPrepareStatus())
 }
 
-const stopPolling = () => {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+const stopPolling = () => preparePoll.stop()
 
 const startProfilesPolling = () => {
-  profilesTimer = setInterval(fetchProfilesRealtime, 3000)
+  profilesPoll.stop()
+  profilesPoll.start(() => fetchProfilesRealtime())
 }
 
-const stopProfilesPolling = () => {
-  if (profilesTimer) {
-    clearInterval(profilesTimer)
-    profilesTimer = null
-  }
-}
+const stopProfilesPolling = () => profilesPoll.stop()
 
 const pollPrepareStatus = async () => {
   if (!taskId.value && !props.simulationId) return
@@ -941,15 +1115,11 @@ const fetchProfilesRealtime = async () => {
 }
 
 const startConfigPolling = () => {
-  configTimer = setInterval(fetchConfigRealtime, 2000)
+  configPoll.stop()
+  configPoll.start(() => fetchConfigRealtime())
 }
 
-const stopConfigPolling = () => {
-  if (configTimer) {
-    clearInterval(configTimer)
-    configTimer = null
-  }
-}
+const stopConfigPolling = () => configPoll.stop()
 
 const fetchConfigRealtime = async () => {
   if (!props.simulationId) return
@@ -975,7 +1145,12 @@ const fetchConfigRealtime = async () => {
         
         if (data.summary) {
           addLog(`  ├─ Agents: ${data.summary.total_agents}`)
-          addLog(`  ├─ Duration: ${data.summary.simulation_hours} hours`)
+          const ts = data.config?.time_config?.time_scale
+          if (ts && ts.unit !== 'hour') {
+            addLog(`  ├─ Duration: ${ts.total_duration} ${ts.unit}s`)
+          } else {
+            addLog(`  ├─ Duration: ${data.summary.simulation_hours} hours`)
+          }
           addLog(`  ├─ Initial posts: ${data.summary.initial_posts_count}`)
           addLog(`  ├─ Hot topics: ${data.summary.hot_topics_count}`)
           addLog(`  └─ Platforms: Twitter ${data.summary.has_twitter_config ? '✓' : '✗'}, Reddit ${data.summary.has_reddit_config ? '✓' : '✗'}`)
@@ -983,7 +1158,12 @@ const fetchConfigRealtime = async () => {
         
         if (data.config.time_config) {
           const tc = data.config.time_config
-          addLog(`Time config: ${tc.minutes_per_round}min/round, ${Math.floor((tc.total_simulation_hours * 60) / tc.minutes_per_round)} rounds total`)
+          const ts = tc.time_scale || { unit: 'hour', per_round: 1 }
+          if (ts.unit !== 'hour') {
+            addLog(`Time config: 1 ${ts.unit}/round, ${Math.floor((ts.total_duration || 0) / Math.max(ts.per_round || 1, 1))} rounds over ${ts.total_duration} ${ts.unit}s`)
+          } else {
+            addLog(`Time config: ${tc.minutes_per_round}min/round, ${Math.floor((tc.total_simulation_hours * 60) / tc.minutes_per_round)} rounds total`)
+          }
         }
         
         if (data.config.event_config?.narrative_direction) {
@@ -991,7 +1171,7 @@ const fetchConfigRealtime = async () => {
           addLog(`Narrative direction: ${narrative.length > 50 ? narrative.substring(0, 50) + '...' : narrative}`)
         }
         
-        stopConfigPolling()
+        configPoll.stop()
         phase.value = 4
         addLog('✓ Environment setup complete, ready to simulate')
         emit('update-status', 'completed')
@@ -1018,8 +1198,20 @@ const loadPreparedData = async () => {
         
         if (res.data.summary) {
           addLog(`  ├─ Agents: ${res.data.summary.total_agents}`)
-          addLog(`  ├─ Duration: ${res.data.summary.simulation_hours} hours`)
+          const ts = res.data.config?.time_config?.time_scale
+          if (ts && ts.unit !== 'hour') {
+            addLog(`  ├─ Duration: ${ts.total_duration} ${ts.unit}s`)
+          } else {
+            addLog(`  ├─ Duration: ${res.data.summary.simulation_hours} hours`)
+          }
           addLog(`  └─ Initial posts: ${res.data.summary.initial_posts_count}`)
+        }
+
+        if (res.data.warnings?.length) {
+          prepareWarnings.value = res.data.warnings
+          for (const w of res.data.warnings) {
+            addLog(`⚠ ${w}`)
+          }
         }
         
         addLog('✓ Environment setup complete, ready to simulate')
@@ -1046,7 +1238,15 @@ watch(() => props.systemLogs?.length, () => {
   })
 })
 
+const onStep2Visibility = () => {
+  if (document.hidden) return
+  if (preparePoll.isActive) void pollPrepareStatus()
+  if (profilesPoll.isActive) void fetchProfilesRealtime()
+  if (configPoll.isActive) void fetchConfigRealtime()
+}
+
 onMounted(() => {
+  document.addEventListener('visibilitychange', onStep2Visibility)
   if (props.simulationId) {
     addLog('Step2 environment setup initializing')
     startPrepareSimulation()
@@ -1054,1551 +1254,11 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onStep2Visibility)
   stopPolling()
   stopProfilesPolling()
   stopConfigPolling()
 })
 </script>
 
-<style scoped>
-.env-setup-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #FAFAFA;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-.scroll-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* Step Card */
-.step-card {
-  background: #FFF;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  border: 1px solid #EAEAEA;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.step-card.active {
-  border-color: #FF5722;
-  box-shadow: 0 4px 12px rgba(255, 87, 34, 0.08);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.step-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.step-num {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 20px;
-  font-weight: 700;
-  color: #E0E0E0;
-}
-
-.step-card.active .step-num,
-.step-card.completed .step-num {
-  color: #000;
-}
-
-.step-title {
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.5px;
-}
-
-.badge {
-  font-size: 10px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.badge.success { background: #E8F5E9; color: #2E7D32; }
-.badge.processing { background: #FF5722; color: #FFF; }
-.badge.pending { background: #F5F5F5; color: #999; }
-.badge.accent { background: #E3F2FD; color: #1565C0; }
-
-.card-content {
-  /* No extra padding - uses step-card's padding */
-}
-
-.api-note {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #999;
-  margin-bottom: 8px;
-}
-
-.description {
-  font-size: 12px;
-  color: #666;
-  line-height: 1.5;
-  margin-bottom: 16px;
-}
-
-/* Action Section */
-.action-section {
-  margin-top: 16px;
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  font-size: 14px;
-  font-weight: 600;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.action-btn.primary {
-  background: #000;
-  color: #FFF;
-}
-
-.action-btn.primary:hover:not(:disabled) {
-  opacity: 0.8;
-}
-
-.action-btn.secondary {
-  background: #F5F5F5;
-  color: #333;
-}
-
-.action-btn.secondary:hover:not(:disabled) {
-  background: #E5E5E5;
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.action-group {
-  display: flex;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.action-group.dual {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-
-.action-group.dual .action-btn {
-  width: 100%;
-}
-
-/* Info Card */
-.info-card {
-  background: #F5F5F5;
-  border-radius: 6px;
-  padding: 16px;
-  margin-top: 16px;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px dashed #E0E0E0;
-}
-
-.info-row:last-child {
-  border-bottom: none;
-}
-
-.info-label {
-  font-size: 12px;
-  color: #666;
-}
-
-.info-value {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.info-value.mono {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-}
-
-/* Stats Grid */
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  background: #F9F9F9;
-  padding: 16px;
-  border-radius: 6px;
-}
-
-.stat-card {
-  text-align: center;
-}
-
-.stat-value {
-  display: block;
-  font-size: 20px;
-  font-weight: 700;
-  color: #000;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.stat-label {
-  font-size: 9px;
-  color: #999;
-  text-transform: uppercase;
-  margin-top: 4px;
-  display: block;
-}
-
-/* Profiles Preview */
-.profiles-preview {
-  margin-top: 20px;
-  border-top: 1px solid #E5E5E5;
-  padding-top: 16px;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.preview-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.profiles-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.profiles-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.profiles-list::-webkit-scrollbar-thumb {
-  background: #DDD;
-  border-radius: 2px;
-}
-
-.profiles-list::-webkit-scrollbar-thumb:hover {
-  background: #CCC;
-}
-
-.profile-card {
-  background: #FAFAFA;
-  border: 1px solid #E5E5E5;
-  border-radius: 6px;
-  padding: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.profile-card:hover {
-  border-color: #999;
-  background: #FFF;
-}
-
-.profile-header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.profile-realname {
-  font-size: 14px;
-  font-weight: 700;
-  color: #000;
-}
-
-.profile-username {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #999;
-}
-
-.profile-meta {
-  margin-bottom: 8px;
-}
-
-.profile-profession {
-  font-size: 11px;
-  color: #666;
-  background: #F0F0F0;
-  padding: 2px 8px;
-  border-radius: 3px;
-}
-
-.profile-bio {
-  font-size: 12px;
-  color: #444;
-  line-height: 1.6;
-  margin: 0 0 10px 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.profile-topics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.topic-tag {
-  font-size: 10px;
-  color: #1565C0;
-  background: #E3F2FD;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.topic-more {
-  font-size: 10px;
-  color: #999;
-  padding: 2px 6px;
-}
-
-/* Config Preview */
-/* Config Detail Panel */
-.config-detail-panel {
-  margin-top: 16px;
-}
-
-.config-block {
-  margin-top: 16px;
-  border-top: 1px solid #E5E5E5;
-  padding-top: 12px;
-}
-
-.config-block:first-child {
-  margin-top: 0;
-  border-top: none;
-  padding-top: 0;
-}
-
-.config-block-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.config-block-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.config-block-badge {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  background: #F1F5F9;
-  color: #475569;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-/* Config Grid */
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-
-.config-item {
-  background: #F9F9F9;
-  padding: 12px 14px;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.config-item-label {
-  font-size: 11px;
-  color: #94A3B8;
-}
-
-.config-item-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1E293B;
-}
-
-/* Time Periods */
-.time-periods {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.period-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: #F9F9F9;
-  border-radius: 6px;
-}
-
-.period-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748B;
-  min-width: 70px;
-}
-
-.period-hours {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #475569;
-  flex: 1;
-}
-
-.period-multiplier {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: #6366F1;
-  background: #EEF2FF;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-/* Agents Cards */
-.agents-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.agents-cards::-webkit-scrollbar {
-  width: 4px;
-}
-
-.agents-cards::-webkit-scrollbar-thumb {
-  background: #DDD;
-  border-radius: 2px;
-}
-
-.agents-cards::-webkit-scrollbar-thumb:hover {
-  background: #CCC;
-}
-
-.agent-card {
-  background: #F9F9F9;
-  border: 1px solid #E5E5E5;
-  border-radius: 6px;
-  padding: 14px;
-  transition: all 0.2s ease;
-}
-
-.agent-card:hover {
-  border-color: #999;
-  background: #FFF;
-}
-
-/* Agent Card Header */
-.agent-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.agent-identity {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.agent-id {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #94A3B8;
-}
-
-.agent-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1E293B;
-}
-
-.agent-tags {
-  display: flex;
-  gap: 6px;
-}
-
-.agent-type {
-  font-size: 10px;
-  color: #64748B;
-  background: #F1F5F9;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.agent-stance {
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.stance-neutral {
-  background: #F1F5F9;
-  color: #64748B;
-}
-
-.stance-supportive {
-  background: #DCFCE7;
-  color: #16A34A;
-}
-
-.stance-opposing {
-  background: #FEE2E2;
-  color: #DC2626;
-}
-
-.stance-observer {
-  background: #FEF3C7;
-  color: #D97706;
-}
-
-/* Agent Timeline */
-.agent-timeline {
-  margin-bottom: 14px;
-}
-
-.timeline-label {
-  display: block;
-  font-size: 10px;
-  color: #94A3B8;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.mini-timeline {
-  display: flex;
-  gap: 2px;
-  height: 16px;
-  background: #F8FAFC;
-  border-radius: 4px;
-  padding: 3px;
-}
-
-.timeline-hour {
-  flex: 1;
-  background: #E2E8F0;
-  border-radius: 2px;
-  transition: all 0.2s;
-}
-
-.timeline-hour.active {
-  background: linear-gradient(180deg, #6366F1, #818CF8);
-}
-
-.timeline-marks {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 4px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  color: #94A3B8;
-}
-
-/* Agent Params */
-.agent-params {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.param-group {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.param-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.param-item .param-label {
-  font-size: 10px;
-  color: #94A3B8;
-}
-
-.param-item .param-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
-}
-
-.param-value.with-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mini-bar {
-  height: 4px;
-  background: linear-gradient(90deg, #6366F1, #A855F7);
-  border-radius: 2px;
-  min-width: 4px;
-  max-width: 40px;
-}
-
-.param-value.positive {
-  color: #16A34A;
-}
-
-.param-value.negative {
-  color: #DC2626;
-}
-
-.param-value.neutral {
-  color: #64748B;
-}
-
-.param-value.highlight {
-  color: #6366F1;
-}
-
-/* Platforms Grid */
-.platforms-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.platform-card {
-  background: #F9F9F9;
-  padding: 14px;
-  border-radius: 6px;
-}
-
-.platform-card-header {
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #E5E5E5;
-}
-
-.platform-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-}
-
-.platform-params {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.param-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.param-label {
-  font-size: 12px;
-  color: #64748B;
-}
-
-.param-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: #1E293B;
-}
-
-/* Reasoning Content */
-.reasoning-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.reasoning-item {
-  padding: 12px 14px;
-  background: #F9F9F9;
-  border-radius: 6px;
-}
-
-.reasoning-text {
-  font-size: 13px;
-  color: #555;
-  line-height: 1.7;
-  margin: 0;
-}
-
-/* Profile Modal */
-.profile-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.profile-modal {
-  background: #FFF;
-  border-radius: 16px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 85vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 24px;
-  background: #FFF;
-  border-bottom: 1px solid #F0F0F0;
-}
-
-.modal-header-info {
-  flex: 1;
-}
-
-.modal-name-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.modal-realname {
-  font-size: 20px;
-  font-weight: 700;
-  color: #000;
-}
-
-.modal-username {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  color: #999;
-}
-
-.modal-profession {
-  font-size: 12px;
-  color: #666;
-  background: #F5F5F5;
-  padding: 4px 10px;
-  border-radius: 4px;
-  display: inline-block;
-  font-weight: 500;
-}
-
-.close-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: none;
-  color: #999;
-  border-radius: 50%;
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: color 0.2s;
-  padding: 0;
-}
-
-.close-btn:hover {
-  color: #333;
-}
-
-.modal-body {
-  padding: 24px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-/* Info Grid */
-.modal-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px 16px;
-  margin-bottom: 32px;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.info-label {
-  font-size: 11px;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}
-
-.info-value {
-  font-size: 15px;
-  font-weight: 600;
-  color: #333;
-}
-
-.info-value.mbti {
-  font-family: 'JetBrains Mono', monospace;
-  color: #FF5722;
-}
-
-/* Section */
-.modal-section {
-  margin-bottom: 28px;
-}
-
-.section-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-}
-
-.section-bio {
-  font-size: 14px;
-  color: #333;
-  line-height: 1.6;
-  margin: 0;
-  padding: 16px;
-  background: #F9F9F9;
-  border-radius: 6px;
-  border-left: 3px solid #E0E0E0;
-}
-
-/* Topic Tags */
-.topics-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.topic-item {
-  font-size: 11px;
-  color: #1565C0;
-  background: #E3F2FD;
-  padding: 4px 10px;
-  border-radius: 12px;
-  transition: all 0.2s;
-  border: none;
-}
-
-.topic-item:hover {
-  background: #BBDEFB;
-  color: #0D47A1;
-}
-
-/* Persona Details */
-.persona-dimensions {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.dimension-card {
-  background: #F8F9FA;
-  padding: 12px;
-  border-radius: 6px;
-  border-left: 3px solid #DDD;
-  transition: all 0.2s;
-}
-
-.dimension-card:hover {
-  background: #F0F0F0;
-  border-left-color: #999;
-}
-
-.dim-title {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 4px;
-}
-
-.dim-desc {
-  display: block;
-  font-size: 10px;
-  color: #888;
-  line-height: 1.4;
-}
-
-.persona-content {
-  max-height: none;
-  overflow: visible;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-}
-
-.persona-content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.persona-content::-webkit-scrollbar-thumb {
-  background: #DDD;
-  border-radius: 2px;
-}
-
-.section-persona {
-  font-size: 13px;
-  color: #555;
-  line-height: 1.8;
-  margin: 0;
-  text-align: justify;
-}
-
-/* System Logs */
-.system-logs {
-  background: #000;
-  color: #DDD;
-  padding: 16px;
-  font-family: 'JetBrains Mono', monospace;
-  border-top: 1px solid #222;
-  flex-shrink: 0;
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px solid #333;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  font-size: 10px;
-  color: #888;
-}
-
-.log-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  height: 80px; /* Approx 4 lines visible */
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.log-content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.log-content::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 2px;
-}
-
-.log-line {
-  font-size: 11px;
-  display: flex;
-  gap: 12px;
-  line-height: 1.5;
-}
-
-.log-time {
-  color: #666;
-  min-width: 75px;
-}
-
-.log-msg {
-  color: #CCC;
-  word-break: break-all;
-}
-
-/* Spinner */
-.spinner-sm {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #E5E5E5;
-  border-top-color: #FF5722;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-/* Orchestration Content */
-.orchestration-content {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  margin-top: 16px;
-}
-
-.box-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-}
-
-.narrative-box {
-  background: #FFFFFF;
-  padding: 20px 24px;
-  border-radius: 12px;
-  border: 1px solid #EEF2F6;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.03);
-  transition: all 0.3s ease;
-}
-
-.narrative-box .box-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #666;
-  font-size: 13px;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-  font-weight: 600;
-}
-
-.special-icon {
-  filter: drop-shadow(0 2px 4px rgba(255, 87, 34, 0.2));
-  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.narrative-box:hover .special-icon {
-  transform: rotate(180deg);
-}
-
-.narrative-text {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  color: #334155;
-  line-height: 1.8;
-  margin: 0;
-  text-align: justify;
-  letter-spacing: 0.01em;
-}
-
-.topics-section {
-  background: #FFF;
-}
-
-.hot-topics-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.hot-topic-tag {
-  font-size: 12px;
-  color:rgba(255, 86, 34, 0.88);
-  background: #FFF3E0;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-weight: 500;
-}
-
-.hot-topic-more {
-  font-size: 11px;
-  color: #999;
-  padding: 4px 6px;
-}
-
-.initial-posts-section {
-  border-top: 1px solid #EAEAEA;
-  padding-top: 16px;
-}
-
-.posts-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding-left: 8px;
-  border-left: 2px solid #F0F0F0;
-  margin-top: 12px;
-}
-
-.timeline-item {
-  position: relative;
-  padding-left: 20px;
-}
-
-.timeline-marker {
-  position: absolute;
-  left: 0;
-  top: 14px;
-  width: 12px;
-  height: 2px;
-  background: #DDD;
-}
-
-.timeline-content {
-  background: #F9F9F9;
-  padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #EEE;
-}
-
-.post-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.post-role {
-  font-size: 11px;
-  font-weight: 700;
-  color: #333;
-  text-transform: uppercase;
-}
-
-.post-agent-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.post-id,
-.post-username {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #666;
-  line-height: 1;
-  vertical-align: baseline;
-}
-
-.post-username {
-  margin-right: 6px;
-}
-
-.post-text {
-  font-size: 12px;
-  color: #555;
-  line-height: 1.5;
-  margin: 0;
-}
-
-/* Simulation Rounds Config */
-.rounds-config-section {
-  margin: 24px 0;
-  padding-top: 24px;
-  border-top: 1px solid #EAEAEA;
-}
-
-.rounds-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1E293B;
-}
-
-.section-desc {
-  font-size: 12px;
-  color: #94A3B8;
-}
-
-.desc-highlight {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
-  color: #1E293B;
-  background: #F1F5F9;
-  padding: 1px 6px;
-  border-radius: 4px;
-  margin: 0 2px;
-}
-
-/* Switch Control */
-.switch-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 4px 8px 4px 4px;
-  border-radius: 20px;
-  transition: background 0.2s;
-}
-
-.switch-control:hover {
-  background: #F8FAFC;
-}
-
-.switch-control input {
-  display: none;
-}
-
-.switch-track {
-  width: 36px;
-  height: 20px;
-  background: #E2E8F0;
-  border-radius: 10px;
-  position: relative;
-  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-}
-
-.switch-track::after {
-  content: '';
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 16px;
-  height: 16px;
-  background: #FFF;
-  border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-}
-
-.switch-control input:checked + .switch-track {
-  background: #000;
-}
-
-.switch-control input:checked + .switch-track::after {
-  transform: translateX(16px);
-}
-
-.switch-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748B;
-}
-
-.switch-control input:checked ~ .switch-label {
-  color: #1E293B;
-}
-
-/* Slider Content */
-.rounds-content {
-  animation: fadeIn 0.3s ease;
-}
-
-.slider-display {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 16px;
-}
-
-.slider-main-value {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.val-num {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 24px;
-  font-weight: 700;
-  color: #000;
-}
-
-.val-unit {
-  font-size: 12px;
-  color: #666;
-  font-weight: 500;
-}
-
-.slider-meta-info {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #64748B;
-  background: #F1F5F9;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.range-wrapper {
-  position: relative;
-  padding: 0 2px;
-}
-
-.minimal-slider {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 4px;
-  background: #E2E8F0;
-  border-radius: 2px;
-  outline: none;
-  background-image: linear-gradient(#000, #000);
-  background-size: var(--percent, 0%) 100%;
-  background-repeat: no-repeat;
-  cursor: pointer;
-}
-
-.minimal-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #FFF;
-  border: 2px solid #000;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-  transition: transform 0.1s;
-  margin-top: -6px; /* Center thumb */
-}
-
-.minimal-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-}
-
-.minimal-slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-}
-
-.range-marks {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 8px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #94A3B8;
-  position: relative;
-}
-
-.mark-recommend {
-  cursor: pointer;
-  transition: color 0.2s;
-  position: relative;
-}
-
-.mark-recommend:hover {
-  color: #000;
-}
-
-.mark-recommend.active {
-  color: #000;
-  font-weight: 600;
-}
-
-.mark-recommend::after {
-  content: '';
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 1px;
-  height: 4px;
-  background: #CBD5E1;
-}
-
-/* Auto Info */
-.auto-info-card {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  background: #F8FAFC;
-  padding: 16px 20px;
-  border-radius: 8px;
-}
-
-.auto-value {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: 4px;
-  padding-right: 24px;
-  border-right: 1px solid #E2E8F0;
-}
-
-.auto-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  justify-content: center;
-}
-
-.auto-meta-row {
-  display: flex;
-  align-items: center;
-}
-
-.duration-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748B;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-}
-
-.auto-desc {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.auto-desc p {
-  margin: 0;
-  font-size: 13px;
-  color: #64748B;
-  line-height: 1.5;
-}
-
-.highlight-tip {
-  margin-top: 4px !important;
-  font-size: 12px !important;
-  color: #000 !important;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.highlight-tip:hover {
-  text-decoration: underline;
-}
-
-.plan-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748B;
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-}
-
-.plan-info-tip {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #94A3B8;
-  line-height: 1.5;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-/* Modal Transition */
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-
-.modal-enter-active .profile-modal {
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.modal-leave-active .profile-modal {
-  transition: all 0.3s ease-in;
-}
-
-.modal-enter-from .profile-modal,
-.modal-leave-to .profile-modal {
-  transform: scale(0.95) translateY(10px);
-  opacity: 0;
-}
-</style>
+<style scoped src="./Step2EnvSetup.scoped.css"></style>

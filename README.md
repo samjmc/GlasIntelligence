@@ -198,6 +198,12 @@ See `.env.example` for all required configuration. Key additions for CI/CD:
 ├── frontend/              # Vue 3 SPA
 │   └── src/               # Components, views, router
 ├── e2e/                   # Playwright E2E tests
+├── docs/                  # Reference artifacts (reports for PDF tools, SQL schema snapshot)
+│   ├── reports/           # Markdown sources for client/PDF reports
+│   └── schema/            # Reference SQL (Supabase schema snapshot)
+├── tasks/                 # Local task tracking (todo.md)
+├── scripts/               # PDF/visual/DB utilities (simulation CLIs live under backend/scripts/)
+├── nginx/                 # Nginx configs for prod/staging/monitoring
 ├── monitoring/            # Observability configs
 │   ├── prometheus.yml
 │   ├── alert-rules.yml
@@ -212,6 +218,10 @@ See `.env.example` for all required configuration. Key additions for CI/CD:
 ├── Makefile               # Developer commands
 └── .pre-commit-config.yaml
 ```
+
+## Status
+
+![CI](https://github.com/samjmc/GlasIntelligence/actions/workflows/ci.yml/badge.svg)
 
 ## License
 

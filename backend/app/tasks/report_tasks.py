@@ -6,10 +6,10 @@ from ..celery_app import celery_app
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
 
-logger = get_logger('glas.tasks.report')
+logger = get_logger("glas.tasks.report")
 
 
-@celery_app.task(bind=True, name='glas.generate_report', max_retries=2)
+@celery_app.task(bind=True, name="glas.generate_report", max_retries=2)
 def generate_report_task(self, simulation_id: str, task_id: str):
     """Generate analysis report from simulation results (same path as HTTP thread)."""
     task_manager = TaskManager()
@@ -71,7 +71,7 @@ def generate_report_task(self, simulation_id: str, task_id: str):
         raise
 
 
-@celery_app.task(bind=True, name='glas.generate_pdf')
+@celery_app.task(bind=True, name="glas.generate_pdf")
 def generate_pdf_task(self, report_id: str, simulation_id: str):
     """Generate branded PDF from report."""
     logger.info(f"Generating PDF for report {report_id}")

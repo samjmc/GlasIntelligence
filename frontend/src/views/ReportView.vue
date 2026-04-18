@@ -180,11 +180,11 @@ const loadReportData = async () => {
   }
 }
 
-const loadGraph = async (graphId) => {
+const loadGraph = async (graphId, options = {}) => {
   graphLoading.value = true
   
   try {
-    const res = await getGraphData(graphId)
+    const res = await getGraphData(graphId, { refresh: !!options.refresh })
     if (res.success) {
       graphData.value = res.data
       addLog('Graph data loaded')
@@ -198,7 +198,7 @@ const loadGraph = async (graphId) => {
 
 const refreshGraph = () => {
   if (projectData.value?.graph_id) {
-    loadGraph(projectData.value.graph_id)
+    loadGraph(projectData.value.graph_id, { refresh: true })
   }
 }
 

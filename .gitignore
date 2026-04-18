@@ -68,3 +68,9 @@ visuals_s2/
 *.bak
 celerybeat-schedule
 celerybeat.pid
+
+# IDE / editor config
+.cursor/
+_*.txt
+_*.py
+

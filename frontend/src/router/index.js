@@ -127,6 +127,13 @@ const routes = [
     component: InteractionView,
     props: true,
   },
+  {
+    path: '/bundle/:bundleId',
+    name: 'BundleResults',
+    component: () => import('../views/BundleResultsView.vue'),
+    props: true,
+    meta: { requiresAuth: true },
+  },
 ]
 
 const router = createRouter({

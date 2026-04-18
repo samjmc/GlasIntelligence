@@ -157,14 +157,16 @@
         
         <div class="card-content">
           <p class="api-note">POST /api/simulation/create</p>
-          <p class="description">Graph build complete. Proceed to environment setup.</p>
+          <p class="description">
+            {{ isBundleMode ? `Graph build complete. ${bundleData.scenarios?.length || 0} scenarios ready to run.` : 'Graph build complete. Proceed to environment setup.' }}
+          </p>
           <button 
             class="action-btn" 
             :disabled="currentPhase < 2 || creatingSimulation"
             @click="handleEnterEnvSetup"
           >
             <span v-if="creatingSimulation" class="spinner-sm"></span>
-            {{ creatingSimulation ? 'Creating...' : 'Proceed to Environment Setup ➝' }}
+            {{ creatingSimulation ? (isBundleMode ? 'Starting Analysis...' : 'Creating...') : (isBundleMode ? 'Start Full Analysis ➝' : 'Proceed to Environment Setup ➝') }}
           </button>
         </div>
       </div>
@@ -188,10 +190,11 @@
 
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
-import { createSimulation } from '../api/simulation'
+import { useRouter, useRoute } from 'vue-router'
+import { createSimulation, updateSession, runBundle } from '../api/simulation'
 
 const router = useRouter()
+const route = useRoute()
 
 const props = defineProps({
   currentPhase: { type: Number, default: 0 },
@@ -199,7 +202,8 @@ const props = defineProps({
   ontologyProgress: Object,
   buildProgress: Object,
   graphData: Object,
-  systemLogs: { type: Array, default: () => [] }
+  systemLogs: { type: Array, default: () => [] },
+  bundleData: { type: Object, default: null },
 })
 
 defineEmits(['next-step'])
@@ -208,27 +212,51 @@ const selectedOntologyItem = ref(null)
 const logContent = ref(null)
 const creatingSimulation = ref(false)
 
+const isBundleMode = computed(() => !!props.bundleData?.bundleId)
+
 const handleEnterEnvSetup = async () => {
   if (!props.projectData?.project_id || !props.projectData?.graph_id) {
     console.error('Missing project or graph info')
+    alert('Missing project or graph information. Please complete the graph build step first.')
     return
   }
   
   creatingSimulation.value = true
   
   try {
+    const sessionIdForGraph = localStorage.getItem('glas_active_session') || route.query.session_id
     const res = await createSimulation({
       project_id: props.projectData.project_id,
       graph_id: props.projectData.graph_id,
       enable_twitter: true,
-      enable_reddit: true
+      enable_reddit: true,
+      ...(sessionIdForGraph ? { session_id: String(sessionIdForGraph) } : {}),
     })
     
     if (res.success && res.data?.simulation_id) {
-      router.push({
-        name: 'Simulation',
-        params: { simulationId: res.data.simulation_id }
-      })
+      if (isBundleMode.value) {
+        const sessionId = localStorage.getItem('glas_active_session') || route.query.session_id
+        if (!sessionId) {
+          alert('No active session found. Please start from the home page.')
+          return
+        }
+        try {
+          await updateSession(sessionId, { simulation_id: res.data.simulation_id })
+          await runBundle(props.bundleData.bundleId, { session_id: sessionId })
+          router.push({
+            name: 'BundleResults',
+            params: { bundleId: props.bundleData.bundleId },
+          })
+        } catch (e) {
+          console.error('Bundle run failed:', e)
+          alert('Failed to start bundle analysis: ' + (e.message || 'Unknown error'))
+        }
+      } else {
+        router.push({
+          name: 'Simulation',
+          params: { simulationId: res.data.simulation_id }
+        })
+      }
     } else {
       console.error('Create simulation failed:', res.error)
       alert('Create simulation failed: ' + (res.error || 'Unknown error'))

@@ -65,25 +65,29 @@ class PlatformActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_start(self, round_num: int, simulated_hour: int):
+    def log_round_start(self, round_num: int, simulated_hour: int, time_label: dict = None):
         """记录轮次开始"""
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "event_type": "round_start",
             "simulated_hour": simulated_hour,
+            "time_label": time_label.get("label", "") if time_label else "",
         }
         
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_end(self, round_num: int, actions_count: int):
-        """记录轮次结束"""
+    def log_round_end(self, round_num: int, actions_count: int, time_label: dict = None, simulated_hours: float = 0):
+        """Record round completion with action count and elapsed simulated time."""
+        simulated_hours = simulated_hours if simulated_hours is not None else 0
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "event_type": "round_end",
             "actions_count": actions_count,
+            "time_label": time_label.get("label", "") if time_label else "",
+            "simulated_hours": simulated_hours,
         }
         
         with open(self.log_path, 'a', encoding='utf-8') as f:
@@ -239,25 +243,29 @@ class ActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_start(self, round_num: int, simulated_hour: int, platform: str):
+    def log_round_start(self, round_num: int, simulated_hour: int, platform: str, time_label: dict = None):
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "platform": platform,
             "event_type": "round_start",
             "simulated_hour": simulated_hour,
+            "time_label": time_label.get("label", "") if time_label else "",
         }
         
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_round_end(self, round_num: int, actions_count: int, platform: str):
+    def log_round_end(self, round_num: int, actions_count: int, platform: str, time_label: dict = None, simulated_hours: float = 0):
+        simulated_hours = simulated_hours if simulated_hours is not None else 0
         entry = {
             "round": round_num,
             "timestamp": datetime.now().isoformat(),
             "platform": platform,
             "event_type": "round_end",
             "actions_count": actions_count,
+            "time_label": time_label.get("label", "") if time_label else "",
+            "simulated_hours": simulated_hours,
         }
         
         with open(self.log_path, 'a', encoding='utf-8') as f:

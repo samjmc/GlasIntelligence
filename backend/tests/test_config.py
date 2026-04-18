@@ -31,6 +31,7 @@ class TestConfigSimulationLimits:
         assert rounds == Config.ENTERPRISE_SIMULATION_ROUNDS
 
     def test_enterprise_plan_limits_normalizes_casing(self):
+        """Supabase may store 'Enterprise' from manual grants; limits must still apply."""
         agents, rounds = Config.simulation_limits("Enterprise")
         assert agents == Config.ENTERPRISE_SIMULATION_AGENTS
         assert rounds == Config.ENTERPRISE_SIMULATION_ROUNDS

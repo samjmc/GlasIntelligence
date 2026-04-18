@@ -394,15 +394,43 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { useProjectRouteId } from '../composables/useProjectRouteId'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
+import { getSession } from '../api/simulation'
+import { getGraphPollIntervalMs, graphSkipPollWhenDocumentHidden } from '../config/zepFootprint'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 import * as d3 from 'd3'
 
-const route = useRoute()
-const router = useRouter()
+const { route, projectId: currentProjectId } = useProjectRouteId()
 
-const currentProjectId = ref(route.params.projectId)
+function resolveLinkedSessionId() {
+  const q = route.query.session_id
+  if (typeof q === 'string' && q.trim()) return q.trim()
+  if (typeof localStorage !== 'undefined') {
+    const s = localStorage.getItem('glas_active_session')
+    if (s && s.trim()) return s.trim()
+  }
+  return null
+}
+
+/** If disk project.json lacks graph_id, recover Zep id from Supabase session (backup column). */
+async function mergeGraphIdFromSessionIfNeeded() {
+  if (!projectData.value) return
+  if (projectData.value.graph_id) return
+  const sid = resolveLinkedSessionId()
+  if (!sid) return
+  try {
+    const res = await getSession(sid)
+    const s = res?.data
+    const gid = s?.graph_id
+    if (!gid || typeof gid !== 'string') return
+    projectData.value = { ...projectData.value, graph_id: gid }
+  } catch {
+    /* session fetch failed — continue without backup graph id */
+  }
+}
+const router = useRouter()
 
 const loading = ref(true)
 const graphLoading = ref(false)
@@ -586,19 +614,22 @@ const loadProject = async () => {
     if (response.success) {
       projectData.value = response.data
       updatePhaseByStatus(response.data.status)
-      
-      if (response.data.status === 'ontology_generated' && !response.data.graph_id) {
+      await mergeGraphIdFromSessionIfNeeded()
+
+      const pd = projectData.value
+      if (pd.status === 'ontology_generated' && !pd.graph_id) {
         await startBuildGraph()
       }
-      
-      if (response.data.status === 'graph_building' && response.data.graph_build_task_id) {
+
+      if (pd.status === 'graph_building' && pd.graph_build_task_id) {
         currentPhase.value = 1
-        startPollingTask(response.data.graph_build_task_id)
+        startPollingTask(pd.graph_build_task_id)
+        startGraphPolling()
       }
-      
-      if (response.data.status === 'graph_completed' && response.data.graph_id) {
+
+      if (pd.status === 'graph_completed' && pd.graph_id) {
         currentPhase.value = 2
-        await loadGraph(response.data.graph_id)
+        await loadGraph(pd.graph_id)
       }
     } else {
       error.value = response.error || 'Failed to load project'
@@ -658,55 +689,99 @@ const startBuildGraph = async () => {
   }
 }
 
-let graphPollTimer = null
+let graphPollActive = false
+let graphPollTimeoutId = null
+let graphBackoffUntil = 0
+
+const graphBuildingActive = () =>
+  currentPhase.value === 1 || projectData.value?.status === 'graph_building'
 
 const startGraphPolling = () => {
-  fetchGraphData()
-  
-  graphPollTimer = setInterval(async () => {
+  stopGraphPolling()
+  graphPollActive = true
+  scheduleGraphPoll(0)
+}
+
+const scheduleGraphPoll = (delayMs) => {
+  if (!graphPollActive) return
+  if (graphPollTimeoutId !== null) {
+    clearTimeout(graphPollTimeoutId)
+    graphPollTimeoutId = null
+  }
+  graphPollTimeoutId = setTimeout(async () => {
+    graphPollTimeoutId = null
+    if (!graphPollActive) return
     await fetchGraphData()
-  }, 10000)
+    if (!graphPollActive) return
+    const base = getGraphPollIntervalMs({
+      documentHidden: document.hidden,
+      graphBuilding: graphBuildingActive(),
+    })
+    scheduleGraphPoll(base)
+  }, delayMs)
 }
 
 const refreshGraph = async () => {
+  if (!projectData.value?.graph_id) return
   graphLoading.value = true
-  await fetchGraphData()
-  graphLoading.value = false
+  try {
+    await loadGraph(projectData.value.graph_id, { refresh: true })
+  } finally {
+    graphLoading.value = false
+  }
 }
 
 const stopGraphPolling = () => {
-  if (graphPollTimer) {
-    clearInterval(graphPollTimer)
-    graphPollTimer = null
+  graphPollActive = false
+  if (graphPollTimeoutId !== null) {
+    clearTimeout(graphPollTimeoutId)
+    graphPollTimeoutId = null
   }
 }
 
 const fetchGraphData = async () => {
+  if (graphSkipPollWhenDocumentHidden && document.hidden) return
+  if (Date.now() < graphBackoffUntil) return
   try {
-    const projectResponse = await getProject(currentProjectId.value)
-    
-    if (projectResponse.success && projectResponse.data.graph_id) {
-      const graphId = projectResponse.data.graph_id
-      projectData.value = projectResponse.data
-      
-      const graphResponse = await getGraphData(graphId)
-      
-      if (graphResponse.success && graphResponse.data) {
-        const newData = graphResponse.data
-        const newNodeCount = newData.node_count || newData.nodes?.length || 0
-        const oldNodeCount = graphData.value?.node_count || graphData.value?.nodes?.length || 0
-        
-        console.log('Fetching graph data, nodes:', newNodeCount, 'edges:', newData.edge_count || newData.edges?.length || 0)
-        
-        if (newNodeCount !== oldNodeCount || !graphData.value) {
-          graphData.value = newData
-          await nextTick()
-          renderGraph()
-        }
+    let graphId = projectData.value?.graph_id
+    if (!graphId) {
+      const projectResponse = await getProject(currentProjectId.value)
+      if (projectResponse.success && projectResponse.data) {
+        projectData.value = projectResponse.data
+        graphId = projectResponse.data.graph_id
+      }
+    }
+    if (!graphId) return
+
+    const graphResponse = await getGraphData(graphId)
+
+    if (graphResponse.success && graphResponse.data) {
+      graphBackoffUntil = 0
+      const newData = graphResponse.data
+      const newNodeCount = newData.node_count || newData.nodes?.length || 0
+      const oldNodeCount = graphData.value?.node_count || graphData.value?.nodes?.length || 0
+
+      if (newNodeCount !== oldNodeCount || !graphData.value) {
+        graphData.value = newData
+        await nextTick()
+        renderGraph()
       }
     }
   } catch (err) {
+    const status = err.response?.status
+    if (status === 429) {
+      const raSec = Number.parseInt(err.response?.headers?.['retry-after'] || '60', 10)
+      const backoffSec = Number.isFinite(raSec) && raSec > 0 ? raSec : 60
+      const clamped = Math.min(Math.max(backoffSec, 1), 300)
+      graphBackoffUntil = Date.now() + clamped * 1000
+    }
     console.log('Graph data fetch:', err.message || 'not ready')
+  }
+}
+
+const onGraphVisibilityChange = () => {
+  if (!document.hidden && graphPollActive) {
+    fetchGraphData()
   }
 }
 
@@ -775,10 +850,10 @@ const stopPolling = () => {
   }
 }
 
-const loadGraph = async (graphId) => {
+const loadGraph = async (graphId, options = {}) => {
   try {
     graphLoading.value = true
-    const response = await getGraphData(graphId)
+    const response = await getGraphData(graphId, { refresh: !!options.refresh })
     
     if (response.success) {
       graphData.value = response.data
@@ -993,995 +1068,15 @@ watch(graphData, () => {
 })
 
 onMounted(() => {
+  document.addEventListener('visibilitychange', onGraphVisibilityChange)
   initProject()
 })
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onGraphVisibilityChange)
   stopPolling()
   stopGraphPolling()
 })
 </script>
 
-<style scoped>
-:root {
-  --black: #000000;
-  --white: #FFFFFF;
-  --orange: #FF6B35;
-  --gray-light: #F5F5F5;
-  --gray-border: #E0E0E0;
-  --gray-text: #666666;
-}
-
-.process-page {
-  min-height: 100vh;
-  background: #0a0a0a;
-  color: #e0e0e0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  overflow: hidden;
-}
-
-.navbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  height: 56px;
-  background: #111;
-  color: #e0e0e0;
-  z-index: 10;
-  position: relative;
-  border-bottom: 1px solid #1e1e1e;
-}
-
-.nav-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.nav-brand {
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.nav-brand:hover {
-  opacity: 0.8;
-}
-
-.nav-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid #333;
-  border-radius: 6px;
-  background: #1a1a1a;
-  color: #aaa;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.nav-btn:hover {
-  background: #222;
-  border-color: #444;
-  color: #e0e0e0;
-}
-
-.nav-center {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.step-badge {
-  background: #FF6B35;
-  color: #fff;
-  padding: 2px 8px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  border-radius: 2px;
-}
-
-.step-name {
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  color: #fff;
-}
-
-.nav-status {
-  display: flex;
-  align-items: center;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #666;
-  margin-right: 8px;
-}
-
-.status-dot.processing {
-  background: #FF6B35;
-  animation: pulse 1.5s infinite;
-}
-
-.status-dot.completed {
-  background: #1A936F;
-}
-
-.status-dot.error {
-  background: #C5283D;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.status-text {
-  font-size: 0.75rem;
-  color: #999;
-}
-
-.main-content {
-  display: flex;
-  height: calc(100vh - 56px);
-  position: relative;
-}
-
-.left-panel {
-  width: 50%;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #1e1e1e;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  background: #0a0a0a;
-  z-index: 5;
-}
-
-.left-panel.full-screen {
-  width: 100%;
-  border-right: none;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  border-bottom: 1px solid #1e1e1e;
-  background: #111;
-  height: 50px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.header-deco {
-  color: #FF6B35;
-  font-size: 0.8rem;
-}
-
-.header-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 0.75rem;
-  color: #888;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-val {
-  font-weight: 600;
-  color: #e0e0e0;
-}
-
-.stat-divider {
-  color: #333;
-}
-
-.action-buttons {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #888;
-  border-radius: 2px;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: #1e1e1e;
-  color: #e0e0e0;
-}
-
-.action-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.icon-refresh, .icon-fullscreen {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.icon-refresh.spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.graph-container {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-.graph-loading,
-.graph-waiting,
-.graph-error {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-}
-
-.loading-animation {
-  position: relative;
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 20px;
-}
-
-.loading-ring {
-  position: absolute;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  animation: ring-rotate 1.5s linear infinite;
-}
-
-.loading-ring:nth-child(1) {
-  width: 80px;
-  height: 80px;
-  border-top-color: #e0e0e0;
-}
-
-.loading-ring:nth-child(2) {
-  width: 60px;
-  height: 60px;
-  top: 10px;
-  left: 10px;
-  border-right-color: #FF6B35;
-  animation-delay: 0.2s;
-}
-
-.loading-ring:nth-child(3) {
-  width: 40px;
-  height: 40px;
-  top: 20px;
-  left: 20px;
-  border-bottom-color: #666;
-  animation-delay: 0.4s;
-}
-
-@keyframes ring-rotate {
-  to { transform: rotate(360deg); }
-}
-
-.loading-text,
-.waiting-text {
-  font-size: 0.9rem;
-  color: #e0e0e0;
-  margin: 0 0 8px;
-}
-
-.waiting-hint {
-  font-size: 0.8rem;
-  color: #999;
-  margin: 0;
-}
-
-.waiting-icon {
-  margin-bottom: 20px;
-}
-
-.network-icon {
-  width: 100px;
-  height: 100px;
-  opacity: 0.6;
-}
-
-.graph-view {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.graph-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.graph-building-hint {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(255, 107, 53, 0.1);
-  border: 1px solid #FF6B35;
-  font-size: 0.8rem;
-  color: #FF6B35;
-}
-
-.building-dot {
-  width: 8px;
-  height: 8px;
-  background: #FF6B35;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
-
-.detail-panel {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 320px;
-  max-height: calc(100% - 32px);
-  background: #111;
-  border: 1px solid #2a2a2a;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  z-index: 100;
-}
-
-.detail-panel-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  background: #161616;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.detail-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #e0e0e0;
-}
-
-.detail-badge {
-  padding: 2px 10px;
-  font-size: 0.75rem;
-  color: #fff;
-  border-radius: 2px;
-}
-
-.detail-close {
-  margin-left: auto;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  color: #888;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.detail-close:hover {
-  color: #e0e0e0;
-}
-
-.detail-content {
-  padding: 16px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.detail-row {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-.detail-label {
-  font-size: 0.8rem;
-  color: #999;
-  min-width: 70px;
-  flex-shrink: 0;
-}
-
-.detail-value {
-  font-size: 0.85rem;
-  color: #e0e0e0;
-  word-break: break-word;
-}
-
-.detail-value.uuid {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  color: #888;
-}
-
-.detail-section {
-  margin-bottom: 12px;
-}
-
-.detail-summary {
-  margin: 8px 0 0 0;
-  font-size: 0.85rem;
-  color: #e0e0e0;
-  line-height: 1.6;
-  padding: 10px;
-  background: #1a1a1a;
-  border-left: 3px solid #FF6B35;
-}
-
-.detail-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.label-tag {
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #888;
-}
-
-.edge-relation {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-}
-
-.edge-source,
-.edge-target {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #e0e0e0;
-}
-
-.edge-arrow {
-  color: #999;
-}
-
-.edge-type {
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  background: #FF6B35;
-  color: #fff;
-}
-
-.detail-value.highlight {
-  font-weight: 600;
-  color: #e0e0e0;
-}
-
-.detail-subtitle {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #e0e0e0;
-  margin: 16px 0 12px 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.properties-list {
-  margin-top: 8px;
-  padding: 10px;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-}
-
-.property-item {
-  display: flex;
-  margin-bottom: 6px;
-  font-size: 0.85rem;
-}
-
-.property-item:last-child {
-  margin-bottom: 0;
-}
-
-.property-key {
-  color: #888;
-  margin-right: 8px;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.property-value {
-  color: #e0e0e0;
-  word-break: break-word;
-}
-
-.episodes-list {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.episode-tag {
-  display: block;
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  font-family: 'JetBrains Mono', monospace;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #888;
-  word-break: break-all;
-}
-
-.error-icon {
-  font-size: 2rem;
-  display: block;
-  margin-bottom: 10px;
-}
-
-.graph-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 12px 24px;
-  border-top: 1px solid #1e1e1e;
-  background: #111;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.legend-label {
-  color: #e0e0e0;
-}
-
-.legend-count {
-  color: #999;
-}
-
-.right-panel {
-  width: 50%;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  background: #0e0e0e;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, transform 0.3s ease;
-  overflow: hidden;
-  opacity: 1;
-}
-
-.right-panel.hidden {
-  width: 0;
-  opacity: 0;
-  transform: translateX(20px);
-  pointer-events: none;
-}
-
-.right-panel .panel-header.dark-header {
-  background: #111;
-  color: #e0e0e0;
-  border-bottom: 1px solid #1e1e1e;
-}
-
-.right-panel .header-icon {
-  color: #FF6B35;
-  margin-right: 8px;
-}
-
-.process-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-}
-
-.process-phase {
-  margin-bottom: 24px;
-  border: 1px solid #2a2a2a;
-  opacity: 0.5;
-  transition: all 0.3s;
-}
-
-.process-phase.active,
-.process-phase.completed {
-  opacity: 1;
-}
-
-.process-phase.active {
-  border-color: #FF6B35;
-}
-
-.process-phase.completed {
-  border-color: #1A936F;
-}
-
-.phase-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px;
-  background: #111;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.process-phase.active .phase-header {
-  background: rgba(255, 107, 53, 0.08);
-}
-
-.process-phase.completed .phase-header {
-  background: rgba(26, 147, 111, 0.08);
-}
-
-.phase-num {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #333;
-  line-height: 1;
-}
-
-.process-phase.active .phase-num {
-  color: #FF6B35;
-}
-
-.process-phase.completed .phase-num {
-  color: #1A936F;
-}
-
-.phase-info {
-  flex: 1;
-}
-
-.phase-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.phase-api {
-  font-size: 0.75rem;
-  color: #999;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.phase-status {
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  background: #1e1e1e;
-  color: #888;
-}
-
-.phase-status.active {
-  background: #FF6B35;
-  color: #fff;
-}
-
-.phase-status.completed {
-  background: #1A936F;
-  color: #fff;
-}
-
-.phase-detail {
-  padding: 16px;
-}
-
-.entity-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.entity-tag {
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  color: #e0e0e0;
-}
-
-.relation-list {
-  font-size: 0.8rem;
-}
-
-.relation-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px dashed #2a2a2a;
-}
-
-.relation-item:last-child {
-  border-bottom: none;
-}
-
-.rel-source,
-.rel-target {
-  color: #e0e0e0;
-}
-
-.rel-arrow {
-  color: #ccc;
-}
-
-.rel-name {
-  color: #FF6B35;
-  font-weight: 500;
-}
-
-.relation-more {
-  padding-top: 8px;
-  color: #999;
-  font-size: 0.75rem;
-}
-
-.ontology-progress {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: rgba(255, 107, 53, 0.08);
-  border: 1px solid rgba(255, 107, 53, 0.25);
-}
-
-.progress-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 107, 53, 0.25);
-  border-top-color: #FF6B35;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.progress-text {
-  font-size: 0.85rem;
-  color: #e0e0e0;
-}
-
-.waiting-state {
-  padding: 16px;
-  background: #111;
-  border: 1px dashed #2a2a2a;
-  text-align: center;
-}
-
-.waiting-hint {
-  font-size: 0.85rem;
-  color: #999;
-}
-
-.progress-bar {
-  height: 6px;
-  background: #1e1e1e;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #FF6B35;
-  transition: width 0.3s;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-}
-
-.progress-message {
-  color: #666;
-}
-
-.progress-percent {
-  color: #FF6B35;
-  font-weight: 600;
-}
-
-.build-result {
-  display: flex;
-  gap: 16px;
-}
-
-.result-item {
-  flex: 1;
-  text-align: center;
-  padding: 12px;
-  background: #1a1a1a;
-}
-
-.result-value {
-  display: block;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #e0e0e0;
-  margin-bottom: 4px;
-}
-
-.result-label {
-  font-size: 0.7rem;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.next-step-section {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid #2a2a2a;
-}
-
-.next-step-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 16px;
-  background: #FF6B35;
-  color: #fff;
-  border: none;
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.next-step-btn:hover:not(:disabled) {
-  background: #e85a2a;
-}
-
-.next-step-btn:disabled {
-  background: #333;
-  color: #666;
-  cursor: not-allowed;
-}
-
-.btn-arrow {
-  font-size: 1.2rem;
-}
-
-.project-panel {
-  border-top: 1px solid #1e1e1e;
-  background: #111;
-}
-
-.project-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 24px;
-  border-bottom: 1px solid #1e1e1e;
-}
-
-.project-icon {
-  color: #FF6B35;
-}
-
-.project-title {
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.project-details {
-  padding: 16px 24px;
-}
-
-.project-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 8px 0;
-  border-bottom: 1px dashed #2a2a2a;
-  font-size: 0.8rem;
-}
-
-.project-item:last-child {
-  border-bottom: none;
-}
-
-.item-label {
-  color: #999;
-  flex-shrink: 0;
-}
-
-.item-value {
-  color: #e0e0e0;
-  text-align: right;
-  max-width: 60%;
-  word-break: break-all;
-}
-
-.item-value.code {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  color: #888;
-}
-
-@media (max-width: 1024px) {
-  .main-content {
-    flex-direction: column;
-  }
-  
-  .left-panel {
-    width: 100% !important;
-    border-right: none;
-    border-bottom: 1px solid #1e1e1e;
-    height: 50vh;
-  }
-  
-  .right-panel {
-    width: 100% !important;
-    height: 50vh;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-  
-  .right-panel.hidden {
-      display: none;
-  }
-}
-</style>
+<style scoped src="./Process.scoped.css"></style>

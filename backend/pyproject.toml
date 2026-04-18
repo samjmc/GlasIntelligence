@@ -84,29 +84,23 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = [
     "E402",   # module-level import not at top (Flask pattern)
     "E501",   # line too long
-    "E722",   # bare-except
     "E741",   # ambiguous variable name
     "I001",   # import sorting
     "W291",   # trailing whitespace
     "W292",   # no newline at end
     "W293",   # whitespace before ':'
-    "F401",   # unused imports (kept for re-export / lazy patterns)
-    "F541",   # f-string without placeholders
-    "F841",   # unused local variable
+    "F841",   # unused local variable (too noisy on existing code)
     "SIM102", # collapsible-if
-    "SIM103", # needless-bool
     "SIM105", # suppressible-exception
     "SIM108", # if-else-block-instead-of-if-exp
     "SIM115", # open-file-with-context-handler
-    "UP006",  # non-pep585-annotation (List vs list)
-    "UP015",  # redundant open mode
-    "UP017",  # datetime-timezone-utc
-    "UP035",  # deprecated import (typing -> collections.abc, etc.)
     "UP042",  # replace-str-enum
     "UP045",  # non-pep604-annotation
     "B007",   # unused-loop-control-variable
     "B023",   # function-uses-loop-variable
     "B904",   # raise-without-from-inside-except
+    "E722",   # bare-except
+    "SIM103", # needless-bool
 ]
 
 [tool.ruff.lint.isort]

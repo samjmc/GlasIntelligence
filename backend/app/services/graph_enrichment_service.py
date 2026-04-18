@@ -6,23 +6,25 @@ and feeds enrichment episodes to Zep to close the gap toward target_entities.
 """
 
 import time
-from typing import Dict, Any, List, Optional, Callable
+from typing import Any
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from zep_cloud import EpisodeData
 from zep_cloud.client import Zep
 
-from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.zep_paging import fetch_all_nodes
 from ..utils.logger import get_logger
+from .graph_snapshot_cache import bump_mutation_generation
 
-logger = get_logger('glas.graph_enrichment')
+logger = get_logger("glas.graph_enrichment")
 
 
 @dataclass
 class EnrichmentRoundResult:
     """Outcome of a single enrichment round."""
+
     round_num: int = 0
     nodes_before: int = 0
     nodes_after: int = 0
@@ -34,14 +36,15 @@ class EnrichmentRoundResult:
 @dataclass
 class EnrichmentResult:
     """Outcome of the full enrichment process."""
+
     initial_nodes: int = 0
     final_nodes: int = 0
     target_entities: int = 0
     rounds_executed: int = 0
-    rounds: List[EnrichmentRoundResult] = field(default_factory=list)
+    rounds: list[EnrichmentRoundResult] = field(default_factory=list)
     stopped_reason: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "initial_nodes": self.initial_nodes,
             "final_nodes": self.final_nodes,
@@ -71,7 +74,7 @@ class GraphEnrichmentService:
     def __init__(
         self,
         zep_client: Zep,
-        llm_client: Optional[LLMClient] = None,
+        llm_client: LLMClient | None = None,
     ):
         self.client = zep_client
         self.llm = llm_client or LLMClient()
@@ -80,10 +83,10 @@ class GraphEnrichmentService:
         self,
         graph_id: str,
         source_text: str,
-        entity_inventory: List[Dict[str, Any]],
+        entity_inventory: list[dict[str, Any]],
         target_entities: int,
         max_rounds: int = 3,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Callable | None = None,
     ) -> EnrichmentResult:
         """
         Run enrichment cycles until node count >= target or max_rounds reached.
@@ -99,27 +102,27 @@ class GraphEnrichmentService:
         Returns:
             EnrichmentResult with per-round details
         """
-        current_nodes = self._get_node_names(graph_id)
+        current_nodes, typed_count = self._get_node_stats(graph_id)
         result = EnrichmentResult(
             initial_nodes=len(current_nodes),
             target_entities=target_entities,
         )
 
-        if len(current_nodes) >= target_entities:
+        if typed_count >= target_entities:
             result.final_nodes = len(current_nodes)
             result.stopped_reason = "already_at_target"
-            logger.info(f"Graph already has {len(current_nodes)} nodes (target: {target_entities}), skipping enrichment")
+            logger.info(f"Graph already has {typed_count} typed nodes (target: {target_entities}), skipping enrichment")
             return result
 
         logger.info(
-            f"Starting enrichment: {len(current_nodes)} nodes, target {target_entities}, "
-            f"inventory has {len(entity_inventory)} entities"
+            f"Starting enrichment: {len(current_nodes)} total nodes ({typed_count} typed), "
+            f"target {target_entities}, inventory has {len(entity_inventory)} entities"
         )
 
         for round_num in range(1, max_rounds + 1):
             if progress_callback:
                 progress_callback(
-                    f"Enrichment round {round_num}/{max_rounds} ({len(current_nodes)} nodes)...",
+                    f"Enrichment round {round_num}/{max_rounds} ({typed_count} typed nodes)...",
                     (round_num - 1) / max_rounds,
                 )
 
@@ -133,16 +136,16 @@ class GraphEnrichmentService:
             result.rounds.append(round_result)
             result.rounds_executed = round_num
 
-            current_nodes = self._get_node_names(graph_id)
+            current_nodes, typed_count = self._get_node_stats(graph_id)
             round_result.nodes_after = len(current_nodes)
             round_result.nodes_added = round_result.nodes_after - round_result.nodes_before
 
             logger.info(
                 f"Enrichment round {round_num}: {round_result.nodes_before} → {round_result.nodes_after} nodes "
-                f"(+{round_result.nodes_added})"
+                f"({typed_count} typed, +{round_result.nodes_added})"
             )
 
-            if len(current_nodes) >= target_entities:
+            if typed_count >= target_entities:
                 result.stopped_reason = "target_reached"
                 break
 
@@ -161,14 +164,16 @@ class GraphEnrichmentService:
 
         if progress_callback:
             progress_callback(
-                f"Enrichment complete: {result.final_nodes} nodes (target: {target_entities})",
+                f"Enrichment complete: {result.final_nodes} nodes ({typed_count} typed, target: {target_entities})",
                 1.0,
             )
 
         logger.info(
-            f"Enrichment finished: {result.initial_nodes} → {result.final_nodes} nodes "
+            f"Enrichment finished: {result.initial_nodes} → {result.final_nodes} nodes ({typed_count} typed) "
             f"in {result.rounds_executed} rounds ({result.stopped_reason})"
         )
+        if result.rounds_executed > 0:
+            bump_mutation_generation(graph_id)
         return result
 
     # ───────────────────────────────────────────────────────────
@@ -179,7 +184,7 @@ class GraphEnrichmentService:
         self,
         graph_id: str,
         source_text: str,
-        entity_inventory: List[Dict[str, Any]],
+        entity_inventory: list[dict[str, Any]],
         existing_node_names: set,
         round_num: int,
     ) -> EnrichmentRoundResult:
@@ -214,19 +219,23 @@ class GraphEnrichmentService:
     # Gap analysis
     # ───────────────────────────────────────────────────────────
 
-    def _get_node_names(self, graph_id: str) -> set:
+    def _get_node_stats(self, graph_id: str) -> tuple[set, int]:
+        """Return (all_node_names, typed_node_count) in a single pagination pass."""
         nodes = fetch_all_nodes(self.client, graph_id)
         names = set()
+        typed = 0
         for node in nodes:
             if node.name:
                 names.add(node.name.strip().lower())
-        return names
+            if any(l not in ("Entity", "Node") for l in (node.labels or [])):
+                typed += 1
+        return names, typed
 
     def _find_missing_entities(
         self,
-        entity_inventory: List[Dict[str, Any]],
+        entity_inventory: list[dict[str, Any]],
         existing_node_names: set,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return inventory entries not yet present in the graph."""
         missing = []
         for entity in entity_inventory:
@@ -246,17 +255,16 @@ class GraphEnrichmentService:
 
     def _generate_enrichment_episodes(
         self,
-        missing_entities: List[Dict[str, Any]],
+        missing_entities: list[dict[str, Any]],
         existing_node_names: set,
         source_text: str,
         max_entities_per_batch: int = 10,
-    ) -> List[str]:
+    ) -> list[str]:
         """Use LLM to generate natural language passages that describe missing entities."""
         batch = missing_entities[:max_entities_per_batch]
 
         entity_list = "\n".join(
-            f"- {e.get('name', '?')} ({e.get('category', '?')}): {e.get('context', '')}"
-            for e in batch
+            f"- {e.get('name', '?')} ({e.get('category', '?')}): {e.get('context', '')}" for e in batch
         )
 
         existing_sample = sorted(existing_node_names)[:20]
@@ -303,7 +311,7 @@ class GraphEnrichmentService:
     # Send episodes to Zep
     # ───────────────────────────────────────────────────────────
 
-    def _send_episodes(self, graph_id: str, passages: List[str]) -> List[str]:
+    def _send_episodes(self, graph_id: str, passages: list[str]) -> list[str]:
         episodes = [EpisodeData(data=passage, type="text") for passage in passages]
         episode_uuids = []
 
@@ -323,7 +331,7 @@ class GraphEnrichmentService:
 
         return episode_uuids
 
-    def _wait_for_episodes(self, episode_uuids: List[str]) -> None:
+    def _wait_for_episodes(self, episode_uuids: list[str]) -> None:
         if not episode_uuids:
             return
 

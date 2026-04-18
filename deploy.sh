@@ -24,8 +24,8 @@ server {
 }
 INITNGINX
 
-    cp nginx.conf nginx.conf.bak
-    cp /tmp/nginx-init.conf nginx.conf
+    cp nginx/nginx.conf nginx/nginx.conf.bak
+    cp /tmp/nginx-init.conf nginx/nginx.conf
 
     docker compose -f docker-compose.prod.yml up -d glas-intelligence
     sleep 5
@@ -38,8 +38,8 @@ INITNGINX
         -d "$DOMAIN" -d "www.$DOMAIN" \
         --email "$EMAIL" --agree-tos --no-eff-email
 
-    cp nginx.conf.bak nginx.conf
-    rm nginx.conf.bak
+    cp nginx/nginx.conf.bak nginx/nginx.conf
+    rm nginx/nginx.conf.bak
 
     docker compose -f docker-compose.prod.yml down
     echo "--- Certificates obtained. Run: ./deploy.sh start ---"

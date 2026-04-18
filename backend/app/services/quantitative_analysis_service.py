@@ -10,14 +10,16 @@ import os
 import json
 import csv
 import math
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any
 from dataclasses import dataclass, field
 from enum import Enum
 
+from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
+from .calibration_guardrails import apply_estimate_guardrails
 
-logger = get_logger('glas.quantitative_analysis')
+logger = get_logger("glas.quantitative_analysis")
 
 
 def _safe_int(val, lo: int, hi: int, default: int) -> int:
@@ -37,6 +39,7 @@ def _safe_float(val, default: float = 0.0) -> float:
 # ═══════════════════════════════════════════════════════════════
 # Enums and Types
 # ═══════════════════════════════════════════════════════════════
+
 
 class StancePosition(str, Enum):
     SUPPORTIVE = "supportive"
@@ -63,24 +66,26 @@ class RiskSeverity(str, Enum):
 # Result Dataclasses
 # ═══════════════════════════════════════════════════════════════
 
+
 @dataclass
 class SimulationMetrics:
     """Aggregated simulation activity statistics."""
+
     total_actions: int = 0
     twitter_actions: int = 0
     reddit_actions: int = 0
     total_agents: int = 0
     total_rounds: int = 0
 
-    action_type_distribution: Dict[str, int] = field(default_factory=dict)
+    action_type_distribution: dict[str, int] = field(default_factory=dict)
     engagement_rate: float = 0.0
     content_creation_rate: float = 0.0
-    platform_ratio: Dict[str, float] = field(default_factory=dict)
+    platform_ratio: dict[str, float] = field(default_factory=dict)
 
-    most_active_agents: List[Dict[str, Any]] = field(default_factory=list)
-    agent_type_activity: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    most_active_agents: list[dict[str, Any]] = field(default_factory=list)
+    agent_type_activity: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_actions": self.total_actions,
             "twitter_actions": self.twitter_actions,
@@ -116,16 +121,20 @@ class SimulationMetrics:
             lines.append("")
             lines.append("Most Active Agents (top 5):")
             for agent in self.most_active_agents[:5]:
-                lines.append(f"  {agent['agent_name']}: {agent['total_actions']} actions "
-                             f"(Twitter: {agent.get('twitter_actions', 0)}, Reddit: {agent.get('reddit_actions', 0)})")
+                lines.append(
+                    f"  {agent['agent_name']}: {agent['total_actions']} actions "
+                    f"(Twitter: {agent.get('twitter_actions', 0)}, Reddit: {agent.get('reddit_actions', 0)})"
+                )
 
         if self.agent_type_activity:
             lines.append("")
             lines.append("Activity by Entity Type:")
-            for etype, data in sorted(self.agent_type_activity.items(), key=lambda x: -x[1].get('total_actions', 0)):
-                lines.append(f"  {etype}: {data['agent_count']} agents, "
-                             f"{data['total_actions']} actions, "
-                             f"{data['avg_actions_per_agent']:.1f} avg per agent")
+            for etype, data in sorted(self.agent_type_activity.items(), key=lambda x: -x[1].get("total_actions", 0)):
+                lines.append(
+                    f"  {etype}: {data['agent_count']} agents, "
+                    f"{data['total_actions']} actions, "
+                    f"{data['avg_actions_per_agent']:.1f} avg per agent"
+                )
 
         return "\n".join(lines)
 
@@ -133,6 +142,7 @@ class SimulationMetrics:
 @dataclass
 class AgentStance:
     """Individual agent's classified stance."""
+
     agent_name: str = ""
     agent_type: str = ""
     country: str = ""
@@ -141,7 +151,7 @@ class AgentStance:
     key_concern: str = ""
     confidence: str = "moderate"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "agent_type": self.agent_type,
@@ -156,16 +166,17 @@ class AgentStance:
 @dataclass
 class StanceAnalysis:
     """Aggregated stakeholder position analysis."""
+
     topic: str = ""
     agents_analyzed: int = 0
-    stances: List[AgentStance] = field(default_factory=list)
-    position_distribution: Dict[str, float] = field(default_factory=dict)
-    position_counts: Dict[str, int] = field(default_factory=dict)
-    by_entity_type: Dict[str, Dict[str, float]] = field(default_factory=dict)
-    by_country: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    stances: list[AgentStance] = field(default_factory=list)
+    position_distribution: dict[str, float] = field(default_factory=dict)
+    position_counts: dict[str, int] = field(default_factory=dict)
+    by_entity_type: dict[str, dict[str, float]] = field(default_factory=dict)
+    by_country: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     average_intensity: float = 3.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "topic": self.topic,
             "agents_analyzed": self.agents_analyzed,
@@ -205,8 +216,10 @@ class StanceAnalysis:
                 positions = [e.get("position", "neutral") for e in entries]
                 majority = max(set(positions), key=positions.count)
                 avg_intensity = sum(e.get("intensity", 3) for e in entries) / len(entries)
-                lines.append(f"  {country} ({len(entries)} agents): {majority.capitalize()} "
-                             f"(avg intensity {avg_intensity:.1f}/5)")
+                lines.append(
+                    f"  {country} ({len(entries)} agents): {majority.capitalize()} "
+                    f"(avg intensity {avg_intensity:.1f}/5)"
+                )
 
         return "\n".join(lines)
 
@@ -214,15 +227,16 @@ class StanceAnalysis:
 @dataclass
 class ConsensusMetrics:
     """Consensus and polarization measurements."""
+
     agreement_ratio: float = 0.0
     polarization_index: float = 0.0
     majority_position: str = ""
     majority_percentage: float = 0.0
     faction_count: int = 0
-    cross_group_alignment: Dict[str, str] = field(default_factory=dict)
-    key_fault_lines: List[str] = field(default_factory=list)
+    cross_group_alignment: dict[str, str] = field(default_factory=dict)
+    key_fault_lines: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agreement_ratio": self.agreement_ratio,
             "polarization_index": self.polarization_index,
@@ -264,16 +278,17 @@ class ConsensusMetrics:
 @dataclass
 class EscalationAnalysis:
     """Temporal escalation trend analysis."""
+
     total_rounds: int = 0
-    intensity_curve: List[Dict[str, Any]] = field(default_factory=list)
+    intensity_curve: list[dict[str, Any]] = field(default_factory=list)
     escalation_detected: bool = False
     peak_round: int = 0
     peak_intensity: float = 0.0
-    turning_points: List[Dict[str, Any]] = field(default_factory=list)
-    aggression_ratio_trend: List[float] = field(default_factory=list)
+    turning_points: list[dict[str, Any]] = field(default_factory=list)
+    aggression_ratio_trend: list[float] = field(default_factory=list)
     overall_trend: str = "stable"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_rounds": self.total_rounds,
             "intensity_curve": self.intensity_curve,
@@ -297,13 +312,12 @@ class EscalationAnalysis:
         if self.turning_points:
             lines.append("\nTurning Points:")
             for tp in self.turning_points:
-                lines.append(f"  Round {tp['round']}: {tp['description']} "
-                             f"(change: {tp.get('change_pct', 0):+.0f}%)")
+                lines.append(f"  Round {tp['round']}: {tp['description']} (change: {tp.get('change_pct', 0):+.0f}%)")
 
         if self.intensity_curve:
             lines.append("\nActivity Timeline:")
             for point in self.intensity_curve:
-                bar_len = int(point.get('normalized_intensity', 0) * 20)
+                bar_len = int(point.get("normalized_intensity", 0) * 20)
                 bar = "█" * bar_len + "░" * (20 - bar_len)
                 lines.append(f"  R{point['round']:>2}: {bar} {point['total_actions']} actions")
 
@@ -313,15 +327,22 @@ class EscalationAnalysis:
 @dataclass
 class ProbabilityEstimate:
     """Single outcome probability estimate."""
+
     outcome: str = ""
     probability_low: float = 0.0
     probability_mid: float = 0.0
     probability_high: float = 0.0
     confidence: str = "moderate"
-    supporting_evidence: List[str] = field(default_factory=list)
-    key_drivers: List[str] = field(default_factory=list)
+    supporting_evidence: list[str] = field(default_factory=list)
+    key_drivers: list[str] = field(default_factory=list)
+    # Pre-guardrail LLM triplets (for A/B vs probability_* after calibration_guardrails).
+    raw_low: float = 0.0
+    raw_mid: float = 0.0
+    raw_high: float = 0.0
+    # None = guardrails not applied (disabled or error); list = applied (may be empty).
+    guardrail_corrections: list[str] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "outcome": self.outcome,
             "probability_range": {
@@ -329,6 +350,12 @@ class ProbabilityEstimate:
                 "mid": self.probability_mid,
                 "high": self.probability_high,
             },
+            "raw_probability_range": {
+                "low": self.raw_low,
+                "mid": self.raw_mid,
+                "high": self.raw_high,
+            },
+            "guardrail_corrections": self.guardrail_corrections,
             "confidence": self.confidence,
             "supporting_evidence": self.supporting_evidence,
             "key_drivers": self.key_drivers,
@@ -338,11 +365,12 @@ class ProbabilityEstimate:
 @dataclass
 class ProbabilityAssessment:
     """Collection of probability estimates for key outcomes."""
+
     scenario: str = ""
-    estimates: List[ProbabilityEstimate] = field(default_factory=list)
+    estimates: list[ProbabilityEstimate] = field(default_factory=list)
     methodology_note: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "scenario": self.scenario,
             "estimates": [e.to_dict() for e in self.estimates],
@@ -362,8 +390,10 @@ class ProbabilityAssessment:
                 est.confidence, "★★☆"
             )
             lines.append(f"\n  {est.outcome}")
-            lines.append(f"    Probability: {est.probability_low:.0f}% - {est.probability_high:.0f}% "
-                         f"(midpoint: {est.probability_mid:.0f}%)")
+            lines.append(
+                f"    Probability: {est.probability_low:.0f}% - {est.probability_high:.0f}% "
+                f"(midpoint: {est.probability_mid:.0f}%)"
+            )
             lines.append(f"    Confidence: {est.confidence} {conf_marker}")
             if est.supporting_evidence:
                 lines.append(f"    Evidence: {'; '.join(est.supporting_evidence[:3])}")
@@ -379,13 +409,14 @@ class ProbabilityAssessment:
 @dataclass
 class RiskItem:
     """Single risk on the matrix."""
+
     risk: str = ""
     likelihood: int = 3
     impact: int = 3
     severity: str = "moderate"
-    mitigation_indicators: List[str] = field(default_factory=list)
+    mitigation_indicators: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "risk": self.risk,
             "likelihood": self.likelihood,
@@ -398,11 +429,12 @@ class RiskItem:
 @dataclass
 class RiskMatrix:
     """Impact x Likelihood risk assessment."""
-    risks: List[RiskItem] = field(default_factory=list)
-    top_risks: List[RiskItem] = field(default_factory=list)
+
+    risks: list[RiskItem] = field(default_factory=list)
+    top_risks: list[RiskItem] = field(default_factory=list)
     risk_summary: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "risks": [r.to_dict() for r in self.risks],
             "top_risks": [r.to_dict() for r in self.top_risks],
@@ -438,13 +470,15 @@ class RiskMatrix:
 # Combined Result Dataclasses (what the report tools return)
 # ═══════════════════════════════════════════════════════════════
 
+
 @dataclass
 class MetricsToolResult:
     """Combined result for the analyze_metrics tool."""
-    metrics: Optional[SimulationMetrics] = None
-    escalation: Optional[EscalationAnalysis] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    metrics: SimulationMetrics | None = None
+    escalation: EscalationAnalysis | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         result = {}
         if self.metrics:
             result["simulation_metrics"] = self.metrics.to_dict()
@@ -464,10 +498,11 @@ class MetricsToolResult:
 @dataclass
 class PositionsToolResult:
     """Combined result for the assess_positions tool."""
-    stance: Optional[StanceAnalysis] = None
-    consensus: Optional[ConsensusMetrics] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    stance: StanceAnalysis | None = None
+    consensus: ConsensusMetrics | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         result = {}
         if self.stance:
             result["stance_analysis"] = self.stance.to_dict()
@@ -487,15 +522,19 @@ class PositionsToolResult:
 @dataclass
 class RisksToolResult:
     """Combined result for the estimate_risks tool."""
-    probabilities: Optional[ProbabilityAssessment] = None
-    risk_matrix: Optional[RiskMatrix] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    probabilities: ProbabilityAssessment | None = None
+    risk_matrix: RiskMatrix | None = None
+    monte_carlo: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
         result = {}
         if self.probabilities:
             result["probability_assessment"] = self.probabilities.to_dict()
         if self.risk_matrix:
             result["risk_matrix"] = self.risk_matrix.to_dict()
+        if self.monte_carlo:
+            result["monte_carlo"] = self.monte_carlo
         return result
 
     def to_text(self) -> str:
@@ -504,6 +543,36 @@ class RisksToolResult:
             parts.append(self.probabilities.to_text())
         if self.risk_matrix:
             parts.append(self.risk_matrix.to_text())
+        if self.monte_carlo:
+            mc = self.monte_carlo
+            per_outcome = mc.get("per_outcome", [])
+            composite = mc.get("composite")
+            if per_outcome or composite:
+                lines = ["=== Monte Carlo Analysis ==="]
+                for item in per_outcome:
+                    if item is None:
+                        continue
+                    mc_data = item.get("monte_carlo", {})
+                    cis = mc_data.get("confidence_intervals", {})
+                    ci95 = cis.get("95%", [0, 0])
+                    lines.append(
+                        f"  {item.get('outcome', '')}: "
+                        f"mean={mc_data.get('mean', 0):.1f}%, "
+                        f"95% CI=[{ci95[0]:.1f}%, {ci95[1]:.1f}%]"
+                    )
+                if composite:
+                    c_cis = composite.get("confidence_intervals", {})
+                    c_ci95 = c_cis.get("95%", [0, 0])
+                    lines.append(
+                        f"\n  Composite: mean={composite.get('mean', 0):.1f}%, "
+                        f"95% CI=[{c_ci95[0]:.1f}%, {c_ci95[1]:.1f}%]"
+                    )
+                    conv = composite.get("convergence", {})
+                    lines.append(
+                        f"  Converged: {conv.get('converged', False)} "
+                        f"(relative error: {conv.get('relative_error', 0):.4f})"
+                    )
+                parts.append("\n".join(lines))
         return "\n\n".join(parts)
 
 
@@ -512,8 +581,14 @@ class RisksToolResult:
 # ═══════════════════════════════════════════════════════════════
 
 INTERACTIVE_ACTIONS = {
-    "LIKE_POST", "DISLIKE_POST", "REPOST", "QUOTE_POST",
-    "CREATE_COMMENT", "LIKE_COMMENT", "DISLIKE_COMMENT", "FOLLOW",
+    "LIKE_POST",
+    "DISLIKE_POST",
+    "REPOST",
+    "QUOTE_POST",
+    "CREATE_COMMENT",
+    "LIKE_COMMENT",
+    "DISLIKE_COMMENT",
+    "FOLLOW",
 }
 CONTENT_CREATION_ACTIONS = {"CREATE_POST", "QUOTE_POST"}
 AGGRESSIVE_ACTIONS = {"DISLIKE_POST", "DISLIKE_COMMENT", "MUTE"}
@@ -530,7 +605,7 @@ class StakeholderImpactRow:
     escalation_exposure: float = 0.0
     voice_share_pct: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "entity_type": self.entity_type,
             "stance_majority": self.stance_majority,
@@ -544,9 +619,9 @@ class StakeholderImpactRow:
 
 @dataclass
 class StakeholderImpactMatrix:
-    rows: List[StakeholderImpactRow] = field(default_factory=list)
+    rows: list[StakeholderImpactRow] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"rows": [r.to_dict() for r in self.rows]}
 
     def to_text(self) -> str:
@@ -569,43 +644,88 @@ class StakeholderImpactMatrix:
 @dataclass
 class KeyDriver:
     """A single key driver influencing the decision verdict."""
+
     name: str = ""
     direction: str = ""  # e.g. "positive", "negative", "neutral"
     magnitude: str = ""  # e.g. "strong", "moderate", "weak"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"name": self.name, "direction": self.direction, "magnitude": self.magnitude}
 
 
 @dataclass
 class SensitivityRow:
     """What-if sensitivity: how changing a variable shifts the verdict."""
+
     variable: str = ""
     base_value: str = ""
     swing_pct: str = ""
     impact_on_verdict: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            "variable": self.variable, "base_value": self.base_value,
-            "swing_pct": self.swing_pct, "impact_on_verdict": self.impact_on_verdict,
+            "variable": self.variable,
+            "base_value": self.base_value,
+            "swing_pct": self.swing_pct,
+            "impact_on_verdict": self.impact_on_verdict,
+        }
+
+
+@dataclass
+class RecommendedAction:
+    """A prioritized action from the decision framework."""
+
+    action: str = ""
+    priority: str = ""  # "critical", "high", "medium", "low"
+    rationale: str = ""
+    timeline: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action": self.action,
+            "priority": self.priority,
+            "rationale": self.rationale,
+            "timeline": self.timeline,
+        }
+
+
+@dataclass
+class MonitoringIndicator:
+    """A metric or signal to watch for changes."""
+
+    indicator: str = ""
+    current_state: str = ""
+    threshold: str = ""
+    action_if_triggered: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "indicator": self.indicator,
+            "current_state": self.current_state,
+            "threshold": self.threshold,
+            "action_if_triggered": self.action_if_triggered,
         }
 
 
 @dataclass
 class DecisionFramework:
     """Structured decision recommendation from simulation analysis."""
+
     verdict: str = ""
     confidence: str = ""
     confidence_rationale: str = ""
     reasoning: str = ""
-    key_drivers: List[KeyDriver] = field(default_factory=list)
-    sensitivity: List[SensitivityRow] = field(default_factory=list)
-    flip_conditions: List[str] = field(default_factory=list)
-    financial_summary: Optional[Dict[str, Any]] = None
-    causal_chain: List[Dict[str, str]] = field(default_factory=list)
+    key_drivers: list[KeyDriver] = field(default_factory=list)
+    sensitivity: list[SensitivityRow] = field(default_factory=list)
+    flip_conditions: list[str] = field(default_factory=list)
+    financial_summary: dict[str, Any] | None = None
+    causal_chain: list[dict[str, str]] = field(default_factory=list)
+    recommended_actions: list[RecommendedAction] = field(default_factory=list)
+    monitoring_indicators: list[MonitoringIndicator] = field(default_factory=list)
+    time_sensitivity: str = ""
+    decision_criteria: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         result = {
             "verdict": self.verdict,
             "confidence": self.confidence,
@@ -615,6 +735,10 @@ class DecisionFramework:
             "sensitivity": [s.to_dict() for s in self.sensitivity],
             "flip_conditions": self.flip_conditions,
             "causal_chain": self.causal_chain,
+            "recommended_actions": [a.to_dict() for a in self.recommended_actions],
+            "monitoring_indicators": [m.to_dict() for m in self.monitoring_indicators],
+            "time_sensitivity": self.time_sensitivity,
+            "decision_criteria": self.decision_criteria,
         }
         if self.financial_summary is not None:
             result["financial_summary"] = self.financial_summary
@@ -624,7 +748,7 @@ class DecisionFramework:
 class QuantitativeAnalysisService:
     """Computes quantitative metrics from Glas Intelligence simulation data."""
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient | None = None):
         self._llm = llm_client
 
     @property
@@ -648,7 +772,7 @@ class QuantitativeAnalysisService:
         result.total_agents = len(agent_stats)
         result.total_rounds = len(timeline)
 
-        action_types: Dict[str, int] = {}
+        action_types: dict[str, int] = {}
         for agent in agent_stats:
             result.total_actions += agent["total_actions"]
             result.twitter_actions += agent.get("twitter_actions", 0)
@@ -675,7 +799,7 @@ class QuantitativeAnalysisService:
         result.most_active_agents = agent_stats[:5]
 
         name_to_type = self._build_agent_type_map(profiles)
-        type_stats: Dict[str, Dict[str, Any]] = {}
+        type_stats: dict[str, dict[str, Any]] = {}
         for agent in agent_stats:
             atype = name_to_type.get(agent["agent_name"], "Unknown")
             if atype not in type_stats:
@@ -714,14 +838,16 @@ class QuantitativeAnalysisService:
 
         agent_summaries = []
         for i, profile in enumerate(profiles):
-            agent_summaries.append({
-                "index": i,
-                "name": profile.get("realname", profile.get("username", f"Agent_{i}")),
-                "country": profile.get("country", "Unknown"),
-                "entity_type": profile.get("source_entity_type", profile.get("profession", "Unknown")),
-                "bio": profile.get("bio", "")[:200],
-                "persona": profile.get("persona", "")[:300],
-            })
+            agent_summaries.append(
+                {
+                    "index": i,
+                    "name": profile.get("realname", profile.get("username", f"Agent_{i}")),
+                    "country": profile.get("country", "Unknown"),
+                    "entity_type": profile.get("source_entity_type", profile.get("profession", "Unknown")),
+                    "bio": profile.get("bio", "")[:200],
+                    "persona": profile.get("persona", "")[:300],
+                }
+            )
 
         system_prompt = (
             "You are a quantitative analyst classifying stakeholder positions in a geopolitical simulation.\n\n"
@@ -813,13 +939,13 @@ class QuantitativeAnalysisService:
             entropy = -sum(p * math.log(p) for p in proportions if p > 0)
             result.polarization_index = round(entropy / max_entropy, 2) if max_entropy > 0 else 0.0
 
-        type_positions: Dict[str, str] = {}
+        type_positions: dict[str, str] = {}
         for s in stance.stances:
             if s.agent_type not in type_positions:
                 type_positions[s.agent_type] = s.position
         result.cross_group_alignment = type_positions
 
-        type_stances: Dict[str, List[str]] = {}
+        type_stances: dict[str, list[str]] = {}
         for s in stance.stances:
             type_stances.setdefault(s.agent_type, []).append(s.position)
 
@@ -831,9 +957,7 @@ class QuantitativeAnalysisService:
                 majority_t1 = max(set(type_stances[t1]), key=type_stances[t1].count)
                 majority_t2 = max(set(type_stances[t2]), key=type_stances[t2].count)
                 if majority_t1 != majority_t2 and majority_t1 != "neutral" and majority_t2 != "neutral":
-                    fault_lines.append(
-                        f"{t1} ({majority_t1}) vs {t2} ({majority_t2})"
-                    )
+                    fault_lines.append(f"{t1} ({majority_t1}) vs {t2} ({majority_t2})")
         result.key_fault_lines = fault_lines[:5]
 
         return result
@@ -860,13 +984,15 @@ class QuantitativeAnalysisService:
             positive = sum(r.get("action_types", {}).get(a, 0) for a in POSITIVE_ACTIONS)
             aggression_ratio = aggressive / max(aggressive + positive, 1)
 
-            result.intensity_curve.append({
-                "round": r["round_num"],
-                "total_actions": total,
-                "normalized_intensity": round(normalized, 3),
-                "active_agents": r.get("active_agents_count", 0),
-                "aggression_ratio": round(aggression_ratio, 3),
-            })
+            result.intensity_curve.append(
+                {
+                    "round": r["round_num"],
+                    "total_actions": total,
+                    "normalized_intensity": round(normalized, 3),
+                    "active_agents": r.get("active_agents_count", 0),
+                    "aggression_ratio": round(aggression_ratio, 3),
+                }
+            )
             result.aggression_ratio_trend.append(round(aggression_ratio, 3))
 
         peak_point = max(result.intensity_curve, key=lambda x: x["total_actions"])
@@ -880,15 +1006,17 @@ class QuantitativeAnalysisService:
                 change_pct = ((curr - prev) / prev) * 100
                 if abs(change_pct) >= 50:
                     direction = "Surge" if change_pct > 0 else "Drop"
-                    result.turning_points.append({
-                        "round": result.intensity_curve[i]["round"],
-                        "description": f"{direction} in activity ({prev} → {curr} actions)",
-                        "change_pct": round(change_pct),
-                    })
+                    result.turning_points.append(
+                        {
+                            "round": result.intensity_curve[i]["round"],
+                            "description": f"{direction} in activity ({prev} → {curr} actions)",
+                            "change_pct": round(change_pct),
+                        }
+                    )
 
         if len(result.intensity_curve) >= 3:
-            first_half = result.intensity_curve[:len(result.intensity_curve) // 2]
-            second_half = result.intensity_curve[len(result.intensity_curve) // 2:]
+            first_half = result.intensity_curve[: len(result.intensity_curve) // 2]
+            second_half = result.intensity_curve[len(result.intensity_curve) // 2 :]
             avg_first = sum(p["total_actions"] for p in first_half) / max(len(first_half), 1)
             avg_second = sum(p["total_actions"] for p in second_half) / max(len(second_half), 1)
 
@@ -911,9 +1039,9 @@ class QuantitativeAnalysisService:
     def probability_assessment(
         self,
         scenario: str,
-        stance: Optional[StanceAnalysis] = None,
-        consensus: Optional[ConsensusMetrics] = None,
-        escalation: Optional[EscalationAnalysis] = None,
+        stance: StanceAnalysis | None = None,
+        consensus: ConsensusMetrics | None = None,
+        escalation: EscalationAnalysis | None = None,
     ) -> ProbabilityAssessment:
         evidence_parts = [f"Scenario: {scenario}"]
 
@@ -924,7 +1052,9 @@ class QuantitativeAnalysisService:
         if consensus:
             evidence_parts.append(f"Polarization index: {consensus.polarization_index}")
             evidence_parts.append(f"Agreement ratio: {consensus.agreement_ratio:.1f}%")
-            evidence_parts.append(f"Majority position: {consensus.majority_position} ({consensus.majority_percentage:.1f}%)")
+            evidence_parts.append(
+                f"Majority position: {consensus.majority_position} ({consensus.majority_percentage:.1f}%)"
+            )
             if consensus.key_fault_lines:
                 evidence_parts.append(f"Key fault lines: {'; '.join(consensus.key_fault_lines)}")
 
@@ -984,14 +1114,49 @@ class QuantitativeAnalysisService:
         )
 
         for item in response.get("estimates", []):
+            raw_low = _safe_float(item.get("probability_low", 0))
+            raw_mid = _safe_float(item.get("probability_mid", 0))
+            raw_high = _safe_float(item.get("probability_high", 0))
+
+            guardrail_corrections: list[str] | None = None
+            if Config.ENABLE_CALIBRATION_GUARDRAILS:
+                try:
+                    guard = apply_estimate_guardrails(raw_low, raw_mid, raw_high)
+                    guardrail_corrections = list(guard.corrections)
+                    if guard.corrections:
+                        logger.info(
+                            "Guardrails applied to '%s': %s",
+                            (item.get("outcome", "") or "")[:60],
+                            "; ".join(guard.corrections),
+                        )
+                    final_low, final_mid, final_high = guard.low, guard.mid, guard.high
+                except Exception as e:
+                    logger.warning(
+                        "Guardrails failed (using raw triplets): scenario=%r outcome=%r raw=(%s,%s,%s): %s",
+                        (scenario or "")[:120],
+                        (item.get("outcome") or "")[:80],
+                        raw_low,
+                        raw_mid,
+                        raw_high,
+                        e,
+                    )
+                    guardrail_corrections = None
+                    final_low, final_mid, final_high = raw_low, raw_mid, raw_high
+            else:
+                final_low, final_mid, final_high = raw_low, raw_mid, raw_high
+
             est = ProbabilityEstimate(
                 outcome=item.get("outcome", ""),
-                probability_low=_safe_float(item.get("probability_low", 0)),
-                probability_mid=_safe_float(item.get("probability_mid", 0)),
-                probability_high=_safe_float(item.get("probability_high", 0)),
+                probability_low=final_low,
+                probability_mid=final_mid,
+                probability_high=final_high,
                 confidence=item.get("confidence", "moderate"),
                 supporting_evidence=item.get("supporting_evidence", []),
                 key_drivers=item.get("key_drivers", []),
+                raw_low=raw_low,
+                raw_mid=raw_mid,
+                raw_high=raw_high,
+                guardrail_corrections=guardrail_corrections,
             )
             result.estimates.append(est)
 
@@ -1004,8 +1169,8 @@ class QuantitativeAnalysisService:
     def risk_matrix(
         self,
         scenario: str,
-        probabilities: Optional[ProbabilityAssessment] = None,
-        escalation: Optional[EscalationAnalysis] = None,
+        probabilities: ProbabilityAssessment | None = None,
+        escalation: EscalationAnalysis | None = None,
     ) -> RiskMatrix:
         context_parts = [f"Scenario: {scenario}"]
 
@@ -1114,10 +1279,10 @@ class QuantitativeAnalysisService:
         scenario: str,
         graph_id: str,
         zep_tools=None,
-        cached_stance: Optional[StanceAnalysis] = None,
-        cached_consensus: Optional[ConsensusMetrics] = None,
+        cached_stance: StanceAnalysis | None = None,
+        cached_consensus: ConsensusMetrics | None = None,
     ) -> RisksToolResult:
-        """Tool: estimate_risks — returns probability estimates + risk matrix."""
+        """Tool: estimate_risks — returns probability estimates + risk matrix + Monte Carlo."""
         if cached_stance is not None and cached_consensus is not None:
             stance = cached_stance
             consensus = cached_consensus
@@ -1127,7 +1292,26 @@ class QuantitativeAnalysisService:
         escalation = self.escalation_analysis(simulation_id)
         probs = self.probability_assessment(scenario, stance, consensus, escalation)
         risk = self.risk_matrix(scenario, probs, escalation)
-        return RisksToolResult(probabilities=probs, risk_matrix=risk)
+
+        mc_result = None
+        if probs and probs.estimates:
+            try:
+                from .monte_carlo_engine import (
+                    run_monte_carlo_on_estimates,
+                    run_composite_monte_carlo,
+                )
+
+                est_dicts = [e.to_dict() for e in probs.estimates]
+                per_outcome = run_monte_carlo_on_estimates(est_dicts)
+                composite = run_composite_monte_carlo(est_dicts)
+                mc_result = {
+                    "per_outcome": per_outcome,
+                    "composite": composite,
+                }
+            except Exception as e:
+                logger.warning(f"Monte Carlo analysis failed: {e}")
+
+        return RisksToolResult(probabilities=probs, risk_matrix=risk, monte_carlo=mc_result)
 
     def stakeholder_impact_matrix(
         self,
@@ -1135,7 +1319,7 @@ class QuantitativeAnalysisService:
         graph_id: str,
         topic: str,
         zep_tools=None,
-        cached_stance: Optional[StanceAnalysis] = None,
+        cached_stance: StanceAnalysis | None = None,
     ) -> StakeholderImpactMatrix:
         """
         Per-entity-type impact table: stance mix, intensity, activity vs mean, aggression share.
@@ -1151,7 +1335,7 @@ class QuantitativeAnalysisService:
         if agent_stats:
             global_mean = sum(a["total_actions"] for a in agent_stats) / max(len(agent_stats), 1)
 
-        type_agg: Dict[str, Dict[str, float]] = {}
+        type_agg: dict[str, dict[str, float]] = {}
         for a in agent_stats:
             atype = name_to_type.get(a["agent_name"], "Unknown")
             if atype not in type_agg:
@@ -1162,7 +1346,7 @@ class QuantitativeAnalysisService:
             type_agg[atype]["aggr"] += aggr
             type_agg[atype]["total_actions"] += a["total_actions"]
 
-        rows: List[StakeholderImpactRow] = []
+        rows: list[StakeholderImpactRow] = []
         types_seen = set(stance.by_entity_type.keys()) | set(type_agg.keys())
 
         for etype in sorted(types_seen):
@@ -1204,7 +1388,7 @@ class QuantitativeAnalysisService:
     # Helpers
     # ───────────────────────────────────────────────────────────
 
-    def _load_agent_profiles(self, simulation_id: str) -> List[Dict[str, Any]]:
+    def _load_agent_profiles(self, simulation_id: str) -> list[dict[str, Any]]:
         """Load agent persona files (mirrors ZepTools._load_agent_profiles)."""
         sim_dir = os.path.join(
             os.path.dirname(__file__),
@@ -1214,7 +1398,7 @@ class QuantitativeAnalysisService:
         reddit_path = os.path.join(sim_dir, "reddit_profiles.json")
         if os.path.exists(reddit_path):
             try:
-                with open(reddit_path, "r", encoding="utf-8") as f:
+                with open(reddit_path, encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
                 logger.warning(f"Failed to read reddit_profiles.json: {e}")
@@ -1223,25 +1407,27 @@ class QuantitativeAnalysisService:
         if os.path.exists(twitter_path):
             try:
                 profiles = []
-                with open(twitter_path, "r", encoding="utf-8") as f:
+                with open(twitter_path, encoding="utf-8") as f:
                     reader = csv.DictReader(f)
                     for row in reader:
-                        profiles.append({
-                            "realname": row.get("name", ""),
-                            "username": row.get("username", ""),
-                            "bio": row.get("description", ""),
-                            "persona": row.get("user_char", ""),
-                            "profession": "Unknown",
-                        })
+                        profiles.append(
+                            {
+                                "realname": row.get("name", ""),
+                                "username": row.get("username", ""),
+                                "bio": row.get("description", ""),
+                                "persona": row.get("user_char", ""),
+                                "profession": "Unknown",
+                            }
+                        )
                 return profiles
             except Exception as e:
                 logger.warning(f"Failed to read twitter_profiles.csv: {e}")
 
         return []
 
-    def _build_agent_type_map(self, profiles: List[Dict[str, Any]]) -> Dict[str, str]:
+    def _build_agent_type_map(self, profiles: list[dict[str, Any]]) -> dict[str, str]:
         """Map agent name -> entity type from profiles."""
-        name_to_type: Dict[str, str] = {}
+        name_to_type: dict[str, str] = {}
         for profile in profiles:
             name = profile.get("realname", profile.get("username", ""))
             etype = profile.get("source_entity_type", profile.get("profession", "Unknown"))
@@ -1255,7 +1441,7 @@ class QuantitativeAnalysisService:
             return
 
         total = len(result.stances)
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for s in result.stances:
             counts[s.position] = counts.get(s.position, 0) + 1
 
@@ -1263,7 +1449,7 @@ class QuantitativeAnalysisService:
         result.position_distribution = {k: (v / total) * 100 for k, v in counts.items()}
         result.average_intensity = sum(s.intensity for s in result.stances) / total
 
-        type_counts: Dict[str, Dict[str, int]] = {}
+        type_counts: dict[str, dict[str, int]] = {}
         for s in result.stances:
             type_counts.setdefault(s.agent_type, {})
             type_counts[s.agent_type][s.position] = type_counts[s.agent_type].get(s.position, 0) + 1
@@ -1274,11 +1460,13 @@ class QuantitativeAnalysisService:
 
         for s in result.stances:
             if s.country and s.country != "Unknown":
-                result.by_country.setdefault(s.country, []).append({
-                    "position": s.position,
-                    "intensity": s.intensity,
-                    "confidence": s.confidence,
-                })
+                result.by_country.setdefault(s.country, []).append(
+                    {
+                        "position": s.position,
+                        "intensity": s.intensity,
+                        "confidence": s.confidence,
+                    }
+                )
 
     def generate_decision_framework(
         self,
@@ -1287,7 +1475,7 @@ class QuantitativeAnalysisService:
         positions: StanceAnalysis,
         risks: RisksToolResult,
         stakeholder_matrix: StakeholderImpactMatrix,
-        decision_intake: Optional[Dict[str, Any]] = None,
+        decision_intake: dict[str, Any] | None = None,
     ) -> DecisionFramework:
         """Synthesize a structured decision recommendation from all analysis data."""
         intake_block = ""
@@ -1319,6 +1507,14 @@ Return ONLY valid JSON:
     {"variable": "variable name", "base_value": "current value", "swing_pct": "±X%", "impact_on_verdict": "description"}
   ],
   "flip_conditions": ["condition that would reverse the verdict"],
+  "recommended_actions": [
+    {"action": "specific action to take", "priority": "critical|high|medium|low", "rationale": "why this action matters", "timeline": "immediate|1-2 weeks|1 month|3 months"}
+  ],
+  "monitoring_indicators": [
+    {"indicator": "what to watch", "current_state": "where it is now", "threshold": "trigger level", "action_if_triggered": "what to do"}
+  ],
+  "decision_criteria": ["condition that should be true before acting on this verdict"],
+  "time_sensitivity": "How long this analysis remains valid and why (e.g. '2-4 weeks — stakeholder positions may shift after upcoming policy announcement')",
   "financial_summary": {
     "applicable": true,
     "revenue_range": {"low": "$X", "high": "$Y", "unit": "USD/year"},
@@ -1338,6 +1534,15 @@ stakeholder consensus strength, data recency).
 input conditions to the verdict. Each link should connect a cause to its downstream effect. \
 The chain should read as a narrative: condition A leads to B, which causes C. \
 Confidence per link should be "high", "moderate", or "low".
+- recommended_actions: provide 3-5 prioritized actions the decision-maker should take. Each \
+action must be specific and actionable (not generic advice). Priority reflects urgency and impact. \
+Timeline indicates when the action should be completed.
+- monitoring_indicators: provide 3-4 signals the decision-maker should watch over time. Each \
+should have a concrete threshold that would trigger a reassessment or course correction.
+- decision_criteria: 2-4 preconditions that should hold true before acting on the verdict. \
+These are sanity checks the user can validate independently.
+- time_sensitivity: a single sentence explaining the shelf life of this analysis and what \
+events could invalidate it.
 - If user provided flip conditions, evaluate them against simulation results.
 - financial_summary: set "applicable" to true ONLY when the scenario involves quantifiable \
 financial outcomes (revenue, costs, profit, investment returns). For pure policy, social, or \
@@ -1396,6 +1601,26 @@ and omit the range fields.
                 flip_conditions=data.get("flip_conditions", []),
                 financial_summary=fin,
                 causal_chain=causal,
+                recommended_actions=[
+                    RecommendedAction(
+                        action=a.get("action", ""),
+                        priority=a.get("priority", "medium"),
+                        rationale=a.get("rationale", ""),
+                        timeline=a.get("timeline", ""),
+                    )
+                    for a in data.get("recommended_actions", [])
+                ],
+                monitoring_indicators=[
+                    MonitoringIndicator(
+                        indicator=m.get("indicator", ""),
+                        current_state=m.get("current_state", ""),
+                        threshold=m.get("threshold", ""),
+                        action_if_triggered=m.get("action_if_triggered", ""),
+                    )
+                    for m in data.get("monitoring_indicators", [])
+                ],
+                time_sensitivity=data.get("time_sensitivity", ""),
+                decision_criteria=data.get("decision_criteria", []),
             )
         except Exception as e:
             logger.warning(f"Decision framework generation failed: {e}")
