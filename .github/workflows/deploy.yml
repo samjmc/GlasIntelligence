@@ -122,6 +122,14 @@ jobs:
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
+            # Free disk space BEFORE pull
+            echo "Disk before cleanup:"
+            df -h / | tail -1
+            docker image prune -af --filter "until=24h" 2>/dev/null || true
+            docker builder prune -af --filter "until=24h" 2>/dev/null || true
+            echo "Disk after cleanup:"
+            df -h / | tail -1
+
             docker pull ${REGISTRY}/${IMAGE_NAME}:${DEPLOY_TAG} || docker pull ${REGISTRY}/${IMAGE_NAME}:latest
 
             docker compose -f docker-compose.staging.yml up -d --pull always --force-recreate
@@ -185,6 +193,15 @@ jobs:
             echo "${CURRENT_IMAGE}" > /opt/glas/.rollback-image
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+
+            # Free disk space BEFORE pull — old image layers stack up and fill the disk,
+            # causing silent pull failures that fall back to cached old images.
+            echo "Disk before cleanup:"
+            df -h / | tail -1
+            docker image prune -af --filter "until=24h" 2>/dev/null || true
+            docker builder prune -af --filter "until=24h" 2>/dev/null || true
+            echo "Disk after cleanup:"
+            df -h / | tail -1
 
             docker compose -f docker-compose.prod.yml pull
 
