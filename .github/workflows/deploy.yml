@@ -95,6 +95,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Copy compose + nginx files to staging server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "docker-compose.prod.yml,docker-compose.staging.yml,nginx.conf,nginx/nginx-staging.conf"
+          target: ${{ env.DEPLOY_PATH }}
+          overwrite: true
+
       - name: Deploy to staging
         uses: appleboy/ssh-action@v1
         with:
@@ -109,13 +119,6 @@ jobs:
             export IMAGE_NAME="${{ env.IMAGE_NAME }}"
             # docker-compose.staging.yml uses ghcr.io/${GITHUB_REPOSITORY_OWNER:-glasinsight}/... — must match push owner
             export GITHUB_REPOSITORY_OWNER="${{ github.repository_owner }}"
-
-            # Sync compose + nginx files from repo (these aren't baked into the image)
-            if [ -d .git ]; then
-              git fetch --depth=1 origin main && git reset --hard origin/main
-            else
-              echo "WARN: ${{ env.DEPLOY_PATH }} is not a git checkout; compose/nginx files will not auto-update"
-            fi
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
@@ -156,6 +159,16 @@ jobs:
           script: |
             docker inspect glas-intelligence --format='{{.Config.Image}}' 2>/dev/null || echo "none"
 
+      - name: Copy compose + nginx files to production server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "docker-compose.prod.yml,docker-compose.staging.yml,nginx.conf,nginx/nginx-staging.conf"
+          target: ${{ env.DEPLOY_PATH }}
+          overwrite: true
+
       - name: Deploy to production
         uses: appleboy/ssh-action@v1
         with:
@@ -170,13 +183,6 @@ jobs:
 
             CURRENT_IMAGE=$(docker inspect glas-intelligence --format='{{.Config.Image}}' 2>/dev/null || echo "")
             echo "${CURRENT_IMAGE}" > /opt/glas/.rollback-image
-
-            # Sync compose + nginx files from repo (these aren't baked into the image)
-            if [ -d .git ]; then
-              git fetch --depth=1 origin main && git reset --hard origin/main
-            else
-              echo "WARN: ${{ env.DEPLOY_PATH }} is not a git checkout; compose/nginx files will not auto-update"
-            fi
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
