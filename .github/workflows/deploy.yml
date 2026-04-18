@@ -187,7 +187,13 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --force-recreate
+
+            # Explicitly stop+remove the old containers (they may be managed by a stale
+            # compose project and ignore --force-recreate). This is safe: data lives in
+            # named volumes (redis_data) and bind mounts (./backend/uploads, /etc/letsencrypt).
+            docker rm -f glas-intelligence glas-redis glas-celery-worker glas-sim-worker glas-research-worker glas-celery-beat 2>/dev/null || true
+
+            docker compose -f docker-compose.prod.yml up -d
             echo "Production deployed with tag: ${DEPLOY_TAG}"
 
             # Verify what's actually running
