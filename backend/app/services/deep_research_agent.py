@@ -133,7 +133,10 @@ class DeepResearchAgent:
         return sorted(result)
 
     def _parse_response(self, response) -> dict[str, Any]:
-        summary_md = ""
+        # Accumulate text across all output_text blocks. Previously we assigned
+        # rather than appended, which silently dropped earlier content if the
+        # Responses API emitted multiple message items (e.g. a final empty one).
+        text_chunks: list[str] = []
         sources: list[dict[str, str]] = []
         search_queries: list[str] = []
         seen_urls: set = set()
@@ -147,13 +150,17 @@ class DeepResearchAgent:
             if getattr(item, "type", None) == "message":
                 for block in getattr(item, "content", []):
                     if getattr(block, "type", None) == "output_text":
-                        summary_md = getattr(block, "text", "")
+                        chunk = getattr(block, "text", "") or ""
+                        if chunk:
+                            text_chunks.append(chunk)
                         for ann in getattr(block, "annotations", []):
                             url = getattr(ann, "url", None)
                             title = getattr(ann, "title", None) or url or ""
                             if url and url not in seen_urls:
                                 seen_urls.add(url)
                                 sources.append({"url": url, "title": title})
+
+        summary_md = "\n\n".join(text_chunks).strip()
 
         key_facts = self._extract_key_facts(summary_md)
         historical_precedents = self._extract_section(summary_md, "Historical Precedents")

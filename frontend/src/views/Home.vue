@@ -443,18 +443,38 @@
 
                 <div v-if="error" class="research-error">{{ error }}</div>
 
-                <div v-if="briefing" class="briefing-preview">
+                <div v-if="briefing" class="briefing-preview" :class="{ 'briefing-empty': !briefingHasContent }">
                   <div class="briefing-header">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     <span class="briefing-title">{{ briefing.filename }}</span>
-                    <button class="briefing-toggle" @click="briefingExpanded = !briefingExpanded">
+                    <button
+                      v-if="briefingHasContent"
+                      class="briefing-toggle"
+                      @click="briefingExpanded = !briefingExpanded"
+                    >
                       {{ briefingExpanded ? 'Collapse' : 'Read' }}
+                    </button>
+                    <button
+                      v-else
+                      class="briefing-toggle briefing-toggle-retry"
+                      :disabled="researchLoading"
+                      @click="retryEmptyResearch"
+                      title="The previous research returned no content. Click to retry."
+                    >
+                      Retry
                     </button>
                     <button class="remove-btn" @click="removeBriefing">&times;</button>
                   </div>
                   <div class="briefing-content" :class="{ expanded: briefingExpanded }">
-                    <pre v-if="briefingExpanded" class="briefing-md">{{ briefing.content_md }}</pre>
-                    <template v-else>{{ briefing.content_md.slice(0, 300) }}...</template>
+                    <template v-if="!briefingHasContent">
+                      <span class="briefing-empty-msg">
+                        Research completed but returned no content. This is a known intermittent issue with the research agent — click <strong>Retry</strong> above to run it again (your credit is preserved on failure).
+                      </span>
+                    </template>
+                    <template v-else-if="briefingExpanded">
+                      <pre class="briefing-md">{{ briefing.content_md }}</pre>
+                    </template>
+                    <template v-else>{{ briefing.content_md.slice(0, 300) }}{{ briefing.content_md.length > 300 ? '...' : '' }}</template>
                   </div>
                 </div>
               </div>
@@ -535,6 +555,7 @@ const showUpgradeModal = ref(false)
 const researchLoading = ref(false)
 const briefing = ref(null)
 const briefingExpanded = ref(false)
+const briefingHasContent = computed(() => !!(briefing.value?.content_md || '').trim())
 const leftPanelCollapsed = ref(false)
 
 const typewriterText = ref('')
@@ -608,6 +629,9 @@ const bundlePlan = ref([])
 const bundleLoading = ref(false)
 const activeBundleId = ref(null)
 const scenarioCount = ref(5)
+// Tracks whether the user (or a restored session/draft) ever had full-analysis enabled
+// in this browser context. Used to warn if they start without it after previously enabling.
+const wasFullAnalysisEnabled = ref(false)
 
 onMounted(async () => {
   const full = 'Simulate the future'
@@ -652,6 +676,7 @@ onMounted(async () => {
     const draft = localStorage.getItem(DRAFT_KEY)
     if (draft) {
       const d = JSON.parse(draft)
+      suppressAutoSave = true
       if (d.prompt && !formData.value.simulationRequirement) {
         formData.value.simulationRequirement = d.prompt
       }
@@ -661,6 +686,14 @@ onMounted(async () => {
         decisionForm.constraints = d.decision_context.constraints || ''
         decisionForm.flip_conditions = d.decision_context.flip_conditions || ''
       }
+      if (d.full_analysis_mode) {
+        fullAnalysisMode.value = true
+        wasFullAnalysisEnabled.value = true
+        if (Array.isArray(d.bundle_plan)) bundlePlan.value = d.bundle_plan
+        if (d.active_bundle_id) activeBundleId.value = d.active_bundle_id
+        if (typeof d.scenario_count === 'number') scenarioCount.value = d.scenario_count
+      }
+      setTimeout(() => { suppressAutoSave = false }, 100)
     }
   } catch { /* ignore corrupt draft */ }
 
@@ -836,6 +869,16 @@ function removeBriefing() {
   }
 }
 
+// Used when the dossier came back empty (silent failure). We clear the stale
+// dossier from the UI and re-run deep research so the credit-refund / retry
+// path in runDeepResearch kicks in cleanly.
+function retryEmptyResearch() {
+  if (researchLoading.value) return
+  removeBriefing()
+  researchDossier.value = null
+  runDeepResearch()
+}
+
 const triggerFileInput = () => { if (!loading.value) fileInput.value?.click() }
 const handleFileSelect = (event) => { addFiles(Array.from(event.target.files)) }
 const handleDragOver = () => { if (!loading.value) isDragOver.value = true }
@@ -896,6 +939,15 @@ async function restoreSession() {
     decisionForm.constraints = dc.constraints || ''
     decisionForm.flip_conditions = dc.flip_conditions || ''
 
+    const bc = s.bundle_config
+    if (bc && typeof bc === 'object' && bc.full_analysis) {
+      fullAnalysisMode.value = true
+      wasFullAnalysisEnabled.value = true
+      activeBundleId.value = bc.bundle_id || null
+      bundlePlan.value = Array.isArray(bc.scenarios) ? bc.scenarios : []
+      if (bundlePlan.value.length) scenarioCount.value = bundlePlan.value.length
+    }
+
     if (s.research_status === 'completed' && s.research_dossier) {
       researchDossier.value = s.research_dossier
       briefing.value = {
@@ -940,11 +992,13 @@ async function restoreFromSession(session) {
   const bc = session.bundle_config
   if (bc && typeof bc === 'object' && bc.full_analysis) {
     fullAnalysisMode.value = true
+    wasFullAnalysisEnabled.value = true
     activeBundleId.value = bc.bundle_id || null
     bundlePlan.value = bc.scenarios || []
     scenarioCount.value = bundlePlan.value.length || 5
   } else {
     fullAnalysisMode.value = false
+    wasFullAnalysisEnabled.value = false
     activeBundleId.value = null
     bundlePlan.value = []
   }
@@ -1006,6 +1060,7 @@ async function handleAbandonSession(sessionId) {
     if (activeSessionId.value === sessionId) {
       activeSessionId.value = null
       localStorage.removeItem(SESSION_KEY)
+      wasFullAnalysisEnabled.value = false
     }
   } catch { /* ignore */ }
 }
@@ -1118,6 +1173,10 @@ function saveDraft() {
   const draft = {
     prompt: formData.value.simulationRequirement,
     decision_context: { ...decisionForm },
+    full_analysis_mode: fullAnalysisMode.value,
+    bundle_plan: bundlePlan.value,
+    active_bundle_id: activeBundleId.value,
+    scenario_count: scenarioCount.value,
   }
   try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch { /* quota */ }
 }
@@ -1131,13 +1190,14 @@ function scheduleSessionSave() {
       const fields = {
         prompt: formData.value.simulationRequirement,
         decision_context: { ...decisionForm },
-      }
-      if (fullAnalysisMode.value && activeBundleId.value) {
-        fields.bundle_config = {
-          bundle_id: activeBundleId.value,
-          scenarios: bundlePlan.value,
-          full_analysis: true,
-        }
+        // Always send bundle_config so toggling off persists; null clears it server-side.
+        bundle_config: fullAnalysisMode.value
+          ? {
+              bundle_id: activeBundleId.value,
+              scenarios: bundlePlan.value,
+              full_analysis: true,
+            }
+          : null,
       }
       await updateSession(activeSessionId.value, fields)
     } catch (err) {
@@ -1161,10 +1221,13 @@ watch(decisionForm, () => {
 }, { deep: true })
 
 watch(fullAnalysisMode, (enabled) => {
-  if (!enabled) {
+  if (enabled) {
+    wasFullAnalysisEnabled.value = true
+  } else {
     bundlePlan.value = []
     activeBundleId.value = null
   }
+  saveDraft()
   scheduleSessionSave()
 })
 
@@ -1219,6 +1282,16 @@ const startSimulation = async () => {
   if (fullAnalysisMode.value && (!activeBundleId.value || bundlePlan.value.length === 0)) {
     error.value = 'Generate scenarios first before starting full analysis.'
     return
+  }
+  // Guard: user previously enabled Full Decision Analysis but it's currently off.
+  // This catches the case where a refresh / accidental toggle would silently
+  // start a single-scenario run when they intended a multi-scenario one.
+  if (!fullAnalysisMode.value && wasFullAnalysisEnabled.value) {
+    const ok = window.confirm(
+      'Full Decision Analysis is currently OFF, but you had it enabled earlier. ' +
+      'Start a single-scenario analysis instead? Click Cancel to re-enable it.'
+    )
+    if (!ok) return
   }
 
   loading.value = true

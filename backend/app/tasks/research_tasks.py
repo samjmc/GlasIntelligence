@@ -68,6 +68,13 @@ def run_deep_research_task(
         if dossier.get("error"):
             raise RuntimeError("Research agent returned error flag")
 
+        # Guard against silent failures: agent occasionally returns a "successful"
+        # response with no text content (final empty message item, refusal, etc.).
+        # Treat that as a failure so the credit is refunded and the user can retry,
+        # rather than persisting a useless dossier and showing "..." in the UI.
+        if not (dossier.get("summary_md") or "").strip():
+            raise RuntimeError("Research agent returned empty summary_md")
+
         SupabaseDB.update_session(
             session_id,
             research_status="completed",
