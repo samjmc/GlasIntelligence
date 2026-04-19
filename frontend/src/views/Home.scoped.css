@@ -666,6 +666,18 @@
   color: var(--text-secondary);
   margin: 0;
 }
+.briefing-empty .briefing-header { color: var(--warning, #d97706); }
+.briefing-empty-msg {
+  display: block;
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+.briefing-empty-msg strong { color: var(--accent); font-style: normal; }
+.briefing-toggle-retry { color: var(--warning, #d97706); border-color: var(--warning, #d97706); }
+.briefing-toggle-retry:hover { background: rgba(217, 119, 6, 0.08); }
+.briefing-toggle-retry:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Upload / files ── */
 .upload-zone {
