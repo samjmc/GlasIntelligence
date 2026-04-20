@@ -172,14 +172,27 @@ def start_research(session_id):
     rs = session.get("research_status")
     if rs in ("processing", "queued", "claiming"):
         return jsonify({"success": False, "error": "Research is already in progress"}), 409
-    if rs == "completed":
+
+    # A session can be marked "completed" but have an empty/missing dossier
+    # (silent failure path that PR #12 fixed for new runs, but legacy rows still
+    # exist). Treat that case as a retryable failure so the user can re-run
+    # without burning a credit, instead of blocking with 409.
+    existing_dossier = session.get("research_dossier") or {}
+    has_real_content = bool((existing_dossier.get("summary_md") or "").strip())
+    if rs == "completed" and has_real_content:
         return jsonify({"success": False, "error": "Research already completed. Use the existing dossier."}), 409
 
-    is_retry = rs == "failed"
+    # Anything previously failed OR completed-but-empty is treated as a free retry.
+    is_retry = rs == "failed" or (rs == "completed" and not has_real_content)
 
     # Atomic guard: claim the session for research to prevent double-starts
     # supabase-py 2.x: .or_() doesn't work on UPDATE; .is_() works for NULL, .eq() for strings
-    query = SupabaseDB.client().table("scenario_sessions").update({"research_status": "claiming"}).eq("id", session_id)
+    claim_payload = {"research_status": "claiming"}
+    # If we're retrying an empty-completed dossier, also wipe the stale dossier
+    # so a subsequent failure doesn't leave the user staring at the same empty card.
+    if rs == "completed" and not has_real_content:
+        claim_payload["research_dossier"] = None
+    query = SupabaseDB.client().table("scenario_sessions").update(claim_payload).eq("id", session_id)
     if rs is None:
         query = query.is_("research_status", "null")
     else:
