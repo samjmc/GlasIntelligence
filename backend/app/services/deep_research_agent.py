@@ -23,7 +23,6 @@ from .research_angles import (
 _TRANSIENT_STATUS_CODES = {500, 502, 503}
 _MAX_RETRIES = 5
 _RETRY_BACKOFFS = [5, 10, 30, 60, 90]
-_MAX_OUTPUT_TOKENS = 16000
 
 logger = get_logger("glas.deep_research")
 
@@ -39,6 +38,7 @@ class DeepResearchAgent:
         )
         self.model = Config.DEEP_RESEARCH_MODEL
         self.max_tool_calls = Config.DEEP_RESEARCH_MAX_TOOL_CALLS
+        self.max_output_tokens = Config.DEEP_RESEARCH_MAX_OUTPUT_TOKENS
 
     def run(
         self,
@@ -74,7 +74,8 @@ class DeepResearchAgent:
             try:
                 return self.client.responses.create(
                     model=self.model,
-                    max_output_tokens=_MAX_OUTPUT_TOKENS,
+                    max_output_tokens=self.max_output_tokens,
+                    max_tool_calls=self.max_tool_calls,
                     input=[
                         {
                             "role": "developer",
@@ -140,14 +141,18 @@ class DeepResearchAgent:
         sources: list[dict[str, str]] = []
         search_queries: list[str] = []
         seen_urls: set = set()
+        item_counts: dict[str, int] = {}
 
         for item in response.output:
-            if getattr(item, "type", None) == "web_search_call":
+            item_type = getattr(item, "type", None) or "unknown"
+            item_counts[item_type] = item_counts.get(item_type, 0) + 1
+
+            if item_type == "web_search_call":
                 query = getattr(item, "query", None) or getattr(item, "input", None)
                 if query and isinstance(query, str):
                     search_queries.append(query)
 
-            if getattr(item, "type", None) == "message":
+            if item_type == "message":
                 for block in getattr(item, "content", []):
                     if getattr(block, "type", None) == "output_text":
                         chunk = getattr(block, "text", "") or ""
@@ -161,6 +166,46 @@ class DeepResearchAgent:
                                 sources.append({"url": url, "title": title})
 
         summary_md = "\n\n".join(text_chunks).strip()
+
+        # Log diagnostics so we can see WHY a run was empty (incomplete vs failed
+        # vs no message item at all). Previously every failure mode looked identical.
+        status = getattr(response, "status", None)
+        incomplete = getattr(response, "incomplete_details", None)
+        incomplete_reason = getattr(incomplete, "reason", None) if incomplete else None
+        usage = getattr(response, "usage", None)
+        out_tok = getattr(usage, "output_tokens", None) if usage else None
+        logger.info(
+            "Deep research response: status=%s incomplete_reason=%s items=%s "
+            "output_tokens=%s text_chunks=%d summary_chars=%d",
+            status,
+            incomplete_reason,
+            item_counts,
+            out_tok,
+            len(text_chunks),
+            len(summary_md),
+        )
+
+        # Fallback: if iteration found nothing but the SDK aggregate has text,
+        # use that rather than silently returning empty content.
+        if not summary_md:
+            agg = getattr(response, "output_text", "") or ""
+            if agg.strip():
+                logger.warning(
+                    "Iteration produced empty summary_md but response.output_text "
+                    "has %d chars — falling back to aggregate.",
+                    len(agg),
+                )
+                summary_md = agg.strip()
+
+        # Surface incomplete/failed runs as explicit errors so the Celery task
+        # refunds the credit and the user sees a real failure, not "..." in the UI.
+        # We still propagate any text we did manage to extract via the message;
+        # the caller (research_tasks) treats empty summary_md as failure.
+        if status and status not in {"completed", None} and not summary_md:
+            raise RuntimeError(
+                f"Deep research returned status={status} reason={incomplete_reason} "
+                f"items={item_counts} output_tokens={out_tok}"
+            )
 
         key_facts = self._extract_key_facts(summary_md)
         historical_precedents = self._extract_section(summary_md, "Historical Precedents")
