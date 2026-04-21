@@ -284,6 +284,16 @@ class Config:
         50,
         env_key="DEEP_RESEARCH_MAX_TOOL_CALLS",
     )
+    # Deep research models burn output tokens on internal reasoning + tool calls
+    # before emitting the final report. The system prompt asks for up to 15k words
+    # (~20-30k tokens) on top of that. Default 100k matches OpenAI's recommended
+    # ceiling for o4-mini-deep-research; 16k caused silent "incomplete" responses
+    # with no message item, surfacing as empty dossiers in the UI.
+    DEEP_RESEARCH_MAX_OUTPUT_TOKENS = _safe_int(
+        os.environ.get("DEEP_RESEARCH_MAX_OUTPUT_TOKENS", "100000"),
+        100000,
+        env_key="DEEP_RESEARCH_MAX_OUTPUT_TOKENS",
+    )
     RESEARCH_CLASSIFICATION_MODEL = os.environ.get("RESEARCH_CLASSIFICATION_MODEL", "gpt-4o-mini")
 
     # Decision layer
