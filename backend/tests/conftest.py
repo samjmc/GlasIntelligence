@@ -86,7 +86,7 @@ class TestConfig:
     DEEP_RESEARCH_ENABLED = False
     DEEP_RESEARCH_MODEL = "o4-mini-deep-research"
     DEEP_RESEARCH_MAX_TOOL_CALLS = 50
-    DEEP_RESEARCH_MAX_OUTPUT_TOKENS = 100000
+    DEEP_RESEARCH_MAX_OUTPUT_TOKENS = 50000
     JSON_AS_ASCII = False
 
     @classmethod
