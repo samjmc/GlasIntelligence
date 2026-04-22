@@ -9,7 +9,7 @@ import hashlib
 import time
 from typing import Any
 
-from openai import OpenAI, RateLimitError, APIStatusError
+from openai import OpenAI, RateLimitError, APIStatusError, APIConnectionError, APITimeoutError
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -20,7 +20,13 @@ from .research_angles import (
     get_angles_by_ids,
 )
 
-_TRANSIENT_STATUS_CODES = {500, 502, 503}
+# Transient HTTP statuses that should be retried.
+# - 500/502/503: standard origin-side blips
+# - 504: Gateway Timeout
+# - 520/522/524: Cloudflare edge errors that fire when api.openai.com's origin
+#   takes too long. Long deep-research calls (10-40 min) hit these regularly;
+#   without retry, the entire run is wasted and surfaces as "Research failed".
+_TRANSIENT_STATUS_CODES = {500, 502, 503, 504, 520, 522, 524}
 _MAX_RETRIES = 5
 _RETRY_BACKOFFS = [5, 10, 30, 60, 90]
 
@@ -92,22 +98,44 @@ class DeepResearchAgent:
                 last_exc = e
                 wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
                 logger.warning(
-                    f"Rate limited by OpenAI (attempt {attempt + 1}/{_MAX_RETRIES}), retrying in {wait}s: {e.message}"
+                    "Rate limited by OpenAI (attempt %d/%d), retrying in %ds: %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    wait,
+                    getattr(e, "message", str(e)),
                 )
                 time.sleep(wait)
                 continue
             except APIStatusError as e:
                 last_exc = e
                 if e.status_code not in _TRANSIENT_STATUS_CODES:
-                    logger.error(f"API error {e.status_code}: {e}")
+                    logger.error("API error %s (non-transient): %s", e.status_code, e)
                     raise
                 wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
                 logger.warning(
-                    f"Transient API error {e.status_code} (attempt {attempt + 1}/{_MAX_RETRIES}), retrying in {wait}s"
+                    "Transient API error %s (attempt %d/%d), retrying in %ds",
+                    e.status_code,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    wait,
+                )
+                time.sleep(wait)
+            except (APIConnectionError, APITimeoutError) as e:
+                # Network-level failures (TCP reset, DNS hiccup, read timeout
+                # mid-stream). Common on multi-minute deep-research calls where
+                # the connection sits idle while the model reasons.
+                last_exc = e
+                wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                logger.warning(
+                    "Connection/timeout error (attempt %d/%d), retrying in %ds: %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    wait,
+                    type(e).__name__,
                 )
                 time.sleep(wait)
 
-        logger.error(f"Deep research failed after {_MAX_RETRIES} attempts")
+        logger.error("Deep research failed after %d attempts", _MAX_RETRIES)
         raise last_exc  # type: ignore[misc]
 
     @staticmethod

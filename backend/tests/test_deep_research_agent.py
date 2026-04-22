@@ -130,3 +130,133 @@ def test_search_queries_collected(agent):
     result = agent._parse_response(resp)
     assert "hello world" in result["search_queries"]
     assert "fallback" in result["search_queries"]
+
+
+# ---------------------------------------------------------------------------
+# _call_with_retry — transient error handling
+# ---------------------------------------------------------------------------
+#
+# Production failure 2026-04-22: a 12-minute deep-research call returned
+# `openai.InternalServerError: 520 Web server is returning an unknown error`
+# from Cloudflare in front of api.openai.com. The retry set was {500,502,503}
+# only, so 520 was treated as fatal and the entire run was wasted. These tests
+# lock in retry coverage for Cloudflare edge errors and connection failures.
+
+import httpx
+from openai import APIConnectionError, APIStatusError, RateLimitError
+
+
+def _api_status_error(status_code: int) -> APIStatusError:
+    """Build an APIStatusError with the given HTTP status."""
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    response = httpx.Response(status_code, request=request, text="cf error body")
+    return APIStatusError("boom", response=response, body=None)
+
+
+class _FakeResponses:
+    def __init__(self, fn):
+        self._fn = fn
+
+    def create(self, **kwargs):
+        return self._fn(**kwargs)
+
+
+class _FakeClient:
+    def __init__(self, fn):
+        self.responses = _FakeResponses(fn)
+
+
+@pytest.fixture
+def fast_agent(agent, monkeypatch):
+    """Agent with no retry sleeps so tests run instantly. Caller installs client."""
+    monkeypatch.setattr("app.services.deep_research_agent.time.sleep", lambda *_: None)
+    return agent
+
+
+def _install(agent, fn):
+    """Wire a fake responses.create() onto the agent."""
+    agent.client = _FakeClient(fn)
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, 504, 520, 522, 524])
+def test_transient_status_codes_retried(fast_agent, status):
+    """All Cloudflare/gateway transient codes must be retried, not raised."""
+    calls = {"n": 0}
+    sentinel = object()
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise _api_status_error(status)
+        return sentinel
+
+    _install(fast_agent, fake_create)
+    result = fast_agent._call_with_retry("sys", "user")
+    assert result is sentinel
+    assert calls["n"] == 3
+
+
+def test_non_transient_status_raises_immediately(fast_agent):
+    """4xx (e.g. 401, 400) must bubble up on the first attempt."""
+    calls = {"n": 0}
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        raise _api_status_error(401)
+
+    _install(fast_agent, fake_create)
+    with pytest.raises(APIStatusError):
+        fast_agent._call_with_retry("sys", "user")
+    assert calls["n"] == 1
+
+
+def test_connection_error_retried(fast_agent):
+    """APIConnectionError (TCP reset, DNS hiccup) must be retried."""
+    calls = {"n": 0}
+    sentinel = object()
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise APIConnectionError(
+                request=httpx.Request("POST", "https://api.openai.com/v1/responses"),
+            )
+        return sentinel
+
+    _install(fast_agent, fake_create)
+    result = fast_agent._call_with_retry("sys", "user")
+    assert result is sentinel
+    assert calls["n"] == 2
+
+
+def test_rate_limit_retried_then_succeeds(fast_agent):
+    """RateLimitError must be retried (regression: .message attr access)."""
+    calls = {"n": 0}
+    sentinel = object()
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+            response = httpx.Response(429, request=request, text="rate limited")
+            raise RateLimitError("rate limited", response=response, body=None)
+        return sentinel
+
+    _install(fast_agent, fake_create)
+    result = fast_agent._call_with_retry("sys", "user")
+    assert result is sentinel
+    assert calls["n"] == 2
+
+
+def test_persistent_520_eventually_raises(fast_agent):
+    """If 520 happens MAX_RETRIES times, the original error bubbles up."""
+    calls = {"n": 0}
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        raise _api_status_error(520)
+
+    _install(fast_agent, fake_create)
+    with pytest.raises(APIStatusError):
+        fast_agent._call_with_retry("sys", "user")
+    assert calls["n"] == 5  # _MAX_RETRIES
