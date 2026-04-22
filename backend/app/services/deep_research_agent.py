@@ -6,6 +6,7 @@ Produces a structured research dossier for simulation grounding.
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from typing import Any
 
@@ -30,7 +31,30 @@ _TRANSIENT_STATUS_CODES = {500, 502, 503, 504, 520, 522, 524}
 _MAX_RETRIES = 5
 _RETRY_BACKOFFS = [5, 10, 30, 60, 90]
 
+# OpenAI's TPM rate-limit window is one minute. If we retry sooner than that
+# the same tokens are still counted against the bucket; bumping the floor to
+# 60s on rate-limit errors avoids burning attempts on guaranteed failures.
+_RATE_LIMIT_MIN_BACKOFF = 60
+_RATE_LIMIT_MAX_BACKOFF = 180
+
+# OpenAI rate-limit messages embed a hint like "Please try again in 5.694s"
+# or "Please try again in 186ms". Honouring that lets us wait the right
+# amount instead of guessing with a fixed schedule.
+_RETRY_HINT_RE = re.compile(r"try again in\s+([0-9.]+)\s*(ms|s)\b", re.IGNORECASE)
+
 logger = get_logger("glas.deep_research")
+
+
+def _parse_retry_hint(message: str) -> float | None:
+    """Extract seconds-to-wait from an OpenAI rate-limit error message."""
+    if not message:
+        return None
+    m = _RETRY_HINT_RE.search(message)
+    if not m:
+        return None
+    value = float(m.group(1))
+    unit = m.group(2).lower()
+    return value / 1000.0 if unit == "ms" else value
 
 
 class DeepResearchAgent:
@@ -96,13 +120,23 @@ class DeepResearchAgent:
                 )
             except RateLimitError as e:
                 last_exc = e
-                wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                # Honour OpenAI's own "try again in X" hint when present, but
+                # never retry sooner than the TPM window (60s) — the tokens
+                # from the previous attempt are still counted until the window
+                # rolls over, so faster retries are guaranteed to fail again.
+                msg = getattr(e, "message", str(e))
+                hint = _parse_retry_hint(msg)
+                base = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                wait = max(_RATE_LIMIT_MIN_BACKOFF, base, hint or 0)
+                wait = min(wait, _RATE_LIMIT_MAX_BACKOFF)
                 logger.warning(
-                    "Rate limited by OpenAI (attempt %d/%d), retrying in %ds: %s",
+                    "Rate limited by OpenAI (attempt %d/%d), hint=%ss base=%ds, retrying in %.1fs: %s",
                     attempt + 1,
                     _MAX_RETRIES,
+                    hint,
+                    base,
                     wait,
-                    getattr(e, "message", str(e)),
+                    msg,
                 )
                 time.sleep(wait)
                 continue

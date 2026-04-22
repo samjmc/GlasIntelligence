@@ -286,12 +286,20 @@ class Config:
     )
     # Deep research models burn output tokens on internal reasoning + tool calls
     # before emitting the final report. The system prompt asks for up to 15k words
-    # (~20-30k tokens) on top of that. Default 100k matches OpenAI's recommended
-    # ceiling for o4-mini-deep-research; 16k caused silent "incomplete" responses
-    # with no message item, surfacing as empty dossiers in the UI.
+    # (~20-30k tokens) on top of that.
+    #
+    # Tuning history:
+    # - 16000: too low, model hit the cap mid-reasoning and returned empty dossiers (PR #14).
+    # - 100000: solved the empty-dossier issue but blew the OpenAI org TPM budget.
+    #   OpenAI charges (input + max_output_tokens) against the per-minute token
+    #   limit AT REQUEST TIME, regardless of actual usage. With Tier 1's 200k TPM,
+    #   each 100k-output request reserved over half the budget, and 2 concurrent
+    #   attempts (or one in-flight + one retry) triggered persistent 429s.
+    # - 50000 (current): comfortably fits a 15k-word (~22k token) report plus
+    #   reasoning headroom, while letting 3 concurrent requests fit in 200k TPM.
     DEEP_RESEARCH_MAX_OUTPUT_TOKENS = _safe_int(
-        os.environ.get("DEEP_RESEARCH_MAX_OUTPUT_TOKENS", "100000"),
-        100000,
+        os.environ.get("DEEP_RESEARCH_MAX_OUTPUT_TOKENS", "50000"),
+        50000,
         env_key="DEEP_RESEARCH_MAX_OUTPUT_TOKENS",
     )
     RESEARCH_CLASSIFICATION_MODEL = os.environ.get("RESEARCH_CLASSIFICATION_MODEL", "gpt-4o-mini")

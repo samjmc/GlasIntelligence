@@ -260,3 +260,105 @@ def test_persistent_520_eventually_raises(fast_agent):
     with pytest.raises(APIStatusError):
         fast_agent._call_with_retry("sys", "user")
     assert calls["n"] == 5  # _MAX_RETRIES
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit hint parsing + smart backoff
+# ---------------------------------------------------------------------------
+#
+# Production failure 2026-04-22 10:14 UTC: 5 retries with 5/10/30/60/90s
+# backoffs all hit TPM 429 because we retried inside the 60s rate window.
+# OpenAI's error messages embed a "Please try again in Xs" hint we were
+# ignoring. The fix: floor backoff at 60s (TPM window) and honour the hint.
+
+from app.services.deep_research_agent import (
+    _RATE_LIMIT_MAX_BACKOFF,
+    _RATE_LIMIT_MIN_BACKOFF,
+    _parse_retry_hint,
+)
+
+
+@pytest.mark.parametrize(
+    "msg,expected",
+    [
+        ("Rate limit reached. Please try again in 5.694s.", 5.694),
+        ("Please try again in 186ms.", 0.186),
+        ("Please try again in 2s. Visit ...", 2.0),
+        ("nothing to see here", None),
+        ("", None),
+    ],
+)
+def test_parse_retry_hint(msg, expected):
+    assert _parse_retry_hint(msg) == expected
+
+
+def _rate_limit_error(message: str) -> RateLimitError:
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    response = httpx.Response(429, request=request, text=message)
+    return RateLimitError(message, response=response, body={"error": {"message": message}})
+
+
+def test_rate_limit_waits_at_least_window(fast_agent, monkeypatch):
+    """Even if OpenAI says 'try again in 1.89s', we must wait the full TPM
+    window (60s) — retrying sooner is guaranteed to fail again because the
+    previous attempt's tokens are still in the bucket."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "app.services.deep_research_agent.time.sleep",
+        lambda s: sleeps.append(s),
+    )
+    calls = {"n": 0}
+    sentinel = object()
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise _rate_limit_error("Rate limit reached. Please try again in 1.89s.")
+        return sentinel
+
+    _install(fast_agent, fake_create)
+    fast_agent._call_with_retry("sys", "user")
+    assert sleeps == [_RATE_LIMIT_MIN_BACKOFF]
+
+
+def test_rate_limit_honours_long_hint(fast_agent, monkeypatch):
+    """If OpenAI says 'try again in 120s' we must wait that long, not 60s."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "app.services.deep_research_agent.time.sleep",
+        lambda s: sleeps.append(s),
+    )
+    calls = {"n": 0}
+    sentinel = object()
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise _rate_limit_error("Please try again in 120s.")
+        return sentinel
+
+    _install(fast_agent, fake_create)
+    fast_agent._call_with_retry("sys", "user")
+    assert sleeps == [120.0]
+
+
+def test_rate_limit_caps_at_max_backoff(fast_agent, monkeypatch):
+    """Pathological hints (e.g. 'try again in 999s') are capped to MAX_BACKOFF
+    so we don't sit idle forever."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(
+        "app.services.deep_research_agent.time.sleep",
+        lambda s: sleeps.append(s),
+    )
+    calls = {"n": 0}
+    sentinel = object()
+
+    def fake_create(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise _rate_limit_error("Please try again in 999s.")
+        return sentinel
+
+    _install(fast_agent, fake_create)
+    fast_agent._call_with_retry("sys", "user")
+    assert sleeps == [_RATE_LIMIT_MAX_BACKOFF]
