@@ -446,13 +446,13 @@
                 <div v-if="briefing" class="briefing-preview" :class="{ 'briefing-empty': !briefingHasContent }">
                   <div class="briefing-header">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    <span class="briefing-title">{{ briefing.filename }}</span>
+                    <span class="briefing-title" :class="{ 'briefing-title-link': briefingHasContent }" @click="briefingHasContent && (showDossierModal = true)">{{ briefing.filename }}</span>
                     <button
                       v-if="briefingHasContent"
                       class="briefing-toggle"
-                      @click="briefingExpanded = !briefingExpanded"
+                      @click="showDossierModal = true"
                     >
-                      {{ briefingExpanded ? 'Collapse' : 'Read' }}
+                      Read
                     </button>
                     <button
                       v-else
@@ -465,18 +465,24 @@
                     </button>
                     <button class="remove-btn" @click="removeBriefing">&times;</button>
                   </div>
-                  <div class="briefing-content" :class="{ expanded: briefingExpanded }">
+                  <div class="briefing-content">
                     <template v-if="!briefingHasContent">
                       <span class="briefing-empty-msg">
                         Research completed but returned no content. This is a known intermittent issue with the research agent — click <strong>Retry</strong> above to run it again (your credit is preserved on failure).
                       </span>
                     </template>
-                    <template v-else-if="briefingExpanded">
-                      <pre class="briefing-md">{{ briefing.content_md }}</pre>
+                    <template v-else>
+                      <span class="briefing-snippet">{{ briefing.content_md.slice(0, 220) }}{{ briefing.content_md.length > 220 ? '…' : '' }}</span>
                     </template>
-                    <template v-else>{{ briefing.content_md.slice(0, 300) }}{{ briefing.content_md.length > 300 ? '...' : '' }}</template>
                   </div>
                 </div>
+
+                <DossierModal
+                  v-model="showDossierModal"
+                  :content="briefing?.content_md || ''"
+                  :filename="briefing?.filename || 'deep_research_dossier.md'"
+                  @save="onDossierSave"
+                />
               </div>
 
 
@@ -528,6 +534,7 @@ import { useRouter, useRoute } from 'vue-router'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
 import AppNavbar from '../components/AppNavbar.vue'
 import ResearchSettingsModal from '../components/ResearchSettingsModal.vue'
+import DossierModal from '../components/DossierModal.vue'
 import { authState, refreshAccessToken } from '../store/auth'
 import { useApi } from '../composables/useApi'
 import {
@@ -555,6 +562,7 @@ const showUpgradeModal = ref(false)
 const researchLoading = ref(false)
 const briefing = ref(null)
 const briefingExpanded = ref(false)
+const showDossierModal = ref(false)
 const briefingHasContent = computed(() => !!(briefing.value?.content_md || '').trim())
 const leftPanelCollapsed = ref(false)
 
@@ -836,6 +844,24 @@ async function runDeepResearch() {
     // #region agent log
     fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch:catch',message:'runDeepResearch caught exception',data:{errorMsg:e?.message,errorStr:String(e)},timestamp:Date.now(),hypothesisId:'H3,H5'})}).catch(()=>{});
     // #endregion
+    // 409 = research already completed — load the existing dossier silently
+    if (e?.response?.status === 409 && activeSessionId.value) {
+      try {
+        const statusRes = await getSessionResearchStatus(activeSessionId.value)
+        const dossier = statusRes?.data?.dossier || statusRes?.dossier
+        if (dossier?.summary_md) {
+          researchDossier.value = dossier
+          briefing.value = { title: 'Deep Research Dossier', content_md: dossier.summary_md, filename: 'deep_research_dossier.md' }
+          const existing = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
+          if (existing !== -1) files.value.splice(existing, 1)
+          const blob = new Blob([dossier.summary_md], { type: 'text/markdown' })
+          files.value.push(new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' }))
+          researchLoading.value = false
+          stopResearchTimer()
+          return
+        }
+      } catch (_) {}
+    }
     error.value = e?.message || 'Deep research failed. Please refresh and try again.'
     researchLoading.value = false
     stopResearchTimer()
@@ -867,6 +893,17 @@ function removeBriefing() {
     briefing.value = null
     briefingExpanded.value = false
   }
+}
+
+function onDossierSave(newContent) {
+  if (!briefing.value) return
+  briefing.value = { ...briefing.value, content_md: newContent }
+  if (researchDossier.value) researchDossier.value = { ...researchDossier.value, summary_md: newContent }
+  const idx = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
+  const blob = new Blob([newContent], { type: 'text/markdown' })
+  const updated = new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' })
+  if (idx !== -1) files.value.splice(idx, 1, updated)
+  else files.value.push(updated)
 }
 
 // Used when the dossier came back empty (silent failure). We clear the stale
