@@ -52,8 +52,6 @@ def run_deep_research_task(
             status="researching",
         )
 
-        from ..services.deep_research_agent import DeepResearchAgent
-
         if angle_overrides is not None and not isinstance(angle_overrides, dict):
             angle_overrides = None
 
@@ -61,7 +59,14 @@ def run_deep_research_task(
         if scenario_context:
             context = scenario_context
 
-        agent = DeepResearchAgent()
+        from ..config import Config
+
+        if Config.DEEP_RESEARCH_ENABLED:
+            from ..services.deep_research_agent import DeepResearchAgent
+            agent = DeepResearchAgent()
+        else:
+            from ..services.llm_research_agent import LLMResearchAgent
+            agent = LLMResearchAgent()
 
         dossier = agent.run(prompt, context=context, angle_overrides=angle_overrides)
 

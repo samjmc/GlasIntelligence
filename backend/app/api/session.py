@@ -166,8 +166,8 @@ def start_research(session_id):
     if not session:
         return jsonify({"success": False, "error": "Session not found"}), 404
 
-    if not Config.DEEP_RESEARCH_ENABLED:
-        return jsonify({"success": False, "error": "Deep research is not enabled"}), 403
+    if not Config.DEEP_RESEARCH_ENABLED and not Config.LLM_API_KEY:
+        return jsonify({"success": False, "error": "Research is not available — no API key configured"}), 403
 
     rs = session.get("research_status")
     if rs in ("processing", "queued", "claiming"):
