@@ -860,7 +860,7 @@ async function runDeepResearch() {
           stopResearchTimer()
           return
         }
-      } catch (_) {}
+      } catch (_) { /* fall through to generic error below */ }
     }
     error.value = e?.message || 'Deep research failed. Please refresh and try again.'
     researchLoading.value = false

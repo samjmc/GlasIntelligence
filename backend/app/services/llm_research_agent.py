@@ -11,7 +11,7 @@ from typing import Any
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
-from .research_angles import ALL_ANGLE_IDS, RESEARCH_ANGLES, ResearchAngle
+from .research_angles import RESEARCH_ANGLES
 
 logger = get_logger("glas.llm_research")
 
@@ -87,8 +87,7 @@ Note when a claim is well-established vs. your reasoned inference.
 """
 
 _ANGLE_HEADER = (
-    "\nThe following research angles are particularly relevant to this scenario. "
-    "Include dedicated sections for each:\n"
+    "\nThe following research angles are particularly relevant to this scenario. Include dedicated sections for each:\n"
 )
 
 
@@ -195,7 +194,7 @@ class LLMResearchAgent:
                     facts.append(stripped[2:].strip())
                 elif stripped[:2].rstrip(".").isdigit():
                     dot_idx = stripped.index(".")
-                    facts.append(stripped[dot_idx + 1:].strip())
+                    facts.append(stripped[dot_idx + 1 :].strip())
         return facts
 
     @staticmethod
@@ -243,10 +242,7 @@ Rules:
 - key_metric: specific number with units if known, else empty string
 - Include ALL precedents; do not invent facts not in the input
 """
-        user = (
-            f"[Historical precedents]\n{combined}\n\n"
-            f"[Quantitative anchors]\n{anchors_text}"
-        )
+        user = f"[Historical precedents]\n{combined}\n\n[Quantitative anchors]\n{anchors_text}"
         try:
             llm = LLMClient()
             data = llm.chat_json(
