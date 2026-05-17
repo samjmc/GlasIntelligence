@@ -63,9 +63,11 @@ def run_deep_research_task(
 
         if Config.DEEP_RESEARCH_ENABLED:
             from ..services.deep_research_agent import DeepResearchAgent
+
             agent = DeepResearchAgent()
         else:
             from ..services.llm_research_agent import LLMResearchAgent
+
             agent = LLMResearchAgent()
 
         dossier = agent.run(prompt, context=context, angle_overrides=angle_overrides)
