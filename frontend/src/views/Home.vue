@@ -561,7 +561,6 @@ const enhancing = ref(false)
 const showUpgradeModal = ref(false)
 const researchLoading = ref(false)
 const briefing = ref(null)
-const briefingExpanded = ref(false)
 const showDossierModal = ref(false)
 const briefingHasContent = computed(() => !!(briefing.value?.content_md || '').trim())
 const leftPanelCollapsed = ref(false)
@@ -792,19 +791,10 @@ async function runDeepResearch() {
   startResearchTimer()
 
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch',message:'ensureSession start',data:{isRetry,fullAnalysisMode:fullAnalysisMode.value,bundlePlanLen:bundlePlan.value.length,activeBundleId:activeBundleId.value},timestamp:Date.now(),hypothesisId:'H3,H5'})}).catch(()=>{});
-    // #endregion
     const sessionId = await ensureSession()
-    // #region agent log
-    fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch',message:'ensureSession ok',data:{sessionId},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
 
     if (fullAnalysisMode.value && bundlePlan.value.length > 0 && activeBundleId.value) {
       researchStatusMessage.value = 'Saving scenario context...'
-      // #region agent log
-      fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch',message:'updateSession bundle_config start',data:{sessionId,bundleId:activeBundleId.value,scenarioCount:bundlePlan.value.length},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       await updateSession(sessionId, {
         bundle_config: {
           bundle_id: activeBundleId.value,
@@ -812,17 +802,11 @@ async function runDeepResearch() {
           full_analysis: true,
         },
       })
-      // #region agent log
-      fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch',message:'updateSession bundle_config ok',data:{sessionId},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
     }
 
     researchStatusMessage.value = 'Starting deep research...'
 
     const startRes = await startSessionResearch(sessionId, researchAngleOverrides.value)
-    // #region agent log
-    fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch',message:'startSessionResearch response',data:{hasData:!!startRes?.data,error:startRes?.error,keys:startRes?Object.keys(startRes):null},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
 
     if (!startRes?.data) {
       if (startRes?.error === 'no_research_credits') {
@@ -841,9 +825,6 @@ async function runDeepResearch() {
     if (!isRetry && researchCredits.value !== null) researchCredits.value = Math.max(0, researchCredits.value - 1)
     await pollSessionResearch(sessionId)
   } catch (e) {
-    // #region agent log
-    fetch('http://127.0.0.1:7257/ingest/38b0e473-ee41-4bea-84bc-b374cc0b3a0f',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'36d8eb'},body:JSON.stringify({sessionId:'36d8eb',location:'Home.vue:runDeepResearch:catch',message:'runDeepResearch caught exception',data:{errorMsg:e?.message,errorStr:String(e)},timestamp:Date.now(),hypothesisId:'H3,H5'})}).catch(()=>{});
-    // #endregion
     // 409 = research already completed — load the existing dossier silently
     if (e?.response?.status === 409 && activeSessionId.value) {
       try {
@@ -891,7 +872,6 @@ function removeBriefing() {
     const idx = files.value.findIndex(f => f.name === briefing.value.filename)
     if (idx !== -1) files.value.splice(idx, 1)
     briefing.value = null
-    briefingExpanded.value = false
   }
 }
 

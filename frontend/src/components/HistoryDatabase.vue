@@ -232,6 +232,7 @@ const projects = ref([])
 const loading = ref(true)
 const loadError = ref('')
 const isExpanded = ref(false)
+const isContainerVisible = ref(false)
 const hoveringCard = ref(null)
 const historyContainer = ref(null)
 const selectedProject = ref(null)
@@ -514,6 +515,18 @@ const loadHistory = async () => {
   }
 }
 
+// When projects first load while the section is already in view, trigger expansion.
+// This covers the race where the observer fired before the API response arrived.
+watch(
+  () => projects.value.length > 0,
+  (hasProjects) => {
+    if (hasProjects && isContainerVisible.value && !isExpanded.value) {
+      setTimeout(() => { isExpanded.value = true }, 50)
+    }
+  },
+  { once: true }
+)
+
 // Initialize IntersectionObserver
 const initObserver = () => {
   if (observer) {
@@ -524,9 +537,14 @@ const initObserver = () => {
     (entries) => {
       entries.forEach((entry) => {
         const shouldExpand = entry.isIntersecting
-        
+        isContainerVisible.value = shouldExpand
+
         // Update pending target state (always record latest regardless of animation)
         pendingState = shouldExpand
+
+        // Don't expand/collapse before projects are loaded — the watch below
+        // will fire the expansion once projects arrive.
+        if (projects.value.length === 0) return
         
         // Clear previous debounce timer (new scroll intent overrides old)
         if (expandDebounceTimer) {

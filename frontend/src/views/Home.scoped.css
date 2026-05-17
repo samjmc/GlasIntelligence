@@ -13,6 +13,7 @@
   background: var(--bg);
   font-family: var(--font-sans);
   color: var(--text-primary);
+  overflow-x: hidden;
 }
 
 /* ── Animations ── */
@@ -651,15 +652,13 @@
   font-size: 0.79rem;
   color: var(--text-secondary);
   line-height: 1.55;
-  max-height: 72px;
+  max-height: 110px;
   overflow: hidden;
 }
 .briefing-snippet {
   display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0.75;
+  white-space: normal;
+  word-break: break-word;
 }
 .briefing-empty .briefing-header { color: var(--warning, #d97706); }
 .briefing-empty-msg {
