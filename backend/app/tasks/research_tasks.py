@@ -65,6 +65,10 @@ def run_deep_research_task(
             from ..services.deep_research_agent import DeepResearchAgent
 
             agent = DeepResearchAgent()
+        elif Config.SEARCH_RESEARCH_ENABLED:
+            from ..services.search_research_agent import SearchResearchAgent
+
+            agent = SearchResearchAgent()
         else:
             from ..services.llm_research_agent import LLMResearchAgent
 
