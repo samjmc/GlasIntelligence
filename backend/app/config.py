@@ -45,10 +45,9 @@ def _safe_float(val, default: float, *, env_key: str | None = None) -> float:
 project_root_env = os.path.join(os.path.dirname(__file__), "../../.env")
 
 if os.path.exists(project_root_env):
-    load_dotenv(project_root_env, override=True)
+    load_dotenv(project_root_env, override=False)
 else:
-    # If no .env in root, try loading env vars (for production)
-    load_dotenv(override=True)
+    load_dotenv(override=False)
 
 
 class Config:
@@ -303,6 +302,20 @@ class Config:
         env_key="DEEP_RESEARCH_MAX_OUTPUT_TOKENS",
     )
     RESEARCH_CLASSIFICATION_MODEL = os.environ.get("RESEARCH_CLASSIFICATION_MODEL", "gpt-4o-mini")
+
+    # Tavily Search Research (iterative search + LLM refinement)
+    TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+    SEARCH_RESEARCH_ENABLED = bool(TAVILY_API_KEY)
+    SEARCH_RESEARCH_MAX_ROUNDS = _safe_int(
+        os.environ.get("SEARCH_RESEARCH_MAX_ROUNDS", "3"),
+        3,
+        env_key="SEARCH_RESEARCH_MAX_ROUNDS",
+    )
+    SEARCH_RESEARCH_QUALITY_THRESHOLD = _safe_float(
+        os.environ.get("SEARCH_RESEARCH_QUALITY_THRESHOLD", "7.5"),
+        7.5,
+        env_key="SEARCH_RESEARCH_QUALITY_THRESHOLD",
+    )
 
     # Decision layer
     ENABLE_DECISION_LAYER = os.environ.get("ENABLE_DECISION_LAYER", "false").lower() in ("1", "true", "yes")

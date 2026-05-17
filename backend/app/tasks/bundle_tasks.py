@@ -19,13 +19,13 @@ MAX_RUN_WAIT = 7200
 
 def _wait_for_preparation(simulation_id, timeout=MAX_PREPARE_WAIT):
     """Poll until simulation preparation completes, fails, or times out."""
-    from ..api.simulation import _check_simulation_prepared
+    from ..api.simulation_helpers import check_simulation_prepared
     from ..services.simulation_manager import SimulationManager, SimulationStatus
 
     mgr = SimulationManager()
     elapsed = 0
     while elapsed < timeout:
-        is_prepared, _ = _check_simulation_prepared(simulation_id)
+        is_prepared, _ = check_simulation_prepared(simulation_id)
         if is_prepared:
             return True
         sim = mgr.get_simulation(simulation_id)
