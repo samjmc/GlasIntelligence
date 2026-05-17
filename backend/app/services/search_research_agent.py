@@ -1,4 +1,5 @@
 """Research agent: Tavily web search + iterative LLM synthesis/critique loop."""
+
 from __future__ import annotations
 
 import json
@@ -84,9 +85,7 @@ Write 3000-6000 words. Be specific: name actors, cite search sources where relev
 describe incentives. Note when a claim is from the search results vs. your reasoned inference.\
 """
 
-_ANGLE_HEADER = (
-    "\nThe following research angles are particularly relevant. Include dedicated sections for each:\n"
-)
+_ANGLE_HEADER = "\nThe following research angles are particularly relevant. Include dedicated sections for each:\n"
 
 _QUERY_SYSTEM = """\
 You are a research strategist. Given a scenario description, generate 4-6 precise web search \
