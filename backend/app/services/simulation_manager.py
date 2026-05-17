@@ -242,6 +242,16 @@ class SimulationManager:
 
         simulation_id = f"sim_{uuid.uuid4().hex[:12]}"
 
+        # Purge any stale run_state.json in this directory — rare but possible if the UUID
+        # collides with an old run that was never cleaned up and left a RUNNING run_state.
+        stale_run_state = os.path.join(self.SIMULATION_DATA_DIR, simulation_id, "run_state.json")
+        if os.path.exists(stale_run_state):
+            try:
+                os.remove(stale_run_state)
+                logger.warning("Removed stale run_state.json for new simulation %s", simulation_id)
+            except OSError:
+                pass
+
         state = SimulationState(
             simulation_id=simulation_id,
             project_id=project_id,
