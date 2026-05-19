@@ -62,6 +62,28 @@
           <router-link to="/feed" class="action-btn">View Feed</router-link>
         </section>
 
+        <!-- Your Sessions -->
+        <section v-if="recentSessions.length > 0" class="dash-section">
+          <h2 class="section-heading">Your Sessions</h2>
+          <div class="session-list">
+            <div v-for="sess in recentSessions" :key="sess.id" class="session-row">
+              <div class="session-info">
+                <span class="session-prompt">{{ truncate(sess.prompt || 'Untitled session', 72) }}</span>
+                <span class="session-meta">
+                  <span class="session-date">{{ formatDate(sess.created_at) }}</span>
+                  <span class="session-status-badge" :class="'status-' + sessionStatusClass(sess)">{{ sessionStatusLabel(sess) }}</span>
+                </span>
+              </div>
+              <div class="session-actions">
+                <button v-if="sess.project_id" class="step-link" @click.stop="goToStep(sess, 'graph')">Graph</button>
+                <button v-if="sess.simulation_id" class="step-link" @click.stop="goToStep(sess, 'simulation')">Simulation</button>
+                <button v-if="bundleIdOf(sess)" class="step-link" @click.stop="goToStep(sess, 'bundle')">Bundle</button>
+                <button class="resume-btn" @click="resumeSession(sess)">Resume →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Decision Bundles -->
         <section v-if="bundles.length > 0" class="dash-section">
           <h2 class="section-heading">Decision Bundles</h2>
@@ -160,7 +182,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import { authState } from '../store/auth'
-import { listBundles, listReminders } from '../api/simulation'
+import { listBundles, listReminders, getRecentSessions } from '../api/simulation'
 import { formatRelative, formatAbsolute } from '../utils/formatTime'
 import AppNavbar from '../components/AppNavbar.vue'
 
@@ -175,6 +197,7 @@ const creditHistory = ref([])
 const simulationsThisMonth = ref(0)
 const bundles = ref([])
 const reminders = ref([])
+const recentSessions = ref([])
 
 const planLabel = computed(() => {
   const labels = { free: 'Free', pro: 'Pro', business: 'Business', enterprise: 'Enterprise', payg: 'Pay-as-you-go' }
@@ -222,6 +245,11 @@ async function loadDashboard() {
       const reminderRes = await listReminders()
       if (reminderRes.data) reminders.value = reminderRes.data
     } catch { /* reminders table may not exist yet */ }
+
+    try {
+      const sessRes = await getRecentSessions()
+      if (sessRes?.data) recentSessions.value = sessRes.data
+    } catch { /* non-critical */ }
   } catch (e) {
     console.error('Dashboard load failed:', e)
     dashError.value = 'Failed to load dashboard data'
@@ -232,6 +260,71 @@ async function loadDashboard() {
 
 function viewSimulation(sim) {
   router.push(`/simulation/${sim.id}`)
+}
+
+function bundleIdOf(sess) {
+  return sess.bundle_config?.bundle_id || null
+}
+
+function truncate(str, len) {
+  if (!str || str.length <= len) return str
+  return str.slice(0, len) + '…'
+}
+
+function sessionStatusClass(sess) {
+  const rs = sess.research_status
+  if (rs === 'processing' || rs === 'queued' || rs === 'claiming') return 'running'
+  if (sess.status === 'completed') return 'completed'
+  if (sess.status === 'sim_failed') return 'failed'
+  if (sess.status === 'simulating') return 'running'
+  return 'pending'
+}
+
+function sessionStatusLabel(sess) {
+  const rs = sess.research_status
+  if (rs === 'processing' || rs === 'queued' || rs === 'claiming') return 'Researching'
+  if (rs === 'failed') return 'Research Failed'
+  const bc = sess.bundle_config
+  if (bc?.full_analysis) {
+    if (sess.status === 'simulating') return 'Running Analysis'
+    if (sess.status === 'completed') return 'Analysis Complete'
+    if (sess.status === 'sim_failed') return 'Analysis Failed'
+  }
+  if (sess.status === 'research_complete') return 'Research Done'
+  if (sess.status === 'simulating') return 'Simulating'
+  if (sess.status === 'completed') return 'Completed'
+  if (sess.status === 'sim_failed') return 'Sim Failed'
+  return 'Active'
+}
+
+function goToStep(sess, step) {
+  if (step === 'graph' && sess.project_id) {
+    router.push({ name: 'Process', params: { projectId: sess.project_id }, query: { session_id: sess.id } })
+  } else if (step === 'simulation' && sess.simulation_id) {
+    router.push({ name: 'SimulationRun', params: { simulationId: sess.simulation_id } })
+  } else if (step === 'bundle') {
+    const bundleId = bundleIdOf(sess)
+    if (bundleId) router.push({ name: 'BundleResults', params: { bundleId } })
+  }
+}
+
+function resumeSession(sess) {
+  const navStatus = ['simulating', 'completed', 'sim_failed']
+  const bundleId = bundleIdOf(sess)
+  if (navStatus.includes(sess.status) && bundleId) {
+    router.push({ name: 'BundleResults', params: { bundleId } })
+    return
+  }
+  if (navStatus.includes(sess.status) && sess.simulation_id) {
+    router.push({ name: 'SimulationRun', params: { simulationId: sess.simulation_id } })
+    return
+  }
+  if (sess.project_id) {
+    router.push({ name: 'Process', params: { projectId: sess.project_id }, query: { session_id: sess.id } })
+    return
+  }
+  localStorage.setItem('glas_active_session', sess.id)
+  router.push('/')
 }
 
 function formatDate(iso) {
@@ -518,6 +611,111 @@ onMounted(() => {
 .status-pending {
   background: rgba(255, 152, 0, 0.12);
   color: #ff9800;
+}
+
+/* Sessions */
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  background: #111;
+  transition: background 0.15s;
+}
+
+.session-row:hover {
+  background: #161616;
+}
+
+.session-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-prompt {
+  font-size: 13px;
+  color: #e0e0e0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #555;
+}
+
+.session-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.step-link {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #888;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.step-link:hover {
+  color: #ccc;
+  border-color: #444;
+  background: #222;
+}
+
+.resume-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #000;
+  background: #00c853;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.resume-btn:hover {
+  background: #00e676;
 }
 
 /* Credit Table */

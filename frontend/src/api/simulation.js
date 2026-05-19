@@ -354,6 +354,10 @@ export const getActiveSessions = () => {
   return service.get('/api/session/active')
 }
 
+export const getRecentSessions = () => {
+  return service.get('/api/session/recent')
+}
+
 /**
  * Get a session by ID
  * @param {string} sessionId
