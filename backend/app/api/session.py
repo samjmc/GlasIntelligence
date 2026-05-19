@@ -56,6 +56,14 @@ def get_active_sessions():
     return jsonify({"success": True, "data": sessions})
 
 
+@session_bp.route("/recent", methods=["GET"])
+@require_auth
+def get_recent_sessions():
+    """List the user's recent sessions including completed ones (for Dashboard)."""
+    sessions = SupabaseDB.get_recent_sessions(g.user_id)
+    return jsonify({"success": True, "data": sessions})
+
+
 @session_bp.route("/<session_id>", methods=["GET"])
 @require_auth
 def get_session(session_id):

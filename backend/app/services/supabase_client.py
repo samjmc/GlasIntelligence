@@ -411,6 +411,24 @@ class SupabaseDB:
             )
 
     @classmethod
+    def get_recent_sessions(cls, user_id: str, limit: int = 20) -> list[dict]:
+        """Return the most recent sessions for a user, including completed ones."""
+        resp = (
+            cls.client()
+            .table("scenario_sessions")
+            .select(cls.ACTIVE_SESSION_COLUMNS)
+            .eq("user_id", user_id)
+            .neq("status", "abandoned")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = resp.data or []
+        for r in rows:
+            cls._parse_session_json(r)
+        return rows
+
+    @classmethod
     def get_active_sessions(cls, user_id: str) -> list[dict]:
         resp = (
             cls.client()
