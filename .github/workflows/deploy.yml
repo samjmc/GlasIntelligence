@@ -177,6 +177,26 @@ jobs:
           target: ${{ env.DEPLOY_PATH }}
           overwrite: true
 
+      - name: Inject LLM API key into server .env
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: CLAUDE_API_KEY
+          script: |
+            ENV_FILE="${{ env.DEPLOY_PATH }}/.env"
+            # Remove any existing LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_NAME lines
+            sed -i '/^LLM_API_KEY=/d' "$ENV_FILE"
+            sed -i '/^LLM_BASE_URL=/d' "$ENV_FILE"
+            sed -i '/^LLM_MODEL_NAME=/d' "$ENV_FILE"
+            # Append fresh values sourced from the GitHub secret
+            printf '\nLLM_API_KEY=%s\nLLM_BASE_URL=https://api.anthropic.com\nLLM_MODEL_NAME=claude-haiku-4-5-20251001\n' \
+              "$CLAUDE_API_KEY" >> "$ENV_FILE"
+            echo "LLM config updated (key present: $([ -n "$CLAUDE_API_KEY" ] && echo yes || echo NO))"
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+
       - name: Deploy to production
         uses: appleboy/ssh-action@v1
         with:
