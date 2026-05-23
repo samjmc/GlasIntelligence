@@ -65,16 +65,25 @@ def run_deep_research_task(
             from ..services.deep_research_agent import DeepResearchAgent
 
             agent = DeepResearchAgent()
+            dossier = agent.run(prompt, context=context, angle_overrides=angle_overrides)
         elif Config.SEARCH_RESEARCH_ENABLED:
             from ..services.search_research_agent import SearchResearchAgent
+            from ..services.llm_research_agent import LLMResearchAgent
 
-            agent = SearchResearchAgent()
+            try:
+                dossier = SearchResearchAgent().run(prompt, context=context, angle_overrides=angle_overrides)
+            except Exception as search_exc:
+                logger.warning(
+                    "Session %s: SearchResearchAgent failed (%s: %s), falling back to LLMResearchAgent",
+                    session_id,
+                    type(search_exc).__name__,
+                    search_exc,
+                )
+                dossier = LLMResearchAgent().run(prompt, context=context, angle_overrides=angle_overrides)
         else:
             from ..services.llm_research_agent import LLMResearchAgent
 
-            agent = LLMResearchAgent()
-
-        dossier = agent.run(prompt, context=context, angle_overrides=angle_overrides)
+            dossier = LLMResearchAgent().run(prompt, context=context, angle_overrides=angle_overrides)
 
         if dossier.get("error"):
             raise RuntimeError("Research agent returned error flag")
@@ -95,12 +104,13 @@ def run_deep_research_task(
         )
         logger.info(f"Session {session_id}: research completed successfully")
 
-    except Exception:
+    except Exception as exc:
         logger.exception(f"Session {session_id}: research failed")
         SupabaseDB.update_session(
             session_id,
             research_status="failed",
             status="active",
+            research_dossier={"error": str(exc), "error_type": type(exc).__name__},
         )
         if not is_retry:
             SupabaseDB.refund_research_credit(user_id, f"Research failed — session {session_id}")

@@ -191,19 +191,19 @@ class SearchResearchAgent:
 
     @staticmethod
     def _generate_queries(llm: LLMClient, scenario: str) -> list[str]:
-        raw = llm.chat(
-            messages=[
-                {"role": "system", "content": _QUERY_SYSTEM},
-                {"role": "user", "content": f"Scenario: {scenario}"},
-            ],
-            temperature=0.3,
-            max_tokens=512,
-        )
         try:
+            raw = llm.chat(
+                messages=[
+                    {"role": "system", "content": _QUERY_SYSTEM},
+                    {"role": "user", "content": f"Scenario: {scenario}"},
+                ],
+                temperature=0.3,
+                max_tokens=512,
+            )
             queries = json.loads(raw)
             if isinstance(queries, list):
                 return [str(q) for q in queries[:6] if q]
-        except (json.JSONDecodeError, ValueError):
+        except Exception:
             pass
         return [scenario[:200]]
 

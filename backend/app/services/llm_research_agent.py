@@ -6,7 +6,10 @@ DeepResearchAgent so research_tasks and downstream consumers work without change
 
 from __future__ import annotations
 
+import time
 from typing import Any
+
+from openai import RateLimitError, APIStatusError, APIConnectionError, APITimeoutError
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -14,6 +17,10 @@ from ..utils.llm_client import LLMClient
 from .research_angles import RESEARCH_ANGLES
 
 logger = get_logger("glas.llm_research")
+
+_MAX_RETRIES = 3
+_RETRY_BACKOFFS = [5, 15, 45]
+_TRANSIENT_STATUS_CODES = {500, 502, 503, 504}
 
 # Adapted version of the base research prompt — same output structure but
 # framed for training-knowledge reasoning rather than live web search.
@@ -120,14 +127,11 @@ class LLMResearchAgent:
         )
 
         llm = LLMClient()
-        summary_md = llm.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text},
-            ],
-            temperature=0.3,
-            max_tokens=4096,
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text},
+        ]
+        summary_md = self._chat_with_retry(llm, messages)
 
         if not summary_md.strip():
             raise RuntimeError("LLM research returned empty response")
@@ -153,6 +157,31 @@ class LLMResearchAgent:
             "search_queries": [],
             "selected_angles": selected_ids,
         }
+
+    @staticmethod
+    def _chat_with_retry(llm: LLMClient, messages: list[dict]) -> str:
+        last_exc: Exception | None = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                return llm.chat(messages=messages, temperature=0.3, max_tokens=4096)
+            except RateLimitError as e:
+                last_exc = e
+                wait = max(60, _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)])
+                logger.warning("LLM rate limited (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, e)
+                time.sleep(wait)
+            except APIStatusError as e:
+                last_exc = e
+                if e.status_code not in _TRANSIENT_STATUS_CODES:
+                    raise
+                wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                logger.warning("Transient API error %s (attempt %d/%d), retrying in %ds", e.status_code, attempt + 1, _MAX_RETRIES, wait)
+                time.sleep(wait)
+            except (APIConnectionError, APITimeoutError) as e:
+                last_exc = e
+                wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
+                logger.warning("Connection/timeout error (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, type(e).__name__)
+                time.sleep(wait)
+        raise last_exc  # type: ignore[misc]
 
     @staticmethod
     def _resolve_angles(overrides: dict[str, bool] | None) -> list[str]:
