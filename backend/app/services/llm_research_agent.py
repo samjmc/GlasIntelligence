@@ -165,6 +165,10 @@ class LLMResearchAgent:
             try:
                 return llm.chat(messages=messages, temperature=0.3, max_tokens=4096)
             except RateLimitError as e:
+                # insufficient_quota is permanent — no point retrying until credits are added
+                if getattr(e, "code", None) == "insufficient_quota" or "insufficient_quota" in str(e):
+                    logger.error("LLM quota exceeded (insufficient_quota) — cannot retry")
+                    raise
                 last_exc = e
                 wait = max(60, _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)])
                 logger.warning("LLM rate limited (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, e)
