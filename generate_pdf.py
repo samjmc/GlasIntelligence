@@ -153,7 +153,7 @@ def generate_methodology_section():
 
 <p><strong>Process:</strong></p>
 <ol>
-<li><strong>Knowledge Ingestion:</strong> Official policy documents, financial data, and stakeholder positions were loaded into a knowledge graph (Zep Cloud GraphRAG).</li>
+<li><strong>Knowledge Ingestion:</strong> Official policy documents, financial data, and stakeholder positions were loaded into a temporal knowledge graph (Zep Cloud).</li>
 <li><strong>Entity Extraction:</strong> Key stakeholders were automatically identified and profiled from source documents.</li>
 <li><strong>Persona Generation:</strong> Each stakeholder was given a detailed AI persona reflecting their known positions, communication style, and institutional constraints.</li>
 <li><strong>Social Simulation:</strong> Agents interacted across simulated Twitter and Reddit platforms over 120 rounds using the OASIS engine, responding to each other and to the policy scenario.</li>
@@ -168,7 +168,7 @@ def generate_methodology_section():
 </ul>
 
 <p><strong>Model:</strong> DeepSeek Chat (deepseek-chat) via OpenAI-compatible API<br/>
-<strong>Knowledge Graph:</strong> Zep Cloud (GraphRAG)<br/>
+<strong>Knowledge Graph:</strong> Zep Cloud (temporal knowledge graph)<br/>
 <strong>Simulation Engine:</strong> OASIS (camel-ai) parallel Twitter+Reddit</p>
 </div>
 """

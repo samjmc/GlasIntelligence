@@ -82,7 +82,6 @@ def md_to_pdf(md_path, pdf_path):
 
 files = [
     ("pharmacy_first_caps_report_EN.md", "Pharmacy_First_Caps_Predictive_Report.pdf"),
-    ("RWA_Executive_Brief_Pharmacy_First.md", "RWA_Executive_Brief.pdf"),
 ]
 
 for md_file, pdf_file in files:
