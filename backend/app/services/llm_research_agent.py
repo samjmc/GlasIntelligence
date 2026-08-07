@@ -171,19 +171,33 @@ class LLMResearchAgent:
                     raise
                 last_exc = e
                 wait = max(60, _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)])
-                logger.warning("LLM rate limited (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, e)
+                logger.warning(
+                    "LLM rate limited (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, e
+                )
                 time.sleep(wait)
             except APIStatusError as e:
                 last_exc = e
                 if e.status_code not in _TRANSIENT_STATUS_CODES:
                     raise
                 wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
-                logger.warning("Transient API error %s (attempt %d/%d), retrying in %ds", e.status_code, attempt + 1, _MAX_RETRIES, wait)
+                logger.warning(
+                    "Transient API error %s (attempt %d/%d), retrying in %ds",
+                    e.status_code,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    wait,
+                )
                 time.sleep(wait)
             except (APIConnectionError, APITimeoutError) as e:
                 last_exc = e
                 wait = _RETRY_BACKOFFS[min(attempt, len(_RETRY_BACKOFFS) - 1)]
-                logger.warning("Connection/timeout error (attempt %d/%d), retrying in %ds: %s", attempt + 1, _MAX_RETRIES, wait, type(e).__name__)
+                logger.warning(
+                    "Connection/timeout error (attempt %d/%d), retrying in %ds: %s",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    wait,
+                    type(e).__name__,
+                )
                 time.sleep(wait)
         raise last_exc  # type: ignore[misc]
 

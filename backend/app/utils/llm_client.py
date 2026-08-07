@@ -31,9 +31,11 @@ class LLMClient:
 
         if self._anthropic:
             from anthropic import Anthropic
+
             self._client = Anthropic(api_key=self.api_key)
         else:
             from openai import OpenAI
+
             self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def chat(
