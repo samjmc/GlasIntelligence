@@ -196,7 +196,7 @@
                   </div>
                   <div class="tool-content">
                     <div class="tool-name">QuickSearch Rapid Retrieval</div>
-                    <div class="tool-desc">GraphRAG-based instant query interface with optimized indexing for rapid extraction of node attributes and discrete facts</div>
+                    <div class="tool-desc">Knowledge-graph query interface with optimized indexing for rapid extraction of node attributes and discrete facts</div>
                   </div>
                 </div>
                 <div class="tool-item tool-green">

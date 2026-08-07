@@ -89,10 +89,6 @@ files = [
         os.path.join(REPORTS_DIR, "pharmacy_first_caps_report_EN.md"),
         os.path.join(REPORTS_DIR, "Pharmacy_First_Caps_Predictive_Report.pdf"),
     ),
-    (
-        os.path.join(REPORTS_DIR, "RWA_Executive_Brief_Pharmacy_First.md"),
-        os.path.join(REPORTS_DIR, "RWA_Executive_Brief.pdf"),
-    ),
 ]
 
 for md_file, pdf_file in files:

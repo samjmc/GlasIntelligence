@@ -11,7 +11,7 @@ Glas Intelligence uses large language models and multi-agent social simulation (
 - **Frontend**: Vue 3 + Vite
 - **Backend**: Python / Flask
 - **Simulation**: OASIS (camel-ai) multi-agent framework
-- **Knowledge Graph**: Zep Cloud (GraphRAG)
+- **Knowledge Graph**: Zep Cloud (temporal knowledge graph with entity and relationship extraction)
 - **Auth & DB**: Supabase (PostgreSQL + Auth)
 - **Billing**: Stripe
 - **Task Queue**: Celery + Redis

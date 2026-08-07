@@ -110,7 +110,7 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">02</span>
-            <span class="step-title">GraphRAG Build</span>
+            <span class="step-title">Knowledge Graph Build</span>
           </div>
           <div class="step-status">
             <span v-if="currentPhase > 1" class="badge success">Completed</span>

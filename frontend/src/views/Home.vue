@@ -129,7 +129,7 @@
                   </div>
                   <div class="step-info">
                     <div class="step-title">Knowledge Graph</div>
-                    <div class="step-desc">Document analysis, entity extraction, and GraphRAG construction</div>
+                    <div class="step-desc">Document analysis, entity extraction, and knowledge graph construction</div>
                   </div>
                 </div>
                 <div class="workflow-item">
