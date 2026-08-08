@@ -44,17 +44,26 @@ unchanged when the flag is absent.
 | axios `service` in `frontend/src/api/index.js` | replace the axios **adapter** | `api/simulation.js` (51 fns), `api/graph.js` (5), `api/report.js` (7) → all five Step components, `MainView`, `Home`, `CompareView` |
 | `frontend/src/composables/useApi.js` | wrap `fetch` | 8 views |
 
-Replacing the adapter rather than patching methods is deliberate. `api/graph.js`
-calls the config-object form, `service({ url, method, data })`, which a per-method
-patch would miss. The adapter also sits *below* the existing response interceptor,
-so `response.data` unwrapping and the `res.success === false` rejection continue to
-work untouched — the shim returns the same shape the real backend did.
+Replacing the adapter rather than patching methods is deliberate, for three
+reasons. `api/graph.js` calls the config-object form, `service({ url, method, data })`,
+which a per-method patch would miss. The adapter sits *below* the existing response
+interceptor, so `response.data` unwrapping and the `res.success === false`
+rejection keep working untouched — the shim returns the shape the real backend did.
+And it replaces the transport outright, so a missing fixture cannot fall through to
+the vite dev proxy at `localhost:5001` during local demo runs.
+
+Axios supports this directly: a custom adapter is a function receiving the request
+config and returning a Promise that resolves to
+`{data, status, statusText, headers, config, request}`, and it can be set
+per-instance via `axios.create({ adapter })`.
 
 63 exported API functions and every calling component stay unmodified.
 
 ### Fixtures
 
-Recorded server-side by a Flask `after_request` hook writing JSONL:
+Recorded server-side by a Flask `after_request` hook — `backend/app/__init__.py:94`
+already registers one (`log_response`), so the recorder sits alongside it — writing
+JSONL:
 `{t_ms, method, path, status, body}`, where `t_ms` is milliseconds since run start.
 Normalisation scrubs secrets and rewrites real UUIDs to stable demo IDs.
 
@@ -141,12 +150,56 @@ The demo builds with no environment variables at all. This already works:
   `getAccessToken()` returns `''`.
 - `lib/analytics.js` no-ops without `VITE_POSTHOG_KEY`.
 
+Note that `vite.config.js` sets `envDir: '..'` — environment variables are read
+from the **repo root**, not from `frontend/`. This affects both local demo builds
+and the Cloudflare Pages build configuration, and gets it wrong silently.
+
 `/login` and `/signup` are hidden in demo mode; they would otherwise render forms
 that throw `Auth not configured`.
 
-The landing page states plainly that this is a recorded run. A visitor who works it
-out mid-way feels tricked; one told upfront reads it as a deliberate engineering
-decision.
+**Fonts must be self-hosted.** `frontend/index.html` currently loads Plus Jakarta
+Sans and JetBrains Mono from `fonts.googleapis.com` and `fonts.gstatic.com`. That
+is a live rot vector of exactly the kind this design exists to remove, and it makes
+the origin assertion in the test suite unimplementable. Vendor the woff2 files into
+`frontend/public/fonts/` and declare them with local `@font-face`.
+
+### Demo mode UI
+
+Per Phase 3 of `docs/demo-mode-plan.md`, demo mode must also:
+
+- Show a persistent, dismissible **"Demo — replaying a recorded simulation"**
+  banner. A visitor who works it out mid-way feels tricked; one told upfront reads
+  it as a deliberate engineering decision.
+- Suppress signup and upgrade prompts, and **the credit counter**. A demo showing a
+  credit balance that never decrements is a visible bug.
+- Treat a route as public when its `projectId`/`simulationId`/`reportId` param
+  starts with `demo_`. One condition in `beforeEach`. Nothing validates these IDs
+  as UUIDs, so the prefix is safe.
+
+Phase 3 specifies a `POST /api/demo/start` call behind the CTA. **That endpoint is
+not built.** There is no server. The CTA generates the session ID client-side and
+routes straight to Step 1.
+
+## Deployment
+
+Cloudflare Pages **Git integration**, not a GitHub Actions workflow. The repository
+is connected through OAuth in the Cloudflare dashboard; Pages builds on push.
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `frontend` |
+| Build command | `npm ci && npm run build` |
+| Output directory | `dist` |
+| Environment variables | `VITE_DEMO_MODE=1` |
+
+This requires **no GitHub Actions secrets**. That is the point: the original
+pipeline never worked because Actions secrets do not travel with `git push`, and
+this deployment path has no secrets to lose.
+
+Pages builds independently of GitHub Actions, so a red CI run does not block a
+deploy. For a portfolio demo that trade is acceptable — the e2e job catches
+breakage on the pull request, before merge — but it is a real gap and is recorded
+here rather than discovered later.
 
 ## Error handling
 
@@ -180,7 +233,9 @@ assert a report renders, and assert **zero requests leave the origin**.
 
 That last assertion is the point. `docs/demo-mode-plan.md` claims "if it runs with
 an empty `.env`, it cannot rot." The origin assertion converts that from an
-intention into something CI enforces.
+intention into something CI enforces. It only holds once the Google Fonts links are
+removed from `index.html` and the typefaces are vendored, so that work is a
+prerequisite for the test, not a polish item.
 
 The existing `build-and-e2e` job is not reusable: it boots the full
 `docker-compose.ci.yml` stack and needs `jlumbroso/free-disk-space` because the dev
