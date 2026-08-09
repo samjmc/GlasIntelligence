@@ -29,4 +29,8 @@ describe('demo session IDs', () => {
   it('returns null when the scenario segment is missing', () => {
     expect(decodeDemoId('demo_MTc1NDY1MDAwMDAwMA')).toBeNull()
   })
+
+  it('throws a TypeError when scenario contains an underscore', () => {
+    expect(() => encodeDemoId(1754650000000, 'has_underscore')).toThrow(TypeError)
+  })
 })

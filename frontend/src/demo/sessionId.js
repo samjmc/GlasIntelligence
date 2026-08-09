@@ -14,6 +14,12 @@ function b64urlDecode(str) {
 }
 
 export function encodeDemoId(startMs, scenario) {
+  // Scenario cannot contain '_' — it's used as the format delimiter.
+  // If allowed, e.g. "energy_price_cap" would encode fine but decode to
+  // the truncated name "energy" with no error, silently loading the wrong fixture.
+  if (scenario.includes('_')) {
+    throw new TypeError(`Scenario name cannot contain underscores; got: ${scenario}`)
+  }
   const nonce = Math.random().toString(36).slice(2, 10)
   return `${PREFIX}${b64urlEncode(String(startMs))}_${scenario}_${nonce}`
 }
