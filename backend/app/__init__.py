@@ -97,6 +97,17 @@ def create_app(config_class=Config):
         logger.debug(f"Response: {response.status_code}")
         return response
 
+    # Demo tape recorder. Off unless explicitly recording a golden run.
+    if os.environ.get("DEMO_RECORD") == "1":
+        from .middleware.demo_recorder import init_recorder
+
+        init_recorder(
+            app,
+            out_path=os.environ.get("DEMO_TAPE_PATH", "demo-tape.json"),
+            scenario=os.environ.get("DEMO_SCENARIO", "scenario-1"),
+        )
+        logger.info("Demo recorder enabled")
+
     # Register blueprints
     from .api import graph_bp, simulation_bp, report_bp
 
