@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 
 import pytest
 from flask import Flask
@@ -82,3 +83,24 @@ def test_recorder_skips_non_json_responses(tmp_path):
         client.get("/api/report/download")
 
     assert json.loads(out.read_text())["entries"] == []
+
+
+def test_recorder_continues_on_flush_failure(tmp_path):
+    """Verify that a failing flush does not crash the request pipeline."""
+    out = tmp_path / "tape.json"
+    app = Flask(__name__)
+
+    @app.route("/api/simulation/create", methods=["POST"])
+    def create():
+        return {"success": True, "data": {"id": "sim-1"}}, 200
+
+    init_recorder(app, str(out), scenario="test-scenario")
+
+    with app.test_client() as client:
+        with mock.patch(
+            "app.middleware.demo_recorder.open", side_effect=OSError("Disk full")
+        ):
+            response = client.post("/api/simulation/create", json={})
+            # Request should return 200, not 500 due to flush error
+            assert response.status_code == 200
+            assert response.json == {"success": True, "data": {"id": "sim-1"}}
