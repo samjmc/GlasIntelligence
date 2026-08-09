@@ -199,6 +199,8 @@
             </div>
           </div>
 
+          <DemoScenarioPicker v-if="isDemoMode" @select="onDemoScenarioSelected" />
+
           <div class="console-box">
             <div class="console-section">
               <div class="console-header">
@@ -222,6 +224,7 @@
                   placeholder="What happens if Ofgem removes the energy price cap? What if the US imposes new tariffs on EU goods?"
                   rows="5"
                   :disabled="loading"
+                  :readonly="isDemoMode"
                 ></textarea>
                 <div class="model-badge">Engine: GLAS v1.0</div>
               </div>
@@ -323,7 +326,7 @@
                 </button>
               </div>
 
-              <div class="console-section">
+              <div v-if="!isDemoMode" class="console-section">
                 <div class="console-divider inner-divider">
                   <span>Upload Additional Documents</span>
                 </div>
@@ -378,7 +381,7 @@
                   >
                     <span v-if="!researchLoading">
                       {{ isPaidUser ? 'Deep Research Briefing' : 'Deep Research (Paid Plans)' }}
-                      <span v-if="isPaidUser && researchCredits !== null" class="research-credits-badge">{{ researchCredits }}</span>
+                      <span v-if="!isDemoMode && isPaidUser && researchCredits !== null" class="research-credits-badge">{{ researchCredits }}</span>
                     </span>
                     <span v-else class="research-loading-content">
                       <span class="progress-bar-track">
@@ -535,6 +538,8 @@ import HistoryDatabase from '../components/HistoryDatabase.vue'
 import AppNavbar from '../components/AppNavbar.vue'
 import ResearchSettingsModal from '../components/ResearchSettingsModal.vue'
 import DossierModal from '../components/DossierModal.vue'
+import { isDemoMode } from '../demo/config'
+import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 import { authState, refreshAccessToken } from '../store/auth'
 import { useApi } from '../composables/useApi'
 import {
@@ -894,6 +899,12 @@ function retryEmptyResearch() {
   removeBriefing()
   researchDossier.value = null
   runDeepResearch()
+}
+
+function onDemoScenarioSelected({ sessionId, prompt }) {
+  formData.value.simulationRequirement = prompt
+  activeSessionId.value = sessionId
+  localStorage.setItem(SESSION_KEY, sessionId)
 }
 
 const triggerFileInput = () => { if (!loading.value) fileInput.value?.click() }
