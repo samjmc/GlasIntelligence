@@ -661,9 +661,12 @@ describe('normalisePath', () => {
     expect(normalisePath(raw)).toBe(expected)
   })
 
-  it('matches the python recorder for every case above', () => {
-    // If this file and backend/app/middleware/demo_recorder.py disagree, the
-    // recorded key and the requested key differ and every lookup misses.
+  // If this file and backend/app/middleware/demo_recorder.py disagree, the
+  // recorded key and the requested key differ and every lookup misses. The
+  // cases above are duplicated verbatim in
+  // backend/tests/test_demo_recorder.py::test_normalise_path — change both or
+  // neither.
+  it('treats a demo session id as an id', () => {
     expect(normalisePath('/api/session/demo_a_b_c')).toBe('/api/session/:id')
   })
 })
