@@ -43,4 +43,26 @@ describe('DemoScenarioPicker', () => {
 
     expect(wrapper.find('[data-test="picker-error"]').exists()).toBe(true)
   })
+
+  it('shows a visible error and does not emit select when a scenario id contains an underscore', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        schema_version: 1,
+        scenarios: [
+          { id: 'energy_price_cap', title: 'Energy price cap', blurb: 'Retail cap effects.', prompt: 'Model a cap', duration_ms: 120000 },
+        ],
+      }),
+    }))
+
+    const wrapper = mount(DemoScenarioPicker)
+    await flushPromises()
+
+    await wrapper.find('[data-test="scenario-card"]').trigger('click')
+
+    expect(wrapper.find('[data-test="picker-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="picker-error"]').text()).toContain('energy_price_cap')
+    expect(wrapper.emitted('select')).toBeFalsy()
+  })
 })
