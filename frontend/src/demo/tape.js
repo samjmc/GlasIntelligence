@@ -7,6 +7,7 @@ import { decodeDemoId } from './sessionId'
 import { DEMO_SPEEDUP } from './config'
 
 export const NOT_RECORDED = 'DEMO_NOT_RECORDED'
+export const TAPE_LOAD_FAILED = 'DEMO_TAPE_LOAD_FAILED'
 export const SCHEMA_VERSION = 1
 
 // A path segment is an ID if it is a UUID, a demo id, an all-digit id, or a long
