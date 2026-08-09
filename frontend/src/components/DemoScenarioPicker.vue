@@ -3,7 +3,7 @@
     <h2 class="demo-picker-title">Choose a worked example</h2>
 
     <p v-if="error" data-test="picker-error" class="demo-picker-error">
-      Demo failed to load. Please reload the page.
+      {{ typeof error === 'string' ? error : 'Demo failed to load. Please reload the page.' }}
     </p>
 
     <div v-else class="demo-picker-grid">
@@ -42,7 +42,13 @@ onMounted(async () => {
 })
 
 function choose(scenario) {
-  const sessionId = encodeDemoId(Date.now(), scenario.id)
+  let sessionId
+  try {
+    sessionId = encodeDemoId(Date.now(), scenario.id)
+  } catch (e) {
+    error.value = `Cannot start scenario "${scenario.id}": ${e.message}`
+    return
+  }
   setActiveScenario(scenario.id, sessionId)
   emit('select', { scenarioId: scenario.id, sessionId, prompt: scenario.prompt })
 }
