@@ -8,9 +8,12 @@ frontend/src/demo/tape.js. If one changes, change the other.
 """
 
 import json
+import logging
 import os
 import re
 import time
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
@@ -83,7 +86,10 @@ def init_recorder(app, out_path: str, scenario: str) -> None:
                 "body": body,
             }
         )
-        flush()
+        try:
+            flush()
+        except OSError as e:
+            logger.error(f"Failed to flush demo tape: {e}")
         return response
 
     flush()
