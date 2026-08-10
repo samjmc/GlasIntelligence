@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "scenario": "demo-e2e",
+  "duration_ms": 5000,
+  "entries": [
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/billing/status",
+      "status": 200,
+      "body": { "success": true, "data": { "plan": "pro", "research_credits": 0 } }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/session/active",
+      "status": 200,
+      "body": { "success": true, "data": [] }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/simulation/history",
+      "status": 200,
+      "body": { "success": true, "data": [] }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/simulation/:id",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "demo-e2e-sim",
+          "status": "completed",
+          "project_id": null
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/simulation/:id/config",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "time_config": {
+            "time_scale": { "unit": "hour", "per_round": 1 },
+            "minutes_per_round": 60,
+            "total_simulation_hours": 2
+          }
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/simulation/:id/run-status",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "runner_status": "completed",
+          "twitter_completed": true,
+          "reddit_completed": true,
+          "twitter_current_round": 2,
+          "reddit_current_round": 2,
+          "total_rounds": 2,
+          "twitter_actions_count": 0,
+          "reddit_actions_count": 0
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/simulation/:id/run-status/detail",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": { "actions": [] }
+      }
+    }
+  ]
+}

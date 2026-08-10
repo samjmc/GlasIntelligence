@@ -18,6 +18,12 @@ function announceIfMissing(body, path) {
 }
 
 async function answer(method, url) {
+  if (!activeScenario) {
+    // No scenario selected yet (e.g. page-load API calls before the user picks a
+    // scenario from the picker). Return NOT_RECORDED silently — do NOT try to load
+    // a null tape which would 404 and fire the tape-load-failed watchdog overlay.
+    return { status: 200, body: { success: false, error: NOT_RECORDED, path: String(url) } }
+  }
   const tape = await loadTape(activeScenario)
   const elapsed = elapsedFor(activeSessionId, Date.now())
   const result = resolve(tape.index, method, url, elapsed)
