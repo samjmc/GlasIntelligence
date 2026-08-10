@@ -8,13 +8,11 @@
 - [x] CORS fix — Added port 3001 to CORS_ORIGINS
 - [x] Stripe webhook — Created endpoint, secret added to .env
 - [x] Welcome email — Updated to match free tier (no free credit)
-- [x] Production Docker config — Updated nginx.conf with SSL, docker-compose.prod.yml with certbot
-- [x] Deployment script — deploy.sh created
-- [x] Production .env template — .env.production created
-- [ ] **Manual: Buy glasinsight.com domain** (Namecheap, Cloudflare, or Google Domains)
+- [x] ~~Production Docker config~~ — **OBSOLETED** — static hosting via Cloudflare Pages (Aug 2026)
+- [x] ~~Deployment script~~ — **OBSOLETED** — static hosting via Cloudflare Pages (Aug 2026)
+- [x] ~~Production .env template~~ — **OBSOLETED** — static hosting via Cloudflare Pages (Aug 2026)
+- [ ] **Manual: Cloudflare Pages setup** (configure Git integration for auto-builds, see docs/superpowers/specs/2026-08-08-static-demo-hosting-design.md)
 - [ ] **Manual: Sign up for Resend** (resend.com) and add API key to .env
-- [ ] **Manual: Get a VPS** (Hetzner CX22 recommended, ~$5/mo)
-- [ ] **Manual: Deploy** using deploy.sh
 - [ ] **Manual: Set ADMIN_USER_IDS** after signing up on the platform
 - [ ] **Manual: Switch Stripe to live mode** when ready to charge real money
 
