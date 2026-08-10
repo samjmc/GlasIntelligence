@@ -562,6 +562,10 @@ const error = ref('')
 const isDragOver = ref(false)
 const fileInput = ref(null)
 
+// In demo mode, tracks the scenario chosen in the picker so startSimulation
+// can navigate directly to the pre-recorded simulation replay.
+const demoScenarioId = ref('')
+
 const enhancing = ref(false)
 const showUpgradeModal = ref(false)
 const researchLoading = ref(false)
@@ -758,6 +762,9 @@ const starterExamples = [
 
 const canSubmit = computed(() => {
   const hasPrompt = formData.value.simulationRequirement.trim() !== ''
+  // In demo mode the file-upload section is hidden and files are not needed;
+  // the adapter replays from the tape, so a prompt alone is sufficient.
+  if (isDemoMode) return hasPrompt
   const hasSources = files.value.length > 0 || briefing.value !== null
   return hasPrompt && hasSources
 })
@@ -901,9 +908,10 @@ function retryEmptyResearch() {
   runDeepResearch()
 }
 
-function onDemoScenarioSelected({ sessionId, prompt }) {
+function onDemoScenarioSelected({ scenarioId, sessionId, prompt }) {
   formData.value.simulationRequirement = prompt
   activeSessionId.value = sessionId
+  demoScenarioId.value = scenarioId || ''
   localStorage.setItem(SESSION_KEY, sessionId)
 }
 
@@ -1303,6 +1311,17 @@ function removeScenario(index) {
 
 const startSimulation = async () => {
   if (!canSubmit.value || loading.value) return
+
+  // Demo mode: skip Steps 1–2 (graph build / env setup). The tape replays a
+  // pre-recorded simulation so we navigate straight to the run view. The
+  // simulation ID is derived from the chosen scenario so the adapter can
+  // match requests to the right tape entries.
+  if (isDemoMode) {
+    const simId = `demo-${demoScenarioId.value}-sim`
+    router.push({ name: 'SimulationRun', params: { simulationId: simId } })
+    return
+  }
+
   if (!isPaidUser.value) {
     showUpgradeModal.value = true
     return
