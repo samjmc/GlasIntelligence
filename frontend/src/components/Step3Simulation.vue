@@ -99,13 +99,14 @@
           />
           <span class="graph-memory-text">Live graph memory (Zep — higher usage)</span>
         </label>
-        <button 
+        <button
+          data-test="simulation-complete"
           class="action-btn primary"
           :disabled="phase !== 2 || isGeneratingReport"
           @click="handleNextStep"
         >
           <span v-if="isGeneratingReport" class="loading-spinner-small"></span>
-          {{ isGeneratingReport ? 'Starting...' : 'Generate Report' }} 
+          {{ isGeneratingReport ? 'Starting...' : 'Generate Report' }}
           <span v-if="!isGeneratingReport" class="arrow-icon">→</span>
         </button>
       </div>

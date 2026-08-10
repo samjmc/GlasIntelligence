@@ -20,17 +20,51 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # Copy the e2e fixture into the public demo directory before building.
+      # The fixture lives under e2e/fixtures/demo/ so that Task 3's real golden
+      # recording (written directly to frontend/public/demo/) cannot clobber
+      # it, and so it is clearly separated from production scenario data.
+      - name: Stage e2e fixture
+        run: |
+          mkdir -p frontend/public/demo/demo-e2e
+          cp e2e/fixtures/demo/manifest.json frontend/public/demo/manifest.json
+          cp e2e/fixtures/demo/demo-e2e/tape.json frontend/public/demo/demo-e2e/tape.json
+
       # No secrets, no .env, no backend. If this build needs a credential,
       # the demo has stopped being keyless and this job should fail.
+      # VITE_DEMO_SPEEDUP=100 + VITE_ZEP_STEP3_STATUS_MS=300 make the fixture
+      # tape's running→completed transition happen in ~100ms of wall-clock time
+      # (t_ms=6000 / speedup=100 = 60ms) and polling fires every 300ms, so
+      # the test converges in well under 5 s.
       - name: Build the demo bundle
         run: npm ci && npm run build
         working-directory: frontend
         env:
           VITE_DEMO_MODE: '1'
+          VITE_DEMO_SPEEDUP: '100'
+          VITE_ZEP_STEP3_STATUS_MS: '300'
+          VITE_ZEP_STEP3_DETAIL_MS: '300'
 
       - name: Serve the bundle
         run: npx --yes serve -s dist -l 4173 &
         working-directory: frontend
+
+      # Wait for the static file server to be ready before running tests.
+      # Without this gate a timing race causes Playwright to report opaque
+      # "connection refused" errors that look like test failures rather than
+      # server startup failures.
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4173/ > /dev/null 2>&1; then
+              echo "Server is ready"
+              exit 0
+            fi
+            echo "Waiting for server... ($i/20)"
+            sleep 1
+          done
+          echo "Server failed to start within 20 s" >&2
+          exit 1
 
       - name: Install Playwright
         run: npm ci && npx playwright install --with-deps chromium
