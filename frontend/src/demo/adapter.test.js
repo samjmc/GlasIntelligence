@@ -1,8 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import synthetic from './fixtures/synthetic-tape.json'
+import { encodeDemoId } from './sessionId'
+
+// Helpers for setting up the localStorage mock used by the rehydration tests.
+function mockLocalStorage(store = {}) {
+  const storage = { ...store }
+  global.localStorage = {
+    getItem: (k) => storage[k] ?? null,
+    setItem: (k, v) => { storage[k] = v },
+    removeItem: (k) => { delete storage[k] },
+  }
+  return storage
+}
 
 beforeEach(() => {
   vi.resetModules()
+  global.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} }
   global.fetch = vi.fn(async () => ({
     ok: true,
     status: 200,
@@ -88,6 +101,59 @@ describe('demoAdapter tape-load failure', () => {
     expect(res).toHaveProperty('status', 200)
     expect(res.data.success).toBe(false)
     expect(res.data.error).toBe('DEMO_TAPE_LOAD_FAILED')
+  })
+})
+
+describe('adapter rehydration from localStorage', () => {
+  it('picks up the active scenario from a stored demo session id on module load', async () => {
+    const sessionId = encodeDemoId(Date.now(), 'synthetic')
+    mockLocalStorage({ glas_active_session: sessionId })
+
+    // Module is re-imported after vi.resetModules() so the init block runs fresh.
+    const { demoAdapter } = await import('./adapter')
+
+    // The rehydrated scenario is 'synthetic', so the tape fetch goes to the right path.
+    const res = await demoAdapter({ url: '/api/simulation/create', method: 'post' })
+    expect(res.data.data.id).toBe('sim-synthetic-1')
+
+    const urls = global.fetch.mock.calls.map((c) => c[0])
+    expect(urls).toEqual(['/demo/synthetic/tape.json'])
+  })
+
+  it('silently returns NOT_RECORDED for pre-picker paths when no scenario is stored', async () => {
+    // No localStorage entry — simulates a first visit before the picker.
+    const { demoAdapter } = await import('./adapter')
+
+    const res = await demoAdapter({ url: '/api/billing/status', method: 'get' })
+    expect(res.status).toBe(200)
+    expect(res.data.error).toBe('DEMO_NOT_RECORDED')
+    // Must not have attempted a tape fetch.
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('fires the watchdog for non-allowlisted paths when no scenario is stored', async () => {
+    const dispatched = []
+    global.window = { dispatchEvent: (e) => dispatched.push(e), addEventListener: () => {}, removeEventListener: () => {} }
+
+    const { demoAdapter } = await import('./adapter')
+
+    const res = await demoAdapter({ url: '/api/simulation/demo-e2e-sim', method: 'get' })
+    expect(res.data.error).toBe('DEMO_NOT_RECORDED')
+    expect(dispatched.some((e) => e.type === 'demo:not-recorded')).toBe(true)
+
+    // Restore window mock to avoid leaking into other tests.
+    delete global.window
+  })
+
+  it('ignores a stored session id that is not a valid demo id', async () => {
+    mockLocalStorage({ glas_active_session: 'regular-uuid-not-a-demo-id' })
+
+    const { demoAdapter } = await import('./adapter')
+
+    // With no valid demo id decoded, adapter behaves as if no scenario is set.
+    const res = await demoAdapter({ url: '/api/billing/status', method: 'get' })
+    expect(res.data.error).toBe('DEMO_NOT_RECORDED')
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
 

@@ -11,6 +11,7 @@
         v-for="s in scenarios"
         :key="s.id"
         data-test="scenario-card"
+        :data-scenario-id="s.id"
         class="demo-picker-card"
         @click="choose(s)"
       >
