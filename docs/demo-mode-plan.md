@@ -129,10 +129,11 @@ When a `demo_`-prefixed ID is present:
 
 ### Phase 3 — Public entry
 
-- Router guard: treat a route as public when its `projectId`/`simulationId`/`reportId` param starts with `demo_`. One condition in `beforeEach`, no route duplication.
 - A "See a worked example →" CTA on `LandingView.vue` and `Home.vue` generating a demo session ID client-side (`demo_<base64(timestamp)>_<nonce>`) and routing to Step 1 with that ID.
 - A persistent, dismissible **"Demo — replaying a recorded simulation"** banner. Being straight about it is a credibility gain, not a loss; the alternative reads as a fake if anyone notices.
 - Suppress signup/upgrade prompts and the credit counter while in demo mode.
+
+*Note: a router guard treating `demo_`-prefixed routes as public is unnecessary. `frontend/src/main.js` awaits `initAuth()` before mounting, and with no Supabase key `initAuth()` creates a local user, so `router.beforeEach` already passes all routes when `authState.user` is set.*
 
 ### Phase 4 — Pacing and Step 5
 
