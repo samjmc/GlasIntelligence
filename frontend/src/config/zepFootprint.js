@@ -1,6 +1,6 @@
 /**
  * Single source of truth for client-side Zep/API polling footprint.
- * Values come from Vite env at build time (see Dockerfile.prod, docker-compose.prod.yml, .env.example).
+ * Values come from Vite env at build time (see Dockerfile.prod, .env.example).
  */
 
 function parseIntEnv(raw, fallback) {
