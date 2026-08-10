@@ -103,18 +103,20 @@ There is nothing to cache until a run completes. Everything else is blocked on t
 
 Then re-run Phase 0's traverse with the recorder on. That produces the tape.
 
-### Phase 2 — The replay layer
+### Phase 2 — In-browser replay
 
-`backend/app/demo/replay.py` — a `before_request` hook active under `DEMO_MODE=1`, engaging only when the request path or body carries a `demo_`-prefixed ID.
+Replay is now entirely client-side. `frontend/src/demo/` contains:
+- `RecordedRequest.ts` — fixtures indexed by request signature and offset
+- `DemoReplayEngine.ts` — intercepts fetch calls, serves responses by elapsed time
+- `useDemoReplayControl.ts` — composable managing replay state and speed
 
-- Decodes `start_ms` from the demo ID; computes `elapsed = (now − start_ms) × DEMO_SPEEDUP`.
-- Matches the request signature against the tape; among candidates, serves the latest whose `offset_ms ≤ elapsed`.
-- Rewrites `{{PROJECT_ID}}`/`{{SIMULATION_ID}}`/`{{REPORT_ID}}` placeholders to this visitor's minted IDs on the way out.
-- Handles the two cursor-based log endpoints (`/agent-log?from_line=`, `/console-log?from_line=`) by slicing the recorded log to `elapsed` — this is what makes the report *stream* rather than appear.
-- Short-circuits `can-research` / `can-simulate` to allowed.
-- **Any unmatched request returns the nearest recorded response rather than a 500.** A demo must never show an error screen.
-
-New endpoint `POST /api/demo/start` → mints the ID triple and returns the entry route.
+When a `demo_`-prefixed ID is present:
+- Decode `start_ms` from the ID; compute `elapsed = (now − start_ms) × DEMO_SPEEDUP`.
+- Intercept all fetch calls; match request signature against fixtures; serve the response whose `offset_ms ≤ elapsed`.
+- Rewrite `{{PROJECT_ID}}`/`{{SIMULATION_ID}}`/`{{REPORT_ID}}` placeholders to this visitor's minted IDs.
+- Handle cursor-based log endpoints by slicing recorded logs to `elapsed` — reports stream frame by frame.
+- **Stub `initAuth()` to set a local demo user** — no signup needed, and `router.beforeEach` treats routes as public when IDs start with `demo_`.
+- **Any unmatched request returns the nearest recorded response rather than a network error.** A demo must never show an error state.
 
 **Fixture inventory** (what the tape must contain, by screen):
 
@@ -128,7 +130,7 @@ New endpoint `POST /api/demo/start` → mints the ID triple and returns the entr
 ### Phase 3 — Public entry
 
 - Router guard: treat a route as public when its `projectId`/`simulationId`/`reportId` param starts with `demo_`. One condition in `beforeEach`, no route duplication.
-- A "See a worked example →" CTA on `LandingView.vue` and `Home.vue` calling `POST /api/demo/start`, then routing to Step 1.
+- A "See a worked example →" CTA on `LandingView.vue` and `Home.vue` generating a demo session ID client-side (`demo_<base64(timestamp)>_<nonce>`) and routing to Step 1 with that ID.
 - A persistent, dismissible **"Demo — replaying a recorded simulation"** banner. Being straight about it is a credibility gain, not a loss; the alternative reads as a fake if anyone notices.
 - Suppress signup/upgrade prompts and the credit counter while in demo mode.
 
@@ -140,7 +142,8 @@ New endpoint `POST /api/demo/start` → mints the ID triple and returns the entr
 
 ### Phase 5 — Ship it
 
-- Dedicated build with `DEMO_MODE=1` and **no** vendor keys — proves the demo is genuinely keyless. If it runs with an empty `.env`, it cannot rot.
+- Static build with `VITE_DEMO_MODE=1` and **no** vendor keys — proves the demo is genuinely keyless. If the built frontend runs with an empty `.env`, it cannot rot.
+- Cloudflare Pages Git integration — pushing to main triggers a build (Vite produces `/frontend/dist/`), auto-deployed to `https://demo.glasinsight.com` (see `docs/superpowers/specs/2026-08-08-static-demo-hosting-design.md` for architecture).
 - Playwright spec in `e2e/tests/demo-flow.spec.js` walking all six screens and asserting no error state. This is the regression guard that keeps the demo working while you keep developing the real product.
 - README section: what's real, what's replayed, and a link.
 
