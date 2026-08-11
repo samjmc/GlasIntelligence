@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalisePath, indexEntries, resolve, NOT_RECORDED } from './tape'
+import { normalisePath, indexEntries, resolve, NOT_RECORDED, canonicalQuery } from './tape'
 import synthetic from './fixtures/synthetic-tape.json'
 
 describe('normalisePath', () => {
@@ -67,5 +67,57 @@ describe('resolve', () => {
   it('distinguishes methods on the same path', () => {
     const r = resolve(index, 'DELETE', '/api/simulation/create', 0)
     expect(r.body.error).toBe(NOT_RECORDED)
+  })
+})
+
+describe('canonicalQuery', () => {
+  it('returns empty string for a path with no query', () => {
+    expect(canonicalQuery('/api/report/abc/agent-log')).toBe('')
+  })
+
+  it('returns the query string for a path with params', () => {
+    expect(canonicalQuery('/api/report/abc/agent-log?from_line=0')).toBe('from_line=0')
+  })
+
+  it('sorts multiple params by key', () => {
+    expect(canonicalQuery('/foo?z=1&a=2')).toBe('a=2&z=1')
+  })
+
+  it('percent-encodes keys and values', () => {
+    // space in value → %20
+    const q = canonicalQuery('/foo?key=hello world')
+    expect(q).toBe('key=hello%20world')
+  })
+})
+
+describe('query-string disambiguation (agent-log cursor)', () => {
+  const index = indexEntries(synthetic.entries)
+
+  it('returns from_line=0 snapshot at t=0', () => {
+    const r = resolve(index, 'GET', '/api/report/demo-report-1/agent-log?from_line=0', 0)
+    expect(r.status).toBe(200)
+    expect(r.body.data.logs).toHaveLength(1)
+    expect(r.body.data.logs[0].action).toBe('report_start')
+  })
+
+  it('advances from_line=0 snapshot with elapsed time', () => {
+    const r = resolve(index, 'GET', '/api/report/demo-report-1/agent-log?from_line=0', 6000)
+    expect(r.body.data.logs).toHaveLength(2)
+    expect(r.body.data.logs[1].action).toBe('planning_complete')
+  })
+
+  it('returns from_line=1 snapshot independently of from_line=0', () => {
+    const r = resolve(index, 'GET', '/api/report/demo-report-1/agent-log?from_line=1', 6000)
+    expect(r.body.data.logs).toHaveLength(1)
+    expect(r.body.data.logs[0].action).toBe('planning_complete')
+    expect(r.body.data.from_line).toBe(1)
+  })
+
+  it('falls back to stripped path when no query-specific entry exists', () => {
+    // from_line=99 has no specific entry — should fall back to stripped-path key
+    // The stripped key has all agent-log entries merged, returns the last at max time.
+    const r = resolve(index, 'GET', '/api/report/demo-report-1/agent-log?from_line=99', 99999)
+    // The fallback must not return NOT_RECORDED since the path IS in the tape.
+    expect(r.body.error).not.toBe(NOT_RECORDED)
   })
 })

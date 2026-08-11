@@ -33,23 +33,65 @@ export function normalisePath(path) {
     .join('/')
 }
 
-function keyFor(method, normalisedPath) {
-  return `${method.toUpperCase()} ${normalisedPath}`
+// Extract canonical query string from a path for use in index keys.
+// Exported so tests can verify cross-language parity with the Python recorder.
+// Returns the query string (without '?') sorted by key for stability,
+// or '' if there are no query params.
+export function canonicalQuery(path) {
+  const idx = path.indexOf('?')
+  if (idx === -1) return ''
+  const qs = path.slice(idx + 1)
+  if (!qs) return ''
+  return qs
+    .split('&')
+    .filter(Boolean)
+    .map((kv) => kv.split('=').map(decodeURIComponent))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v ?? '')}`)
+    .join('&')
+}
+
+// Build the index key for an entry. When an entry carries a query string,
+// the key includes it so cursor-based endpoints (e.g. agent-log?from_line=N)
+// can be disambiguated. The resolver tries the query-aware key first, then
+// falls back to the stripped-path key, matching the plan's rule:
+// "query strings are stripped EXCEPT where a recorded entry disambiguates on them."
+function keyFor(method, normalisedPath, query = '') {
+  const base = `${method.toUpperCase()} ${normalisedPath}`
+  return query ? `${base}?${query}` : base
 }
 
 export function indexEntries(entries) {
   const index = new Map()
   for (const entry of entries) {
-    const key = keyFor(entry.method, entry.path)
-    if (!index.has(key)) index.set(key, [])
-    index.get(key).push(entry)
+    const npath = normalisePath(entry.path)
+    const query = canonicalQuery(entry.path)
+    // Always register under the stripped key so fallback resolution works.
+    const strippedKey = keyFor(entry.method, npath)
+    if (!index.has(strippedKey)) index.set(strippedKey, [])
+    index.get(strippedKey).push(entry)
+
+    // Also register under the query-aware key if the entry has query params.
+    if (query) {
+      const queryKey = keyFor(entry.method, npath, query)
+      if (!index.has(queryKey)) index.set(queryKey, [])
+      index.get(queryKey).push(entry)
+    }
   }
   for (const list of index.values()) list.sort((a, b) => a.t_ms - b.t_ms)
   return index
 }
 
 export function resolve(index, method, path, elapsedMs) {
-  const list = index.get(keyFor(method, normalisePath(path)))
+  const npath = normalisePath(path)
+  const query = canonicalQuery(path)
+
+  // Try the query-aware key first when the request has query params.
+  // This lets cursor-based endpoints (e.g. agent-log?from_line=N) return
+  // per-cursor snapshots rather than one collapsing pile of all log entries.
+  const list =
+    (query && index.get(keyFor(method, npath, query))) ||
+    index.get(keyFor(method, npath))
 
   if (!list || list.length === 0) {
     return {

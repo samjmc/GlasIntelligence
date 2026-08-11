@@ -44,6 +44,27 @@
       "path": "/api/billing/can-research",
       "status": 200,
       "body": { "success": true, "data": { "research_credits": null, "is_paid": false } }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/report/:id/agent-log?from_line=0",
+      "status": 200,
+      "body": { "success": true, "data": { "logs": [{ "action": "report_start", "timestamp": "2026-01-01T00:00:00Z" }], "from_line": 0 } }
+    },
+    {
+      "t_ms": 5000,
+      "method": "GET",
+      "path": "/api/report/:id/agent-log?from_line=0",
+      "status": 200,
+      "body": { "success": true, "data": { "logs": [{ "action": "report_start", "timestamp": "2026-01-01T00:00:00Z" }, { "action": "planning_complete", "timestamp": "2026-01-01T00:05:00Z" }], "from_line": 0 } }
+    },
+    {
+      "t_ms": 5000,
+      "method": "GET",
+      "path": "/api/report/:id/agent-log?from_line=1",
+      "status": 200,
+      "body": { "success": true, "data": { "logs": [{ "action": "planning_complete", "timestamp": "2026-01-01T00:05:00Z" }], "from_line": 1 } }
     }
   ]
 }

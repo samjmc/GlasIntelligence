@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import synthetic from './fixtures/synthetic-tape.json'
 import { encodeDemoId } from './sessionId'
+import { DEMO_SPEEDUP } from './config'
 
 // Helpers for setting up the localStorage mock used by the rehydration tests.
 function mockLocalStorage(store = {}) {
@@ -158,6 +159,48 @@ describe('adapter rehydration from localStorage', () => {
     const res = await demoAdapter({ url: '/api/billing/status', method: 'get' })
     expect(res.data.error).toBe('DEMO_NOT_RECORDED')
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('time progression through the adapter', () => {
+  // These tests verify that passing a real session id to setActiveScenario
+  // causes elapsedFor() to advance the virtual clock, and that the adapter
+  // returns the correct time-indexed snapshot. All previous tests call
+  // setActiveScenario(scenario) without a session id, which freezes the clock
+  // at t=0 — intentionally tested separately here.
+
+  it('returns the t=0 snapshot when clock is frozen (no session id)', async () => {
+    const { demoAdapter, setActiveScenario } = await import('./adapter')
+    setActiveScenario('synthetic') // no sessionId → clock frozen at t=0
+
+    const res = await demoAdapter({ url: '/api/simulation/status/demo_a_b_c', method: 'get' })
+    expect(res.data.data.twitter_current_round).toBe(0)
+  })
+
+  it('advances to the t=10000 snapshot when real wall time matches it', async () => {
+    const { demoAdapter, setActiveScenario } = await import('./adapter')
+
+    // Mint a session id that started 10000/DEMO_SPEEDUP ms ago so that elapsedFor()
+    // computes elapsed ≈ 10000 ms of virtual time.
+    const wallElapsed = Math.ceil(10000 / DEMO_SPEEDUP)
+    const startMs = Date.now() - wallElapsed
+    const sessionId = encodeDemoId(startMs, 'synthetic')
+    setActiveScenario('synthetic', sessionId)
+
+    const res = await demoAdapter({ url: '/api/simulation/status/demo_a_b_c', method: 'get' })
+    expect(res.data.data.twitter_current_round).toBe(1)
+  })
+
+  it('clamps at the last snapshot when virtual time exceeds the tape end', async () => {
+    const { demoAdapter, setActiveScenario } = await import('./adapter')
+
+    // Start time far in the past so elapsed >> tape duration
+    const startMs = Date.now() - 9_000_000
+    const sessionId = encodeDemoId(startMs, 'synthetic')
+    setActiveScenario('synthetic', sessionId)
+
+    const res = await demoAdapter({ url: '/api/simulation/status/demo_a_b_c', method: 'get' })
+    expect(res.data.data.runner_status).toBe('completed')
   })
 })
 
