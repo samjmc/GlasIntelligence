@@ -9,3 +9,7 @@ export const isDemoMode = import.meta.env.VITE_DEMO_MODE === '1'
 export const DEMO_SPEEDUP = Number(import.meta.env.VITE_DEMO_SPEEDUP) || 1
 
 export const DEMO_TARGET_MS = 90000
+
+// The localStorage key under which Home.vue persists the active session id.
+// Centralised here so adapter.js and Home.vue can't silently diverge on a rename.
+export const SESSION_KEY = 'glas_active_session'

@@ -32,18 +32,14 @@ jobs:
 
       # No secrets, no .env, no backend. If this build needs a credential,
       # the demo has stopped being keyless and this job should fail.
-      # VITE_DEMO_SPEEDUP=100 + VITE_ZEP_STEP3_STATUS_MS=300 make the fixture
-      # tape's running→completed transition happen in ~100ms of wall-clock time
-      # (t_ms=6000 / speedup=100 = 60ms) and polling fires every 300ms, so
-      # the test converges in well under 5 s.
+      # No speedup overrides — this builds exactly the bundle that ships to
+      # Cloudflare Pages (DEMO_SPEEDUP defaults to 1, poll intervals to 4000 ms).
+      # Verified empirically: both tests pass at shipped defaults in ~13 s.
       - name: Build the demo bundle
         run: npm ci && npm run build
         working-directory: frontend
         env:
           VITE_DEMO_MODE: '1'
-          VITE_DEMO_SPEEDUP: '100'
-          VITE_ZEP_STEP3_STATUS_MS: '300'
-          VITE_ZEP_STEP3_DETAIL_MS: '300'
 
       - name: Serve the bundle
         run: npx --yes serve -s dist -l 4173 &
