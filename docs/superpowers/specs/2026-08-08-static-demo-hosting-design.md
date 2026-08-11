@@ -12,7 +12,7 @@ Flask `replay.py`, and Phase 5 assumed a working deploy path.
 
 Neither assumption holds.
 
-- The deploy target `87.99.135.45` (Hetzner) is unreachable and the bill has lapsed.
+- The deploy target (the Hetzner box) is unreachable and the bill has lapsed.
   That single box runs the app, Redis, and four Celery workers.
 - Sam does not want to pay for hosting.
 - The `Deploy` workflow has never completed successfully. The repo was created

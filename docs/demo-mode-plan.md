@@ -105,18 +105,26 @@ Then re-run Phase 0's traverse with the recorder on. That produces the tape.
 
 ### Phase 2 — In-browser replay
 
-Replay is now entirely client-side. `frontend/src/demo/` contains:
-- `RecordedRequest.ts` — fixtures indexed by request signature and offset
-- `DemoReplayEngine.ts` — intercepts fetch calls, serves responses by elapsed time
-- `useDemoReplayControl.ts` — composable managing replay state and speed
+**Status: shipped.** Replay runs entirely client-side. `frontend/src/demo/` contains:
 
-When a `demo_`-prefixed ID is present:
-- Decode `start_ms` from the ID; compute `elapsed = (now − start_ms) × DEMO_SPEEDUP`.
-- Intercept all fetch calls; match request signature against fixtures; serve the response whose `offset_ms ≤ elapsed`.
-- Rewrite `{{PROJECT_ID}}`/`{{SIMULATION_ID}}`/`{{REPORT_ID}}` placeholders to this visitor's minted IDs.
-- Handle cursor-based log endpoints by slicing recorded logs to `elapsed` — reports stream frame by frame.
-- **Stub `initAuth()` to set a local demo user** — no signup needed, and `router.beforeEach` treats routes as public when IDs start with `demo_`.
-- **Any unmatched request returns the nearest recorded response rather than a network error.** A demo must never show an error state.
+- `tape.js` — loads `tape.json` for the chosen scenario, indexes entries by `METHOD normalised-path[?query]`, and resolves requests against the virtual clock via `resolve(index, method, path, elapsedMs)`. Query strings are stripped from index keys *except* where a recorded entry explicitly carries a query string — so cursor-based endpoints like `GET /api/report/:id/agent-log?from_line=N` are keyed separately per cursor value and fall back to the stripped key when no cursor-specific entry exists. This is the fix that prevents `from_line=0` responses from collapsing all subsequent cursor polls into one.
+- `adapter.js` — replaces the axios adapter and `window.fetch` with the tape resolver. Any path not in the tape returns `{ error: "DEMO_NOT_RECORDED" }` (the `NOT_RECORDED` sentinel) and fires a `demo:not-recorded` event instead of returning the nearest recorded response. The deliberate design choice is that a fixture gap must surface loudly — not silently return a plausible-looking stale answer.
+- `config.js` — exports `isDemoMode` (from `VITE_DEMO_MODE`) and `DEMO_SPEEDUP` (from `VITE_DEMO_SPEEDUP`, defaulting to `1`).
+- `sessionId.js` — mints and decodes `demo_<base64(startMs)>_<scenario>_<nonce>` IDs; `elapsedFor(sessionId)` decodes `start_ms` and returns `(now − start_ms) × DEMO_SPEEDUP`.
+
+When a `demo_`-prefixed scenario is active:
+- `adapter.js` intercepts all axios and fetch calls; matches against the tape index; serves the snapshot in force at `elapsedFor(sessionId, now)`.
+- `start_ms` is embedded in the demo session ID, so two simultaneous visitors are naturally isolated with no server state.
+- **Unmatched requests return `DEMO_NOT_RECORDED` and trigger a visible full-screen watchdog overlay** (in `DemoBanner.vue`, `[data-test="watchdog-not-recorded"]`). A tape-load failure triggers a separate overlay (`[data-test="watchdog-tape-failed"]`). These are the regression guard: if a fixture gap is introduced, the demo shows an unmissable error screen rather than silently hanging on a spinner.
+
+**Fixture inventory** (what the tape must contain, by screen):
+
+- *Intake:* `POST /api/session`, `POST /api/session/<id>/files`, `POST /api/session/<id>/research`, `GET /api/session/<id>/research/status`, `POST /api/source/deep-research` + `/status/<task_id>` + `/result/<task_id>`
+- *Step 1:* `POST /api/graph/ontology/generate`, `POST /api/graph/build`, `GET /api/graph/task/<task_id>`, `GET /api/graph/project/<id>`, `GET /api/graph/data/<graph_id>`, `POST /api/simulation/create`
+- *Step 2:* `GET /api/simulation/<id>`, `POST /api/simulation/prepare`, `POST /api/simulation/prepare/status`, `GET /api/simulation/<id>/profiles{,/realtime}`, `GET /api/simulation/<id>/config{,/realtime}`, `GET /api/simulation/entities/<graph_id>`
+- *Step 3:* `POST /api/simulation/start`, `GET /api/simulation/<id>/run-status{,/detail}`, `/actions`, `/timeline`, `/agent-stats`, `/posts`, `/comments`, `POST /api/report/generate`
+- *Step 4:* `GET /api/report/<id>`, `GET /api/report/<id>/agent-log?from_line=0`, `GET /api/report/<id>/agent-log?from_line=N` (one entry per cursor advance), `GET /api/report/<id>/payload`, `/console-log`, `/sections`, `/section/<i>`, `/progress`
+- *Step 5:* `POST /api/simulation/env-status`, `/interview/batch`, `/suggest-followups`, `POST /api/report/chat`
 
 **Fixture inventory** (what the tape must contain, by screen):
 
