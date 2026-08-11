@@ -34,9 +34,14 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export function setActiveScenario(scenario, sessionId = null) {
+// sessionId is required when a real run is in progress so elapsedFor() can
+// advance the virtual clock correctly. Passing undefined (or omitting it)
+// freezes the tape at t=0 — acceptable for tests that only check static
+// single-entry responses, but callers should pass the actual session id for
+// any test exercising time progression.
+export function setActiveScenario(scenario, sessionId) {
   activeScenario = scenario
-  activeSessionId = sessionId
+  activeSessionId = sessionId ?? null
 }
 
 function announceIfMissing(body, path) {

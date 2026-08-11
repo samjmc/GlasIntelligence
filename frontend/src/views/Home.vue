@@ -209,6 +209,7 @@
                   01 / Describe Your Scenario
                 </span>
                 <button
+                  v-if="!isDemoMode"
                   class="enhance-btn"
                   :disabled="!formData.simulationRequirement.trim() || loading || enhancing"
                   @click="handleEnhancePrompt"
@@ -539,6 +540,8 @@ import AppNavbar from '../components/AppNavbar.vue'
 import ResearchSettingsModal from '../components/ResearchSettingsModal.vue'
 import DossierModal from '../components/DossierModal.vue'
 import { isDemoMode, SESSION_KEY } from '../demo/config'
+import { encodeDemoId } from '../demo/sessionId'
+import { setActiveScenario } from '../demo/adapter'
 import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 import { authState, refreshAccessToken } from '../store/auth'
 import { useApi } from '../composables/useApi'
@@ -721,8 +724,8 @@ onMounted(async () => {
   // Fetch sidebar sessions
   loadActiveSessions()
 
-  // Handle return from Stripe research purchase
-  if (route.query.auto_research === 'true' && route.query.billing === 'success') {
+  // Handle return from Stripe research purchase (never happens in demo mode)
+  if (!isDemoMode && route.query.auto_research === 'true' && route.query.billing === 'success') {
     const refreshRes = await apiGet('/billing/status').catch(() => null)
     if (refreshRes?.success) researchCredits.value = refreshRes.data?.research_credits ?? 0
     if (activeSessionId.value && researchCredits.value > 0) {
@@ -910,11 +913,13 @@ function retryEmptyResearch() {
   runDeepResearch()
 }
 
-function onDemoScenarioSelected({ scenarioId, sessionId, prompt }) {
+function onDemoScenarioSelected({ scenarioId, prompt }) {
   formData.value.simulationRequirement = prompt
-  activeSessionId.value = sessionId
   demoScenarioId.value = scenarioId || ''
-  localStorage.setItem(SESSION_KEY, sessionId)
+  // Session id is minted later, at the moment startSimulation() fires, so that
+  // the virtual clock starts exactly when the run begins (not at picker-click).
+  // At 20× speedup even a 5 s pause between picker and run-start would burn
+  // 100 s of tape and skip straight to the completed state.
 }
 
 const triggerFileInput = () => { if (!loading.value) fileInput.value?.click() }
@@ -1221,6 +1226,10 @@ function saveDraft() {
 
 // Auto-save to session API (post-session)
 function scheduleSessionSave() {
+  // Demo mode has no real session API — skipping prevents PATCH /api/session/<demo id>
+  // from firing (which is not in the tape and would trigger the watchdog overlay).
+  // Matches the existing demo guard on restoreSession() at line ~719.
+  if (isDemoMode) return
   if (suppressAutoSave || !activeSessionId.value) return
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(async () => {
@@ -1315,10 +1324,22 @@ const startSimulation = async () => {
   if (!canSubmit.value || loading.value) return
 
   // Demo mode: skip Steps 1–2 (graph build / env setup). The tape replays a
-  // pre-recorded simulation so we navigate straight to the run view. The
-  // simulation ID is derived from the chosen scenario so the adapter can
-  // match requests to the right tape entries.
+  // pre-recorded simulation so we navigate straight to the run view.
+  // The session id is minted HERE — not at picker-click — so that the virtual
+  // clock encoded in the id starts at the exact moment the run begins.
+  // At 20× speedup, minting at picker-click and navigating 5 s later would
+  // burn 100 s of tape and skip straight past all round-by-round progression.
   if (isDemoMode) {
+    let sessionId
+    try {
+      sessionId = encodeDemoId(Date.now(), demoScenarioId.value)
+    } catch (e) {
+      error.value = `Cannot start demo: ${e.message}`
+      return
+    }
+    // Store before navigation so adapter.js can rehydrate on a page reload.
+    localStorage.setItem(SESSION_KEY, sessionId)
+    setActiveScenario(demoScenarioId.value, sessionId)
     const simId = `demo-${demoScenarioId.value}-sim`
     router.push({ name: 'SimulationRun', params: { simulationId: simId } })
     return

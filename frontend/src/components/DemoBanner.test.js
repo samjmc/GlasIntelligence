@@ -16,7 +16,7 @@ describe('DemoBanner', () => {
   })
 
   describe('watchdog: demo:not-recorded', () => {
-    it('shows not-recorded failure state and stops the run when the event fires', async () => {
+    it('shows not-recorded overlay when the event fires', async () => {
       const wrapper = mount(DemoBanner)
 
       // Initially no error overlay

@@ -23,7 +23,10 @@ describe('DemoScenarioPicker', () => {
     expect(wrapper.text()).toContain('Retail cap effects.')
   })
 
-  it('emits a demo session id and prompt when a card is clicked', async () => {
+  it('emits scenarioId and prompt (no sessionId) when a card is clicked', async () => {
+    // The session id is intentionally NOT minted at picker-click: it is minted
+    // at the moment startSimulation() fires so the virtual clock starts exactly
+    // when the run begins. See IMPORTANT 2 in the final-review-fixes report.
     const wrapper = mount(DemoScenarioPicker)
     await flushPromises()
 
@@ -32,7 +35,7 @@ describe('DemoScenarioPicker', () => {
     const [payload] = wrapper.emitted('select')[0]
     expect(payload.scenarioId).toBe('energy-price-cap')
     expect(payload.prompt).toBe('Model a cap')
-    expect(payload.sessionId).toMatch(/^demo_/)
+    expect(payload.sessionId).toBeUndefined()
   })
 
   it('shows an error state when the manifest fails to load', async () => {
@@ -44,14 +47,31 @@ describe('DemoScenarioPicker', () => {
     expect(wrapper.find('[data-test="picker-error"]').exists()).toBe(true)
   })
 
-  it('shows a visible error and does not emit select when a scenario id contains an underscore', async () => {
+  it('shows a visible error when the manifest schema_version does not match', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ schema_version: 99, scenarios: [] }),
+    }))
+
+    const wrapper = mount(DemoScenarioPicker)
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="picker-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="picker-error"]').text()).toContain('schema')
+  })
+
+  it('emits select even for scenario ids with underscores (underscore check moved to startSimulation)', async () => {
+    // The underscore constraint is enforced by encodeDemoId(), which is now called
+    // in Home.vue's startSimulation(), not in the picker. The picker's job is
+    // only selecting a scenario; the error surfaces at run-start if the id is invalid.
     global.fetch = vi.fn(async () => ({
       ok: true,
       status: 200,
       json: async () => ({
         schema_version: 1,
         scenarios: [
-          { id: 'energy_price_cap', title: 'Energy price cap', blurb: 'Retail cap effects.', prompt: 'Model a cap', duration_ms: 120000 },
+          { id: 'energy_price_cap', title: 'Energy price cap', blurb: 'Retail cap effects.', prompt: 'Model a cap' },
         ],
       }),
     }))
@@ -61,8 +81,8 @@ describe('DemoScenarioPicker', () => {
 
     await wrapper.find('[data-test="scenario-card"]').trigger('click')
 
-    expect(wrapper.find('[data-test="picker-error"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="picker-error"]').text()).toContain('energy_price_cap')
-    expect(wrapper.emitted('select')).toBeFalsy()
+    // The picker emits the select event; startSimulation() will catch the TypeError.
+    expect(wrapper.emitted('select')).toBeTruthy()
+    expect(wrapper.find('[data-test="picker-error"]').exists()).toBe(false)
   })
 })

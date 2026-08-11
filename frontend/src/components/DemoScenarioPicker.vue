@@ -24,34 +24,49 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { encodeDemoId } from '../demo/sessionId'
-import { setActiveScenario } from '../demo/adapter'
+import { SCHEMA_VERSION } from '../demo/tape'
 
 const scenarios = ref([])
 const error = ref(false)
 
 const emit = defineEmits(['select'])
 
+async function fetchManifest() {
+  // One retry: same policy as tape.js loadTape() — a CDN hiccup on a static
+  // asset is usually transient. A second failure is real and must surface.
+  let res
+  try {
+    res = await fetch('/demo/manifest.json')
+    if (!res.ok) throw new Error(`manifest ${res.status}`)
+  } catch {
+    res = await fetch('/demo/manifest.json')
+    if (!res.ok) throw new Error(`manifest ${res.status}`)
+  }
+  const manifest = await res.json()
+  if (manifest.schema_version !== SCHEMA_VERSION) {
+    throw new Error(
+      `Demo manifest schema ${manifest.schema_version} does not match expected ${SCHEMA_VERSION}`,
+    )
+  }
+  return manifest
+}
+
 onMounted(async () => {
   try {
-    const res = await fetch('/demo/manifest.json')
-    if (!res.ok) throw new Error(`manifest ${res.status}`)
-    scenarios.value = (await res.json()).scenarios
-  } catch {
-    error.value = true
+    const manifest = await fetchManifest()
+    scenarios.value = manifest.scenarios
+  } catch (e) {
+    error.value = e?.message || 'Demo failed to load. Please reload the page.'
   }
 })
 
 function choose(scenario) {
-  let sessionId
-  try {
-    sessionId = encodeDemoId(Date.now(), scenario.id)
-  } catch (e) {
-    error.value = `Cannot start scenario "${scenario.id}": ${e.message}`
-    return
-  }
-  setActiveScenario(scenario.id, sessionId)
-  emit('select', { scenarioId: scenario.id, sessionId, prompt: scenario.prompt })
+  // The session id is intentionally NOT minted here. Minting at picker-click
+  // and then navigating to start the run a few seconds later burns virtual-clock
+  // time between click and run-start — at 20× speedup a 5 s gap loses 100 s
+  // of tape. Home.vue's startSimulation() mints the id at the moment the run
+  // actually begins. The picker's only job is selecting a scenario.
+  emit('select', { scenarioId: scenario.id, prompt: scenario.prompt })
 }
 </script>
 
