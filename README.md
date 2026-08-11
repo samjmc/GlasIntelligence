@@ -103,11 +103,13 @@ All checks must pass before a PR can be merged to `main`:
 
 ### Static Demo Hosting
 
-The portfolio demo is a fully static site hosted on Cloudflare Pages. See `docs/demo-mode-plan.md` and `docs/superpowers/specs/2026-08-08-static-demo-hosting-design.md` for architecture and implementation details.
+The portfolio demo (`feat/static-demo-hosting`) is a fully static, keyless build that replays a recorded simulation in the browser — no backend, no Supabase, no API keys. See `docs/demo-mode-plan.md` and `docs/superpowers/specs/2026-08-08-static-demo-hosting-design.md` for architecture and implementation details.
 
-| Environment | URL | Trigger |
-|-------------|-----|---------|
-| **Demo** | https://demo.glasinsight.com | Merge to `main` (Cloudflare Pages auto-build) |
+Cloudflare Pages is not yet configured. Once the golden recording is committed and Pages is wired up, merging to `main` will trigger an automatic build and deploy.
+
+| Job | What it does |
+|-----|--------------|
+| **demo-e2e** | Builds `VITE_DEMO_MODE=1` bundle (no secrets), serves it, runs Playwright against the fixture tape |
 
 ## Monitoring & Observability
 
@@ -142,13 +144,14 @@ make monitoring-down
 
 ## Environment Variables
 
-See `.env.example` for all required configuration. The static demo build uses:
+See `.env.example` for all required configuration. The static demo build is intentionally keyless — the only variables it uses are:
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_DEMO_MODE` | Enable fixture-based replay (set to `1` for demo builds) |
-| `VITE_SUPABASE_URL` | Supabase URL for frontend build (optional, can be empty for demo) |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon key for frontend build (optional, can be empty for demo) |
+| `VITE_DEMO_MODE` | Enable fixture-based replay (set to `1` for demo builds). When unset, all demo branches are dead-code-eliminated by Vite. |
+| `VITE_DEMO_SPEEDUP` | Clock multiplier for the virtual tape clock (defaults to `1`; set to `run_duration_ms / 90000` for a ~90 s traverse). Not required for the CI demo-e2e job, which runs at the default. |
+
+Do **not** set `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` in the demo build — the demo makes no Supabase calls, and including those values would violate the zero-external-origins constraint.
 
 ## Project Structure
 
