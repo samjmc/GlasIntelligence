@@ -151,6 +151,117 @@
           ]
         }
       }
+    },
+    {
+      "t_ms": 0,
+      "method": "POST",
+      "path": "/api/report/generate",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": { "report_id": "demo-e2e-report" }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/report/:id",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "demo-e2e-report",
+          "simulation_id": "demo-e2e-sim",
+          "status": "generating"
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/report/:id/agent-log?from_line=0",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "from_line": 0,
+          "logs": [
+            {
+              "action": "report_start",
+              "timestamp": "2026-01-01T03:00:00Z",
+              "details": { "simulation_id": "demo-e2e-sim", "simulation_requirement": "Pharmacy First commissioning impact" }
+            },
+            {
+              "action": "planning_complete",
+              "timestamp": "2026-01-01T03:00:05Z",
+              "details": {
+                "outline": {
+                  "title": "Pharmacy First Commissioning: Stakeholder Impact Analysis",
+                  "summary": "An assessment of how NHS England commissioning community pharmacies for minor illnesses will affect key stakeholders.",
+                  "sections": [
+                    { "index": 1, "title": "Market Dynamics" },
+                    { "index": 2, "title": "Stakeholder Responses" }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/report/:id/agent-log?from_line=2",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "from_line": 2,
+          "logs": [
+            {
+              "action": "report_complete",
+              "timestamp": "2026-01-01T03:00:30Z",
+              "details": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/report/:id/payload",
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "decision": {
+            "verdict": "Go",
+            "confidence": "high",
+            "reasoning": "Simulation shows broad stakeholder alignment on expanding Pharmacy First to minor illness commissioning.",
+            "confidence_rationale": "High-confidence based on multi-round agent consensus.",
+            "key_drivers": [],
+            "causal_chain": [],
+            "sensitivity": [],
+            "flip_conditions": []
+          }
+        }
+      }
+    },
+    {
+      "t_ms": 0,
+      "method": "GET",
+      "path": "/api/report/:id/console-log",
+      "status": 200,
+      "body": { "success": true, "data": { "from_line": 0, "logs": [] } }
+    },
+    {
+      "t_ms": 0,
+      "method": "POST",
+      "path": "/api/simulation/suggest-followups",
+      "status": 200,
+      "body": { "success": true, "data": { "suggestions": [] } }
     }
   ]
 }

@@ -83,9 +83,24 @@ function loadFailureBody(url) {
 // covers the config-object call form used in api/graph.js, keeps the existing
 // response interceptor working, and guarantees nothing falls through to the vite
 // dev proxy at localhost:5001 when a fixture is missing.
+// Serialise axios params object into a query string so that cursor-based
+// endpoints (e.g. agent-log?from_line=N) reach answer() with their query
+// string intact. Without this, config.url is just the path and all cursor
+// values collapse onto the same stripped-key tape entry.
+function buildUrl(config) {
+  const base = config.url || ''
+  const params = config.params
+  if (!params || typeof params !== 'object') return base
+  const qs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&')
+  return qs ? `${base}?${qs}` : base
+}
+
 export async function demoAdapter(config) {
   const method = (config.method || 'get').toUpperCase()
-  const url = config.url || ''
+  const url = buildUrl(config)
 
   let status, body
   try {

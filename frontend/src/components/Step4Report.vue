@@ -788,7 +788,7 @@
           </div>
 
           <!-- Next Step Button - shown when complete -->
-          <button v-if="isComplete" class="next-step-btn" @click="goToInteraction">
+          <button v-if="isComplete" data-test="report-complete" class="next-step-btn" @click="goToInteraction">
             <span>Proceed to Deep Interaction</span>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -801,9 +801,10 @@
 
         <div class="workflow-timeline">
           <TransitionGroup name="timeline-item">
-            <div 
-              v-for="(log, idx) in displayLogs" 
+            <div
+              v-for="(log, idx) in displayLogs"
               :key="log.timestamp + '-' + idx"
+              data-test="agent-log-entry"
               class="timeline-item"
               :class="getTimelineItemClass(log, idx, displayLogs.length)"
             >
