@@ -617,6 +617,28 @@ git add frontend/public/demo/
 git commit -m "feat(demo): add recorded tape and manifest for the energy price cap scenario"
 ```
 
+- [ ] **Step 7: Reconcile with the e2e fixture** *(added during Task 8)*
+
+Task 8 ships its own synthetic fixture at `e2e/fixtures/demo/`, and
+`.github/workflows/demo-e2e.yml` copies it **over** `frontend/public/demo/manifest.json`
+before building. That is deliberate — the e2e must not depend on a real recording — but
+it has two consequences you need to handle here:
+
+1. CI overwrites your manifest, so the Demo E2E job never exercises the real scenario.
+   It proves the plumbing, not your tape. Verify the real scenario by hand against a
+   local build (and again on the Pages URL in Task 10, Step 4).
+2. If you want CI to cover the real scenario too, change the staging step to merge the
+   two manifests rather than overwrite, and keep `demo-e2e` first so
+   `demo.spec.js`'s `data-scenario-id="demo-e2e"` selector still resolves.
+
+Also confirm `REPLAY_TIMEOUT_MS` in `e2e/tests/demo.spec.js` (currently 120 s) still
+clears your real tape's wall-clock length once `VITE_DEMO_SPEEDUP` is applied.
+
+Finally, when you compute `VITE_DEMO_SPEEDUP` for Task 10, Step 3: note that
+`frontend/src/demo/config.js` reads it as `Number(...) || 1`, so a missing, zero, or
+non-numeric value silently falls back to 1 — the demo would replay at recorded speed
+(minutes, not 90 s) with no error. Double-check the value you paste into Cloudflare.
+
 ---
 
 ## Task 4: Tape loading, matching, and resolution
