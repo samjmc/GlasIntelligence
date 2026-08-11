@@ -1,5 +1,6 @@
 import { loadTape, resolve, elapsedFor, NOT_RECORDED, TAPE_LOAD_FAILED } from './tape'
 import { decodeDemoId } from './sessionId'
+import { SESSION_KEY } from './config'
 
 // Paths that fire on the Home page before the user has chosen a scenario
 // (billing status check, session sidebar, history panel). These are expected
@@ -20,7 +21,7 @@ let activeSessionId = null
 // watchdog design.
 if (typeof window !== 'undefined') {
   try {
-    const stored = localStorage.getItem('glas_active_session')
+    const stored = localStorage.getItem(SESSION_KEY)
     if (stored) {
       const decoded = decodeDemoId(stored)
       if (decoded?.scenario) {

@@ -132,8 +132,13 @@ describe('adapter rehydration from localStorage', () => {
   })
 
   it('fires the watchdog for non-allowlisted paths when no scenario is stored', async () => {
+    // Spy on jsdom's real window.dispatchEvent so we don't need to replace global.window
+    // (deleting it after the test would destroy jsdom's window for every subsequent test).
     const dispatched = []
-    global.window = { dispatchEvent: (e) => dispatched.push(e), addEventListener: () => {}, removeEventListener: () => {} }
+    const spy = vi.spyOn(window, 'dispatchEvent').mockImplementation((e) => {
+      dispatched.push(e)
+      return true
+    })
 
     const { demoAdapter } = await import('./adapter')
 
@@ -141,8 +146,7 @@ describe('adapter rehydration from localStorage', () => {
     expect(res.data.error).toBe('DEMO_NOT_RECORDED')
     expect(dispatched.some((e) => e.type === 'demo:not-recorded')).toBe(true)
 
-    // Restore window mock to avoid leaking into other tests.
-    delete global.window
+    spy.mockRestore()
   })
 
   it('ignores a stored session id that is not a valid demo id', async () => {

@@ -538,7 +538,7 @@ import HistoryDatabase from '../components/HistoryDatabase.vue'
 import AppNavbar from '../components/AppNavbar.vue'
 import ResearchSettingsModal from '../components/ResearchSettingsModal.vue'
 import DossierModal from '../components/DossierModal.vue'
-import { isDemoMode } from '../demo/config'
+import { isDemoMode, SESSION_KEY } from '../demo/config'
 import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 import { authState, refreshAccessToken } from '../store/auth'
 import { useApi } from '../composables/useApi'
@@ -638,7 +638,7 @@ const researchPollActive = ref(false)
 let autoSaveTimer = null
 let suppressAutoSave = false
 const DRAFT_KEY = 'glas_form_draft'
-const SESSION_KEY = 'glas_active_session'
+// SESSION_KEY imported from '../demo/config' — single source of truth shared with adapter.js
 
 const fullAnalysisMode = ref(false)
 const bundlePlan = ref([])
@@ -713,8 +713,10 @@ onMounted(async () => {
     }
   } catch { /* ignore corrupt draft */ }
 
-  // Restore active session
-  await restoreSession()
+  // Restore active session — skipped in demo mode: the picker owns session state
+  // and restoreSession() would call /api/session/<id> (not in the tape), triggering
+  // the watchdog overlay and then wiping the stored session id that adapter.js relies on.
+  if (!isDemoMode) await restoreSession()
 
   // Fetch sidebar sessions
   loadActiveSessions()
