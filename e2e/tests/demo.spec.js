@@ -37,7 +37,7 @@ test('demo makes no third-party requests', async ({ page, baseURL }) => {
   expect(external, `demo requested external origins:\n${external.join('\n')}`).toEqual([])
 })
 
-test('demo replays a scenario through to a report', async ({ page }) => {
+test('demo replays a scenario through to a rendered report', async ({ page }) => {
   // Per-test timeout — see comment at top of file.
   test.setTimeout(REPLAY_TIMEOUT_MS)
 
@@ -51,21 +51,52 @@ test('demo replays a scenario through to a report', async ({ page }) => {
   await page.locator('[data-test="scenario-card"][data-scenario-id="demo-e2e"]').click()
   await page.getByRole('button', { name: /start engine/i }).click()
 
-  // Assert the simulation replayed to completion. The "Generate Report" button
-  // carries data-test="simulation-complete" and is only enabled when phase===2
-  // (the completed state set by Step3Simulation). Asserting :not([disabled])
-  // confirms the simulation actually reached completion, not just that the
-  // button exists.
-  await expect(
-    page.locator('[data-test="simulation-complete"]:not([disabled])'),
-  ).toBeVisible({ timeout: REPLAY_TIMEOUT_MS })
+  // Step 3: Assert the simulation replayed to completion. The "Generate Report"
+  // button carries data-test="simulation-complete" and is only enabled when
+  // phase===2 (the completed state set by Step3Simulation). Asserting
+  // :not([disabled]) confirms the simulation actually reached completion, not
+  // just that the button exists.
+  const generateBtn = page.locator('[data-test="simulation-complete"]:not([disabled])')
+  await expect(generateBtn).toBeVisible({ timeout: REPLAY_TIMEOUT_MS })
 
-  // Negative assertions: the watchdog overlays must never appear.
+  // Negative assertions at Step 3: watchdog overlays must never appear.
   // toBeVisible() alone is insufficient because the overlay is position:fixed,
   // inset:0, z-index:9999 — an element underneath it would still pass
-  // toBeVisible(). We assert count===0 instead: if the overlay rendered at
-  // all, the demo has a fixture gap or a tape-load failure.
+  // toBeVisible(). We assert count===0 instead: if the overlay rendered at all,
+  // the demo has a fixture gap or a tape-load failure.
   await expect(page.locator('[data-test="watchdog-tape-failed"]')).toHaveCount(0)
   await expect(page.locator('[data-test="watchdog-not-recorded"]')).toHaveCount(0)
   await expect(page.locator('[data-test="picker-error"]')).toHaveCount(0)
+
+  // Step 4: Click "Generate Report" and wait for the report view to complete.
+  // This exercises POST /api/report/generate, GET /api/report/:id, and the
+  // cursor-based agent-log polling (the path that tape.js was recently fixed
+  // to key separately per from_line value).
+  await generateBtn.click()
+
+  // Wait for the "Proceed to Deep Interaction" button — it only renders when
+  // Step4Report.vue sets isComplete=true, which happens only after the tape
+  // delivers a report_complete log entry.
+  await expect(
+    page.locator('[data-test="report-complete"]'),
+  ).toBeVisible({ timeout: REPLAY_TIMEOUT_MS })
+
+  // Cursor-regression assertion: verify that the agent log has exactly 3
+  // entries (report_start, planning_complete, report_complete) — one from the
+  // from_line=0 poll and one from the from_line=2 poll. If the cursor keying
+  // regressed and both polls returned the same entries, we would see 5 or more
+  // (the from_line=0 entries would be appended again). If they collapsed into
+  // one entry, we would see fewer than 3.
+  await expect(page.locator('[data-test="agent-log-entry"]')).toHaveCount(3)
+
+  // Negative assertions at Step 4: watchdog overlays must still not appear.
+  await expect(page.locator('[data-test="watchdog-tape-failed"]')).toHaveCount(0)
+  await expect(page.locator('[data-test="watchdog-not-recorded"]')).toHaveCount(0)
+
+  // Verify the report title rendered from the planning_complete outline entry —
+  // this proves the tape content was actually consumed, not just that the page
+  // loaded.
+  await expect(
+    page.getByText('Pharmacy First Commissioning: Stakeholder Impact Analysis'),
+  ).toBeVisible()
 })
