@@ -49,9 +49,7 @@ FLUSH_EVERY = 20
 #                 true only after these fixes.
 # NOTE: DEMO must be anchored at start only (^demo[_-]) — an unanchored match
 # would hit mid-string and diverge from the JS counterpart.
-_UUID = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z"
-)
+_UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z")
 _DEMO = re.compile(r"^demo[_-]")
 _DIGITS = re.compile(r"^[0-9]+\Z")
 _OPAQUE = re.compile(r"^(?=.*[0-9])[A-Za-z0-9_-]{16,}\Z")
@@ -69,9 +67,7 @@ def normalise_path(path: str) -> str:
     segments = path.split("/")
     out = []
     for seg in segments:
-        if seg and (
-            _UUID.match(seg) or _DEMO.match(seg) or _DIGITS.match(seg) or _OPAQUE.match(seg)
-        ):
+        if seg and (_UUID.match(seg) or _DEMO.match(seg) or _DIGITS.match(seg) or _OPAQUE.match(seg)):
             out.append(":id")
         else:
             out.append(seg)
@@ -100,9 +96,7 @@ _BEARER = re.compile(r"\bBearer\s+\S+", re.IGNORECASE)
 _API_KEY = re.compile(r"\b(sk|pk|rk)_[A-Za-z0-9_-]{16,}")
 _STRIPE_CUS = re.compile(r"\bcus_[A-Za-z0-9]{8,}")
 _STRIPE_SUB = re.compile(r"\bsub_[A-Za-z0-9]{8,}")
-_REAL_UUID = re.compile(
-    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
-)
+_REAL_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 # Stable prefix for rewritten UUIDs — chosen to be recognisable in a tape.
 _DEMO_UUID_PREFIX = "demo0000"
@@ -148,6 +142,7 @@ def scrub_body(obj):
 
 
 # ── Recorder ─────────────────────────────────────────────────────────────────
+
 
 def init_recorder(app, out_path: str, scenario: str) -> "Callable[[], None]":
     """Initialise the demo recorder.
