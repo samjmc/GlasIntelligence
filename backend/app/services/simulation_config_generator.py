@@ -562,6 +562,7 @@ class SimulationConfigGenerator:
                     messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
                     response_format={"type": "json_object"},
                     temperature=0.7 - (attempt * 0.1),  # Lower temperature on each retry
+                    extra_body=({"thinking": {"type": "disabled"}} if "deepseek" in (self.base_url or "").lower() else None),
                     # No max_tokens set, letting the LLM generate freely
                 )
 

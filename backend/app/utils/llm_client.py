@@ -64,8 +64,20 @@ class LLMClient:
         }
         if response_format:
             kwargs["response_format"] = response_format
-
-        response = self._client.chat.completions.create(**kwargs)
+        # deepseek-v4 models reason by default, and hidden reasoning consumes
+        # the max_tokens budget — small caps (100-512) return EMPTY content
+        # with finish_reason=length (verified 2026-08-14). The app's structured
+        # calls don't need reasoning; disable it. Retry without the param for
+        # providers/models that reject it.
+        if "deepseek" in (self.base_url or "").lower():
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+            try:
+                response = self._client.chat.completions.create(**kwargs)
+            except Exception:
+                kwargs.pop("extra_body", None)
+                response = self._client.chat.completions.create(**kwargs)
+        else:
+            response = self._client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         # Strip <think> reasoning blocks (e.g. MiniMax M2.5)
         content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
