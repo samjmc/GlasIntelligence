@@ -324,6 +324,19 @@ class SimulationConfigGenerator:
             report_progress(1, "Generating time configuration...")
             time_config_result = self._generate_time_config(context, num_entities, type_dist)
             time_config = self._parse_time_config(time_config_result, num_entities, type_dist, context)
+            # Honor OASIS_DEFAULT_MAX_ROUNDS: clamp the LLM's chosen duration so
+            # the run stays within a bounded round budget. total_rounds derives
+            # from total_simulation_hours * 60 / minutes_per_round.
+            from ..config import Config
+
+            max_rounds = Config.OASIS_DEFAULT_MAX_ROUNDS
+            minutes_per_round = max(int(time_config.get("minutes_per_round", 60)), 30)
+            hours_for_max = max_rounds * minutes_per_round / 60
+            if time_config.get("total_simulation_hours", 72) > hours_for_max:
+                time_config["total_simulation_hours"] = int(hours_for_max)
+                reasoning_parts.append(
+                    f"Capped to {max_rounds} rounds (OASIS_DEFAULT_MAX_ROUNDS={max_rounds})"
+                )
             reasoning_parts.append(f"Time config: {time_config_result.get('reasoning', 'Success')}")
 
         # ========== Step 2: Generate event configuration ==========

@@ -118,7 +118,7 @@ def setup_oasis_logging(log_dir: str):
 
 try:
     from camel.models import ModelFactory
-    from camel.types import ModelPlatformType
+    from camel.types import ModelPlatformType, ModelType
     import oasis
     from oasis import (
         ActionType,
@@ -462,6 +462,17 @@ class RedditSimulationRunner:
         
         print(f"LLM配置: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
         
+        # Platform derived from the key type: Anthropic keys (sk-ant-*) must
+        # use the ANTHROPIC backend — hardcoding OPENAI 401s on every agent
+        # call and produces a silently empty simulation (found 2026-08-14,
+        # V9 verification: 26 rounds, zero actions).
+        if llm_api_key.startswith("sk-ant-"):
+            os.environ["ANTHROPIC_API_KEY"] = llm_api_key
+            return ModelFactory.create(
+                model_platform=ModelPlatformType.ANTHROPIC,
+                model_type=llm_model,
+                api_key=llm_api_key,
+            )
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
