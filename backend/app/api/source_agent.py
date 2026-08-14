@@ -153,8 +153,11 @@ def start_deep_research():
     DEPRECATED: Use POST /api/session/:id/research instead for session-based
     research with Supabase persistence and credit management.
     """
-    if not Config.DEEP_RESEARCH_ENABLED:
-        return jsonify({"success": False, "error": "Deep research is not enabled"}), 403
+    # research_agent_chain() always returns at least the LLM fallback, so the
+    # only hard "not enabled" case is a missing LLM key — check it before
+    # deducting a credit for a guaranteed failure.
+    if not Config.LLM_API_KEY:
+        return jsonify({"success": False, "error": "Research is not enabled"}), 403
 
     if not SupabaseDB.deduct_research_credit(g.user_id, "Deep research (legacy endpoint)"):
         profile = SupabaseDB.get_profile(g.user_id)
@@ -185,11 +188,10 @@ def start_deep_research():
     def _run():
         try:
             tm.update_task(task_id, message="Classifying scenario and selecting research angles...")
-            from ..services.deep_research_agent import DeepResearchAgent
+            from ..services.research_router import run_research_chain
 
-            agent = DeepResearchAgent()
+            dossier = run_research_chain(prompt, angle_overrides=angle_overrides)
             tm.update_task(task_id, message="Research in progress...")
-            dossier = agent.run(prompt, angle_overrides=angle_overrides)
             tm.complete_task(task_id, dossier)
         except Exception:
             logger.exception("Deep research background task failed")

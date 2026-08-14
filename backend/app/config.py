@@ -306,6 +306,10 @@ class Config:
     # Tavily Search Research (iterative search + LLM refinement)
     TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
     SEARCH_RESEARCH_ENABLED = bool(TAVILY_API_KEY)
+    # Model for the search-research chain (query gen, synthesis, critique,
+    # verification). Defaults to the general LLM model; for Claude runs set it
+    # explicitly (e.g. claude-sonnet-5).
+    SEARCH_RESEARCH_MODEL = os.environ.get("SEARCH_RESEARCH_MODEL") or os.environ.get("LLM_MODEL_NAME") or "gpt-4o-mini"
     SEARCH_RESEARCH_MAX_ROUNDS = _safe_int(
         os.environ.get("SEARCH_RESEARCH_MAX_ROUNDS", "3"),
         3,

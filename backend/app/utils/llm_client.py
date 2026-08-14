@@ -97,8 +97,37 @@ class LLMClient:
         if system:
             kwargs["system"] = system
 
-        response = self._client.messages.create(**kwargs)
-        return response.content[0].text
+        # claude-sonnet-5/opus-5 (verified 2026-08-14) run extended thinking by
+        # default. Thinking tokens count against max_tokens, so small budgets
+        # (512-4096) get starved: responses truncate mid-sentence or return a
+        # thinking-only block with no text. Disable thinking explicitly.
+        kwargs["thinking"] = {"type": "disabled"}
+
+        try:
+            response = self._client.messages.create(**kwargs)
+        except Exception as exc:
+            # Newer Claude models (claude-sonnet-5 / opus-5, verified 2026-08-14)
+            # reject the temperature parameter outright (HTTP 400: "temperature
+            # is deprecated for this model"). Retry without it rather than
+            # breaking every LLM call on an Anthropic key.
+            if getattr(exc, "status_code", None) == 400:
+                message = str(exc)
+                if "temperature" in message:
+                    kwargs.pop("temperature", None)
+                elif "thinking" in message:
+                    kwargs.pop("thinking", None)
+                else:
+                    raise
+                response = self._client.messages.create(**kwargs)
+            else:
+                raise
+        # Newer Claude models (claude-sonnet-5) may return a ThinkingBlock
+        # before the TextBlock; find the first text block instead of
+        # assuming content[0] is text.
+        for block in response.content:
+            if getattr(block, "type", None) == "text":
+                return block.text
+        raise ValueError(f"No text block in Anthropic response: {response.content}")
 
     def chat_json(
         self, messages: list[dict[str, str]], temperature: float = 0.3, max_tokens: int = 4096

@@ -37,6 +37,12 @@ export function normalisePath(path) {
 // Exported so tests can verify cross-language parity with the Python recorder.
 // Returns the query string (without '?') sorted by key for stability,
 // or '' if there are no query params.
+//
+// MUST stay byte-identical to canonical_query() in
+// backend/app/middleware/demo_recorder.py. Python's urllib.parse.urlencode
+// uses quote_plus: space -> '+', safe set is [A-Za-z0-9_.-~], and ! * ' ( )
+// get percent-encoded. encodeURIComponent differs on all of those, so the
+// output is re-mapped to Python's encoding — the recorder's key is the truth.
 export function canonicalQuery(path) {
   const idx = path.indexOf('?')
   if (idx === -1) return ''
@@ -46,9 +52,15 @@ export function canonicalQuery(path) {
     .split('&')
     .filter(Boolean)
     .map((kv) => kv.split('=').map(decodeURIComponent))
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v ?? '')}`)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${pyQuotePlus(k)}=${pyQuotePlus(v ?? '')}`)
     .join('&')
+}
+
+function pyQuotePlus(s) {
+  return encodeURIComponent(s)
+    .replace(/%20/g, '+')
+    .replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())
 }
 
 // Build the index key for an entry. When an entry carries a query string,

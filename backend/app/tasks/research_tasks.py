@@ -59,31 +59,9 @@ def run_deep_research_task(
         if scenario_context:
             context = scenario_context
 
-        from ..config import Config
+        from ..services.research_router import run_research_chain
 
-        if Config.DEEP_RESEARCH_ENABLED:
-            from ..services.deep_research_agent import DeepResearchAgent
-
-            agent = DeepResearchAgent()
-            dossier = agent.run(prompt, context=context, angle_overrides=angle_overrides)
-        elif Config.SEARCH_RESEARCH_ENABLED:
-            from ..services.search_research_agent import SearchResearchAgent
-            from ..services.llm_research_agent import LLMResearchAgent
-
-            try:
-                dossier = SearchResearchAgent().run(prompt, context=context, angle_overrides=angle_overrides)
-            except Exception as search_exc:
-                logger.warning(
-                    "Session %s: SearchResearchAgent failed (%s: %s), falling back to LLMResearchAgent",
-                    session_id,
-                    type(search_exc).__name__,
-                    search_exc,
-                )
-                dossier = LLMResearchAgent().run(prompt, context=context, angle_overrides=angle_overrides)
-        else:
-            from ..services.llm_research_agent import LLMResearchAgent
-
-            dossier = LLMResearchAgent().run(prompt, context=context, angle_overrides=angle_overrides)
+        dossier = run_research_chain(prompt, context=context, angle_overrides=angle_overrides)
 
         if dossier.get("error"):
             raise RuntimeError("Research agent returned error flag")

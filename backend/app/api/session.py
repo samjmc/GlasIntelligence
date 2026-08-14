@@ -13,7 +13,13 @@ from ..utils.logger import get_logger
 session_bp = Blueprint("session", __name__)
 logger = get_logger("glas.session")
 
-STALE_RESEARCH_MINUTES = 30
+# Stale-research timeout for the poller. Must exceed research_tasks.py's
+# soft_time_limit (2700s = 45 min): a legitimately long research task (the
+# OpenAI deep-research path runs 30-45 min) must never trip the poller's
+# refund while still running — that double-refunds and marks a live run
+# failed. At 50 min, by the time the poller fires the task has hard-killed
+# and its own failure path has refunded exactly once.
+STALE_RESEARCH_MINUTES = 50
 
 
 @session_bp.route("", methods=["POST"])
