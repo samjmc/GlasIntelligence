@@ -330,10 +330,12 @@ class SimulationConfigGenerator:
             from ..config import Config
 
             max_rounds = Config.OASIS_DEFAULT_MAX_ROUNDS
-            minutes_per_round = max(int(time_config.get("minutes_per_round", 60)), 30)
+            minutes_per_round = max(int(time_config.minutes_per_round or 60), 30)
             hours_for_max = max_rounds * minutes_per_round / 60
-            if time_config.get("total_simulation_hours", 72) > hours_for_max:
-                time_config["total_simulation_hours"] = int(hours_for_max)
+            if int(time_config.total_simulation_hours or 72) > hours_for_max:
+                time_config = TimeSimulationConfig(
+                    **{**asdict(time_config), "total_simulation_hours": int(hours_for_max)}
+                )
                 reasoning_parts.append(
                     f"Capped to {max_rounds} rounds (OASIS_DEFAULT_MAX_ROUNDS={max_rounds})"
                 )
