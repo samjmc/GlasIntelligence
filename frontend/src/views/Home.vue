@@ -199,6 +199,8 @@
             </div>
           </div>
 
+          <DemoScenarioPicker v-if="isDemoMode" @select="onDemoScenarioSelected" />
+
           <div class="console-box">
             <div class="console-section">
               <div class="console-header">
@@ -207,6 +209,7 @@
                   01 / Describe Your Scenario
                 </span>
                 <button
+                  v-if="!isDemoMode"
                   class="enhance-btn"
                   :disabled="!formData.simulationRequirement.trim() || loading || enhancing"
                   @click="handleEnhancePrompt"
@@ -222,6 +225,7 @@
                   placeholder="What happens if Ofgem removes the energy price cap? What if the US imposes new tariffs on EU goods?"
                   rows="5"
                   :disabled="loading"
+                  :readonly="isDemoMode"
                 ></textarea>
                 <div class="model-badge">Engine: GLAS v1.0</div>
               </div>
@@ -323,7 +327,7 @@
                 </button>
               </div>
 
-              <div class="console-section">
+              <div v-if="!isDemoMode" class="console-section">
                 <div class="console-divider inner-divider">
                   <span>Upload Additional Documents</span>
                 </div>
@@ -378,7 +382,7 @@
                   >
                     <span v-if="!researchLoading">
                       {{ isPaidUser ? 'Deep Research Briefing' : 'Deep Research (Paid Plans)' }}
-                      <span v-if="isPaidUser && researchCredits !== null" class="research-credits-badge">{{ researchCredits }}</span>
+                      <span v-if="!isDemoMode && isPaidUser && researchCredits !== null" class="research-credits-badge">{{ researchCredits }}</span>
                     </span>
                     <span v-else class="research-loading-content">
                       <span class="progress-bar-track">
@@ -535,6 +539,10 @@ import HistoryDatabase from '../components/HistoryDatabase.vue'
 import AppNavbar from '../components/AppNavbar.vue'
 import ResearchSettingsModal from '../components/ResearchSettingsModal.vue'
 import DossierModal from '../components/DossierModal.vue'
+import { isDemoMode, SESSION_KEY } from '../demo/config'
+import { encodeDemoId } from '../demo/sessionId'
+import { setActiveScenario } from '../demo/adapter'
+import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 import { authState, refreshAccessToken } from '../store/auth'
 import { useApi } from '../composables/useApi'
 import {
@@ -556,6 +564,10 @@ const loading = ref(false)
 const error = ref('')
 const isDragOver = ref(false)
 const fileInput = ref(null)
+
+// In demo mode, tracks the scenario chosen in the picker so startSimulation
+// can navigate directly to the pre-recorded simulation replay.
+const demoScenarioId = ref('')
 
 const enhancing = ref(false)
 const showUpgradeModal = ref(false)
@@ -629,7 +641,7 @@ const researchPollActive = ref(false)
 let autoSaveTimer = null
 let suppressAutoSave = false
 const DRAFT_KEY = 'glas_form_draft'
-const SESSION_KEY = 'glas_active_session'
+// SESSION_KEY imported from '../demo/config' — single source of truth shared with adapter.js
 
 const fullAnalysisMode = ref(false)
 const bundlePlan = ref([])
@@ -704,14 +716,16 @@ onMounted(async () => {
     }
   } catch { /* ignore corrupt draft */ }
 
-  // Restore active session
-  await restoreSession()
+  // Restore active session — skipped in demo mode: the picker owns session state
+  // and restoreSession() would call /api/session/<id> (not in the tape), triggering
+  // the watchdog overlay and then wiping the stored session id that adapter.js relies on.
+  if (!isDemoMode) await restoreSession()
 
   // Fetch sidebar sessions
   loadActiveSessions()
 
-  // Handle return from Stripe research purchase
-  if (route.query.auto_research === 'true' && route.query.billing === 'success') {
+  // Handle return from Stripe research purchase (never happens in demo mode)
+  if (!isDemoMode && route.query.auto_research === 'true' && route.query.billing === 'success') {
     const refreshRes = await apiGet('/billing/status').catch(() => null)
     if (refreshRes?.success) researchCredits.value = refreshRes.data?.research_credits ?? 0
     if (activeSessionId.value && researchCredits.value > 0) {
@@ -753,6 +767,9 @@ const starterExamples = [
 
 const canSubmit = computed(() => {
   const hasPrompt = formData.value.simulationRequirement.trim() !== ''
+  // In demo mode the file-upload section is hidden and files are not needed;
+  // the adapter replays from the tape, so a prompt alone is sufficient.
+  if (isDemoMode) return hasPrompt
   const hasSources = files.value.length > 0 || briefing.value !== null
   return hasPrompt && hasSources
 })
@@ -894,6 +911,15 @@ function retryEmptyResearch() {
   removeBriefing()
   researchDossier.value = null
   runDeepResearch()
+}
+
+function onDemoScenarioSelected({ scenarioId, prompt }) {
+  formData.value.simulationRequirement = prompt
+  demoScenarioId.value = scenarioId || ''
+  // Session id is minted later, at the moment startSimulation() fires, so that
+  // the virtual clock starts exactly when the run begins (not at picker-click).
+  // At 20× speedup even a 5 s pause between picker and run-start would burn
+  // 100 s of tape and skip straight to the completed state.
 }
 
 const triggerFileInput = () => { if (!loading.value) fileInput.value?.click() }
@@ -1200,6 +1226,10 @@ function saveDraft() {
 
 // Auto-save to session API (post-session)
 function scheduleSessionSave() {
+  // Demo mode has no real session API — skipping prevents PATCH /api/session/<demo id>
+  // from firing (which is not in the tape and would trigger the watchdog overlay).
+  // Matches the existing demo guard on restoreSession() at line ~719.
+  if (isDemoMode) return
   if (suppressAutoSave || !activeSessionId.value) return
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(async () => {
@@ -1292,6 +1322,29 @@ function removeScenario(index) {
 
 const startSimulation = async () => {
   if (!canSubmit.value || loading.value) return
+
+  // Demo mode: skip Steps 1–2 (graph build / env setup). The tape replays a
+  // pre-recorded simulation so we navigate straight to the run view.
+  // The session id is minted HERE — not at picker-click — so that the virtual
+  // clock encoded in the id starts at the exact moment the run begins.
+  // At 20× speedup, minting at picker-click and navigating 5 s later would
+  // burn 100 s of tape and skip straight past all round-by-round progression.
+  if (isDemoMode) {
+    let sessionId
+    try {
+      sessionId = encodeDemoId(Date.now(), demoScenarioId.value)
+    } catch (e) {
+      error.value = `Cannot start demo: ${e.message}`
+      return
+    }
+    // Store before navigation so adapter.js can rehydrate on a page reload.
+    localStorage.setItem(SESSION_KEY, sessionId)
+    setActiveScenario(demoScenarioId.value, sessionId)
+    const simId = `demo-${demoScenarioId.value}-sim`
+    router.push({ name: 'SimulationRun', params: { simulationId: simId } })
+    return
+  }
+
   if (!isPaidUser.value) {
     showUpgradeModal.value = true
     return

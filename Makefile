@@ -1,4 +1,4 @@
-.PHONY: dev build test lint lint-backend lint-frontend test-backend test-frontend test-integration test-e2e setup setup-hooks deploy-staging deploy-prod monitoring-up monitoring-down clean
+.PHONY: dev build test lint lint-backend lint-frontend test-backend test-frontend test-integration test-e2e setup setup-hooks monitoring-up monitoring-down clean
 
 # ──── Development ────
 
@@ -50,15 +50,6 @@ build:
 		--build-arg VITE_SUPABASE_URL=$${VITE_SUPABASE_URL} \
 		--build-arg VITE_SUPABASE_ANON_KEY=$${VITE_SUPABASE_ANON_KEY} \
 		-t glas-intelligence:local .
-
-# ──── Deployment ────
-
-deploy-staging:
-	docker compose -f docker-compose.staging.yml pull
-	docker compose -f docker-compose.staging.yml up -d
-
-deploy-prod:
-	docker compose -f docker-compose.prod.yml up -d --build
 
 # ──── Monitoring ────
 

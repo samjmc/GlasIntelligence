@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "demo-e2e",
+      "title": "Pharmacy First commissioning",
+      "blurb": "NHS England commissions community pharmacies to treat minor illnesses without a GP appointment.",
+      "prompt": "What happens if NHS England commissions community pharmacies to treat minor illnesses under Pharmacy First?"
+    }
+  ]
+}

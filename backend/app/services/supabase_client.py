@@ -227,7 +227,12 @@ class SupabaseDB:
                 )
                 .execute()
             )
-            return True
+            # Mirror the deduct path: check the RPC actually refunded rather
+            # than reporting success unconditionally.
+            result = resp.data
+            if isinstance(result, list):
+                result = result[0] if result else -1
+            return int(result) >= 0
         except Exception:
             logger.warning(f"Research refund RPC unavailable, falling back for user {user_id}")
             profile = cls.get_profile(user_id)

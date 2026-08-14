@@ -103,18 +103,28 @@ There is nothing to cache until a run completes. Everything else is blocked on t
 
 Then re-run Phase 0's traverse with the recorder on. That produces the tape.
 
-### Phase 2 — The replay layer
+### Phase 2 — In-browser replay
 
-`backend/app/demo/replay.py` — a `before_request` hook active under `DEMO_MODE=1`, engaging only when the request path or body carries a `demo_`-prefixed ID.
+**Status: shipped.** Replay runs entirely client-side. `frontend/src/demo/` contains:
 
-- Decodes `start_ms` from the demo ID; computes `elapsed = (now − start_ms) × DEMO_SPEEDUP`.
-- Matches the request signature against the tape; among candidates, serves the latest whose `offset_ms ≤ elapsed`.
-- Rewrites `{{PROJECT_ID}}`/`{{SIMULATION_ID}}`/`{{REPORT_ID}}` placeholders to this visitor's minted IDs on the way out.
-- Handles the two cursor-based log endpoints (`/agent-log?from_line=`, `/console-log?from_line=`) by slicing the recorded log to `elapsed` — this is what makes the report *stream* rather than appear.
-- Short-circuits `can-research` / `can-simulate` to allowed.
-- **Any unmatched request returns the nearest recorded response rather than a 500.** A demo must never show an error screen.
+- `tape.js` — loads `tape.json` for the chosen scenario, indexes entries by `METHOD normalised-path[?query]`, and resolves requests against the virtual clock via `resolve(index, method, path, elapsedMs)`. Query strings are stripped from index keys *except* where a recorded entry explicitly carries a query string — so cursor-based endpoints like `GET /api/report/:id/agent-log?from_line=N` are keyed separately per cursor value and fall back to the stripped key when no cursor-specific entry exists. This is the fix that prevents `from_line=0` responses from collapsing all subsequent cursor polls into one.
+- `adapter.js` — replaces the axios adapter and `window.fetch` with the tape resolver. Any path not in the tape returns `{ error: "DEMO_NOT_RECORDED" }` (the `NOT_RECORDED` sentinel) and fires a `demo:not-recorded` event instead of returning the nearest recorded response. The deliberate design choice is that a fixture gap must surface loudly — not silently return a plausible-looking stale answer.
+- `config.js` — exports `isDemoMode` (from `VITE_DEMO_MODE`) and `DEMO_SPEEDUP` (from `VITE_DEMO_SPEEDUP`, defaulting to `1`).
+- `sessionId.js` — mints and decodes `demo_<base64(startMs)>_<scenario>_<nonce>` IDs; `elapsedFor(sessionId)` decodes `start_ms` and returns `(now − start_ms) × DEMO_SPEEDUP`.
 
-New endpoint `POST /api/demo/start` → mints the ID triple and returns the entry route.
+When a `demo_`-prefixed scenario is active:
+- `adapter.js` intercepts all axios and fetch calls; matches against the tape index; serves the snapshot in force at `elapsedFor(sessionId, now)`.
+- `start_ms` is embedded in the demo session ID, so two simultaneous visitors are naturally isolated with no server state.
+- **Unmatched requests return `DEMO_NOT_RECORDED` and trigger a visible full-screen watchdog overlay** (in `DemoBanner.vue`, `[data-test="watchdog-not-recorded"]`). A tape-load failure triggers a separate overlay (`[data-test="watchdog-tape-failed"]`). These are the regression guard: if a fixture gap is introduced, the demo shows an unmissable error screen rather than silently hanging on a spinner.
+
+**Fixture inventory** (what the tape must contain, by screen):
+
+- *Intake:* `POST /api/session`, `POST /api/session/<id>/files`, `POST /api/session/<id>/research`, `GET /api/session/<id>/research/status`, `POST /api/source/deep-research` + `/status/<task_id>` + `/result/<task_id>`
+- *Step 1:* `POST /api/graph/ontology/generate`, `POST /api/graph/build`, `GET /api/graph/task/<task_id>`, `GET /api/graph/project/<id>`, `GET /api/graph/data/<graph_id>`, `POST /api/simulation/create`
+- *Step 2:* `GET /api/simulation/<id>`, `POST /api/simulation/prepare`, `POST /api/simulation/prepare/status`, `GET /api/simulation/<id>/profiles{,/realtime}`, `GET /api/simulation/<id>/config{,/realtime}`, `GET /api/simulation/entities/<graph_id>`
+- *Step 3:* `POST /api/simulation/start`, `GET /api/simulation/<id>/run-status{,/detail}`, `/actions`, `/timeline`, `/agent-stats`, `/posts`, `/comments`, `POST /api/report/generate`
+- *Step 4:* `GET /api/report/<id>`, `GET /api/report/<id>/agent-log?from_line=0`, `GET /api/report/<id>/agent-log?from_line=N` (one entry per cursor advance), `GET /api/report/<id>/payload`, `/console-log`, `/sections`, `/section/<i>`, `/progress`
+- *Step 5:* `POST /api/simulation/env-status`, `/interview/batch`, `/suggest-followups`, `POST /api/report/chat`
 
 **Fixture inventory** (what the tape must contain, by screen):
 
@@ -127,10 +137,11 @@ New endpoint `POST /api/demo/start` → mints the ID triple and returns the entr
 
 ### Phase 3 — Public entry
 
-- Router guard: treat a route as public when its `projectId`/`simulationId`/`reportId` param starts with `demo_`. One condition in `beforeEach`, no route duplication.
-- A "See a worked example →" CTA on `LandingView.vue` and `Home.vue` calling `POST /api/demo/start`, then routing to Step 1.
+- A "See a worked example →" CTA on `LandingView.vue` and `Home.vue` generating a demo session ID client-side (`demo_<base64(timestamp)>_<nonce>`) and routing to Step 1 with that ID.
 - A persistent, dismissible **"Demo — replaying a recorded simulation"** banner. Being straight about it is a credibility gain, not a loss; the alternative reads as a fake if anyone notices.
 - Suppress signup/upgrade prompts and the credit counter while in demo mode.
+
+*Note: a router guard treating `demo_`-prefixed routes as public is unnecessary. `frontend/src/main.js` awaits `initAuth()` before mounting, and with no Supabase key `initAuth()` creates a local user, so `router.beforeEach` already passes all routes when `authState.user` is set.*
 
 ### Phase 4 — Pacing and Step 5
 
@@ -140,7 +151,8 @@ New endpoint `POST /api/demo/start` → mints the ID triple and returns the entr
 
 ### Phase 5 — Ship it
 
-- Dedicated build with `DEMO_MODE=1` and **no** vendor keys — proves the demo is genuinely keyless. If it runs with an empty `.env`, it cannot rot.
+- Static build with `VITE_DEMO_MODE=1` and **no** vendor keys — proves the demo is genuinely keyless. If the built frontend runs with an empty `.env`, it cannot rot.
+- Cloudflare Pages Git integration — pushing to main triggers a build (Vite produces `/frontend/dist/`), auto-deployed to `https://demo.glasinsight.com` (see `docs/superpowers/specs/2026-08-08-static-demo-hosting-design.md` for architecture).
 - Playwright spec in `e2e/tests/demo-flow.spec.js` walking all six screens and asserting no error state. This is the regression guard that keeps the demo working while you keep developing the real product.
 - README section: what's real, what's replayed, and a link.
 

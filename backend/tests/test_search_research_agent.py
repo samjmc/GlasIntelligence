@@ -1,5 +1,4 @@
 from unittest.mock import patch, MagicMock
-import pytest
 
 from app.services.search_research_agent import SearchResearchAgent
 
@@ -72,9 +71,7 @@ def test_iterates_when_score_below_threshold(MockLLM, MockTavily):
 
     mock_tavily = MagicMock()
     MockTavily.return_value = mock_tavily
-    mock_tavily.search.return_value = [
-        {"title": "T", "url": "https://x.com/1", "content": "C"}
-    ]
+    mock_tavily.search.return_value = [{"title": "T", "url": "https://x.com/1", "content": "C"}]
 
     agent = SearchResearchAgent()
     result = agent.run("scenario needing iteration")
@@ -129,12 +126,101 @@ def test_deduplicates_sources(MockLLM, MockTavily):
     mock_tavily = MagicMock()
     MockTavily.return_value = mock_tavily
     # Both rounds return the same URL
-    mock_tavily.search.return_value = [
-        {"title": "Same", "url": "https://same.com", "content": "C"}
-    ]
+    mock_tavily.search.return_value = [{"title": "Same", "url": "https://same.com", "content": "C"}]
 
     agent = SearchResearchAgent()
     result = agent.run("dedupe test")
 
     urls = [s["url"] for s in result["sources"]]
     assert urls.count("https://same.com") == 1
+
+
+_VERIFICATION_RESPONSE = {
+    "verified_claims": [
+        {"claim": "Fact one: 42%", "source_url": "https://example.com/a"},
+    ],
+    "unverified_claims": [
+        {"claim": "Fact two: 100bn", "note": "not present in search results"},
+    ],
+    "corrections": [
+        {"original": "42% market share", "corrected": "43% market share", "reason": "source reports 43%"},
+    ],
+}
+
+
+@patch("app.services.search_research_agent.TavilyClient")
+@patch("app.services.search_research_agent.LLMClient")
+def test_verification_pass_appends_notes_to_dossier(MockLLM, MockTavily):
+    mock_llm = MagicMock()
+    MockLLM.return_value = mock_llm
+    mock_llm.chat.side_effect = ['["query one"]', _SYNTHESIS_MD]
+    mock_llm.chat_json.side_effect = [
+        {"score": 9.0, "gaps": [], "follow_up_queries": []},
+        _VERIFICATION_RESPONSE,
+        _PRECEDENTS_RESPONSE,
+    ]
+
+    mock_tavily = MagicMock()
+    MockTavily.return_value = mock_tavily
+    mock_tavily.search.return_value = [
+        {"title": "Article A", "url": "https://example.com/a", "content": "Content A"},
+    ]
+
+    agent = SearchResearchAgent()
+    result = agent.run("test scenario about trade wars")
+
+    assert "## Verification Notes" in result["summary_md"]
+    assert "### Verified against search results" in result["summary_md"]
+    assert "- Fact one: 42% — https://example.com/a" in result["summary_md"]
+    assert "### Unverified claims" in result["summary_md"]
+    assert "### Corrected claims" in result["summary_md"]
+    assert "→ 43% market share" in result["summary_md"]
+    assert result["verification"]["corrections"][0]["corrected"] == "43% market share"
+
+
+@patch("app.services.search_research_agent.TavilyClient")
+@patch("app.services.search_research_agent.LLMClient")
+def test_verification_skipped_when_no_sources(MockLLM, MockTavily):
+    mock_llm = MagicMock()
+    MockLLM.return_value = mock_llm
+    mock_llm.chat.side_effect = ['["query one"]', _SYNTHESIS_MD]
+    mock_llm.chat_json.side_effect = [
+        {"score": 9.0, "gaps": [], "follow_up_queries": []},
+        _PRECEDENTS_RESPONSE,
+    ]
+
+    mock_tavily = MagicMock()
+    MockTavily.return_value = mock_tavily
+    mock_tavily.search.return_value = []
+
+    agent = SearchResearchAgent()
+    result = agent.run("scenario with no search hits")
+
+    assert result["verification"] == {}
+    assert "## Verification Notes" not in result["summary_md"]
+    assert result["summary_md"] == _SYNTHESIS_MD
+
+
+@patch("app.services.search_research_agent.TavilyClient")
+@patch("app.services.search_research_agent.LLMClient")
+def test_verification_failure_does_not_fail_run(MockLLM, MockTavily):
+    mock_llm = MagicMock()
+    MockLLM.return_value = mock_llm
+    mock_llm.chat.side_effect = ['["query one"]', _SYNTHESIS_MD]
+    mock_llm.chat_json.side_effect = [
+        {"score": 9.0, "gaps": [], "follow_up_queries": []},
+        RuntimeError("verification LLM down"),
+        _PRECEDENTS_RESPONSE,
+    ]
+
+    mock_tavily = MagicMock()
+    MockTavily.return_value = mock_tavily
+    mock_tavily.search.return_value = [
+        {"title": "Article A", "url": "https://example.com/a", "content": "Content A"},
+    ]
+
+    agent = SearchResearchAgent()
+    result = agent.run("scenario")
+
+    assert result["verification"] == {}
+    assert result["summary_md"] == _SYNTHESIS_MD

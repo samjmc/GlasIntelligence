@@ -228,7 +228,11 @@ class OntologyGenerator:
 
         messages = [{"role": "system", "content": ONTOLOGY_SYSTEM_PROMPT}, {"role": "user", "content": user_message}]
 
-        result = self.llm_client.chat_json(messages=messages, temperature=0.3, max_tokens=4096)
+        # Output cap was 4096 tokens: a rich dossier (the full research
+        # dossier the frontend uploads) pushes the ontology JSON past it,
+        # truncating mid-JSON and failing every retry (V8 verification,
+        # 2026-08-14). 16384 comfortably fits a 10-20 entity ontology.
+        result = self.llm_client.chat_json(messages=messages, temperature=0.3, max_tokens=16384)
 
         result = self._validate_and_process(result)
         result["entity_inventory"] = entity_inventory
