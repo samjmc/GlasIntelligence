@@ -1,4 +1,10 @@
-"""Research agent: Tavily web search + iterative LLM synthesis/critique loop."""
+"""Research agent: Tavily web search + iterative LLM synthesis/critique loop.
+
+This is the Claude research chain: query generation -> live Tavily search ->
+synthesis -> critique with follow-up queries -> re-search -> final verification
+pass. Runs on whatever the configured LLM is; an ``sk-ant-`` key routes through
+Anthropic via LLMClient.
+"""
 
 from __future__ import annotations
 
@@ -114,6 +120,29 @@ Return ONLY valid JSON — no markdown, no explanation:
 }
 """
 
+_VERIFICATION_SYSTEM = """\
+You are the final verification step in a research pipeline. A dossier was drafted from live \
+web search results. Cross-check the dossier's quantitative and factual claims against the \
+provided search results and report what is supported and what is not.
+
+Rules:
+- A claim is "verified" if the search results contain the same figure, date, or named fact. \
+Approximate agreement is fine for figures; dates must match.
+- A claim is "unverified" if it is absent from the results, contradicts them, or appears to \
+come from training knowledge only.
+- "corrections" is for claims where the results contradict the dossier — give the corrected \
+wording and what the source actually says.
+- Never invent source URLs. Only use URLs present in the results.
+- Be specific but concise; 3-8 claims per list is plenty.
+
+Return ONLY valid JSON:
+{
+  "verified_claims": [{"claim": "short claim", "source_url": "url from results"}],
+  "unverified_claims": [{"claim": "short claim", "note": "why it could not be verified"}],
+  "corrections": [{"original": "claim as written", "corrected": "corrected claim", "reason": "what the source says instead"}]
+}
+"""
+
 
 class SearchResearchAgent:
     """Research agent: Tavily search + iterative LLM synthesis and critique."""
@@ -124,7 +153,7 @@ class SearchResearchAgent:
         context: str = "",
         angle_overrides: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
-        llm = LLMClient()
+        llm = LLMClient(model=Config.SEARCH_RESEARCH_MODEL)
         tavily = TavilyClient(api_key=Config.TAVILY_API_KEY)
         selected_ids = LLMResearchAgent._resolve_angles(angle_overrides)
         system_prompt = self._build_system_prompt(selected_ids)
@@ -155,7 +184,12 @@ class SearchResearchAgent:
             summary_md = self._synthesize(llm, system_prompt, scenario, context, search_context)
 
             critique = self._critique(llm, scenario, summary_md)
-            score = float(critique.get("score", 10.0))
+            raw_score = critique.get("score", 10.0)
+            try:
+                score = float(raw_score)
+            except (TypeError, ValueError):
+                logger.warning("Critique returned non-numeric score %r — assuming pass", raw_score)
+                score = 10.0
             follow_up_queries = (critique.get("follow_up_queries") or [])[:6]
 
             logger.info("Round %d critique score: %.1f", round_num, score)
@@ -165,6 +199,11 @@ class SearchResearchAgent:
 
         if not summary_md.strip():
             raise RuntimeError("SearchResearchAgent returned empty summary_md")
+
+        verification: dict = {}
+        if all_sources:
+            verification = self._verify(llm, scenario, summary_md, search_context)
+            summary_md = self._append_verification_notes(summary_md, verification)
 
         key_facts = LLMResearchAgent._extract_key_facts(summary_md)
         historical_precedents = LLMResearchAgent._extract_section(summary_md, "Historical Precedents")
@@ -187,6 +226,7 @@ class SearchResearchAgent:
             "summary_md": summary_md,
             "search_queries": all_queries,
             "selected_angles": selected_ids,
+            "verification": verification,
         }
 
     @staticmethod
@@ -231,13 +271,13 @@ class SearchResearchAgent:
                 {"role": "user", "content": user_text},
             ],
             temperature=0.3,
-            max_tokens=4096,
+            max_tokens=12000,
         )
 
     @staticmethod
     def _critique(llm: LLMClient, scenario: str, summary_md: str) -> dict:
         try:
-            return llm.chat_json(
+            data = llm.chat_json(
                 messages=[
                     {"role": "system", "content": _CRITIQUE_SYSTEM},
                     {
@@ -246,11 +286,63 @@ class SearchResearchAgent:
                     },
                 ],
                 temperature=0.2,
-                max_tokens=512,
+                max_tokens=2048,
             )
+            return data if isinstance(data, dict) else {}
         except Exception as exc:
             logger.warning("Critique call failed: %s", exc)
             return {"score": 10.0, "gaps": [], "follow_up_queries": []}
+
+    @staticmethod
+    def _verify(llm: LLMClient, scenario: str, summary_md: str, search_context: str) -> dict:
+        """Final pass: cross-check the dossier's claims against the search results.
+
+        Never raises — a verification failure must not fail the whole run. Returns
+        an empty dict, which the caller treats as "no notes to append".
+        """
+        try:
+            data = llm.chat_json(
+                messages=[
+                    {"role": "system", "content": _VERIFICATION_SYSTEM},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Scenario: {scenario}\n\n[Dossier]\n{summary_md[:32000]}"
+                            f"\n\n[Search results]\n{search_context[:32000]}"
+                        ),
+                    },
+                ],
+                temperature=0.1,
+                max_tokens=4096,
+            )
+            return data if isinstance(data, dict) else {}
+        except Exception as exc:
+            logger.warning("Verification pass failed: %s", exc)
+            return {}
+
+    @staticmethod
+    def _append_verification_notes(summary_md: str, verification: dict) -> str:
+        """Append a transparent Verification Notes section to the dossier markdown."""
+        verified = verification.get("verified_claims") or []
+        unverified = verification.get("unverified_claims") or []
+        corrections = verification.get("corrections") or []
+        if not (verified or unverified or corrections):
+            return summary_md
+
+        lines = ["", "## Verification Notes"]
+        if corrections:
+            lines.append("### Corrected claims")
+            for c in corrections:
+                lines.append(f"- ~~{c.get('original', '')}~~ → {c.get('corrected', '')} ({c.get('reason', '')})")
+        if unverified:
+            lines.append("### Unverified claims (training-knowledge only)")
+            for u in unverified:
+                lines.append(f"- {u.get('claim', '')} — {u.get('note', '')}")
+        if verified:
+            lines.append("### Verified against search results")
+            for v in verified:
+                lines.append(f"- {v.get('claim', '')} — {v.get('source_url', '')}")
+        return f"{summary_md}\n{chr(10).join(lines)}".strip()
 
     @staticmethod
     def _build_system_prompt(selected_ids: list[str]) -> str:

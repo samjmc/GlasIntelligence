@@ -83,10 +83,11 @@ describe('canonicalQuery', () => {
     expect(canonicalQuery('/foo?z=1&a=2')).toBe('a=2&z=1')
   })
 
-  it('percent-encodes keys and values', () => {
-    // space in value → %20
-    const q = canonicalQuery('/foo?key=hello world')
-    expect(q).toBe('key=hello%20world')
+  it('matches the Python recorder byte-for-byte (quote_plus)', () => {
+    // Python's urlencode: space -> '+', ! * ' ( ) percent-encoded.
+    expect(canonicalQuery('/foo?key=hello world')).toBe('key=hello+world')
+    expect(canonicalQuery('/foo?y=a!b*c&x=1')).toBe('x=1&y=a%21b%2Ac')
+    expect(canonicalQuery('/foo?from_line=0&refresh=true')).toBe('from_line=0&refresh=true')
   })
 })
 

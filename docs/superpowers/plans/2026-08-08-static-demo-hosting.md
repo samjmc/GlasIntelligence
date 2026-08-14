@@ -550,19 +550,35 @@ is a number that may change the design.
 - [ ] **Step 1: Start the stack with recording on**
 
 ```bash
-cd /Users/sammcdonnell/Documents/GlasIntelligence
-docker compose up -d redis
-
-cd backend
-DEMO_RECORD=1 \
-DEMO_SCENARIO=energy-price-cap \
-DEMO_TAPE_PATH=../frontend/public/demo/energy-price-cap/tape.json \
-  python run.py
+cd /Users/sammcdonnell/Documents/GlasIntelligence-demo
+cp .env.demo-record.example .env    # then fill in the six secrets it lists
+./scripts/demo-record-stack.sh energy-price-cap
 ```
 
-Start the Celery workers and the frontend as normal in separate shells. The frontend
-must run **without** `VITE_DEMO_MODE`, so it talks to the real backend through the
-vite proxy at `localhost:5001` and the recorder sees genuine traffic.
+Then, in a second shell:
+
+```bash
+cd /Users/sammcdonnell/Documents/GlasIntelligence-demo/frontend && npm run dev
+```
+
+The frontend must run **without** `VITE_DEMO_MODE`, so it talks to the real backend
+through the vite proxy at `localhost:5001` and the recorder sees genuine traffic.
+
+> **Corrected 2026-08-14.** This step previously said `cd .../GlasIntelligence` and
+> `docker compose up -d redis`. Both were wrong:
+> - The tape must be committed to `feat/static-demo-hosting`, so the run has to
+>   happen in the **`-demo` worktree**. The main tree is on a different branch and
+>   is used by parallel sessions.
+> - This machine has **no Docker and no Homebrew**. `scripts/demo-record-stack.sh`
+>   builds Redis 7.2.5 from source into `/tmp` on first run (verified working),
+>   starts the three Celery queues (`celery`, `research`, `simulation`), and arms
+>   the recorder. It refuses to start if any required secret is blank, so you find
+>   out before spending money rather than 20 minutes into a paid run.
+>
+> Verified empirically on 2026-08-14: the Flask app and all Celery task modules
+> import cleanly with an **empty** environment — the Supabase errors at boot are
+> non-fatal warnings from startup-recovery hooks. Only the actual vendor calls
+> during a run need credentials.
 
 - [ ] **Step 2: Run one scenario end to end in the browser**
 
