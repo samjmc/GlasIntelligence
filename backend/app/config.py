@@ -4,6 +4,7 @@ Load configuration from .env file in project root
 """
 
 import os
+
 from dotenv import load_dotenv
 
 # Load .env file from project root
@@ -19,25 +20,25 @@ else:
 
 class Config:
     """Flask configuration class"""
-    
+
     # Flask config
     SECRET_KEY = os.environ.get('SECRET_KEY', 'glas-intelligence-secret-key')
     DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
-    
+
     # JSON config - disable ASCII escape so non-ASCII displays directly (not as \uXXXX)
     JSON_AS_ASCII = False
-    
+
     # LLM config (unified OpenAI format)
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'gpt-4o-mini')
-    
+
     # Supabase config
     SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
     SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', '')
     SUPABASE_JWT_SECRET = os.environ.get('SUPABASE_JWT_SECRET', '')
     SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '')
-    
+
     # Stripe config
     STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
     STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
@@ -48,30 +49,32 @@ class Config:
     STRIPE_PRICE_PACK_10 = os.environ.get('STRIPE_PRICE_PACK_10', '')
     STRIPE_PRICE_OVERAGE_PRO = os.environ.get('STRIPE_PRICE_OVERAGE_PRO', '')
     STRIPE_PRICE_OVERAGE_BUSINESS = os.environ.get('STRIPE_PRICE_OVERAGE_BUSINESS', '')
+    STRIPE_PRICE_RESEARCH_1 = os.environ.get('STRIPE_PRICE_RESEARCH_1', '')
+    STRIPE_PRICE_RESEARCH_5 = os.environ.get('STRIPE_PRICE_RESEARCH_5', '')
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-    
+
     # Resend email config
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
     RESEND_FROM_EMAIL = os.environ.get('RESEND_FROM_EMAIL', 'noreply@glasinsight.com')
-    
+
     # Zep config
     ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
-    
+
     # File upload config
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '../uploads')
     ALLOWED_EXTENSIONS = {'pdf', 'md', 'txt', 'markdown'}
-    
+
     # Text processing config
     DEFAULT_CHUNK_SIZE = 300  # Default chunk size
     DEFAULT_CHUNK_OVERLAP = 30  # Default overlap size
     DEFAULT_TARGET_ENTITIES = int(os.environ.get('DEFAULT_TARGET_ENTITIES', '50'))
     MAX_ENRICHMENT_ROUNDS = int(os.environ.get('MAX_ENRICHMENT_ROUNDS', '3'))
-    
+
     # OASIS simulation config
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
-    
+
     # OASIS platform available actions config
     OASIS_TWITTER_ACTIONS = [
         'CREATE_POST', 'LIKE_POST', 'REPOST', 'FOLLOW', 'DO_NOTHING', 'QUOTE_POST'
@@ -81,7 +84,7 @@ class Config:
         'LIKE_COMMENT', 'DISLIKE_COMMENT', 'SEARCH_POSTS', 'SEARCH_USER',
         'TREND', 'REFRESH', 'DO_NOTHING', 'FOLLOW', 'MUTE'
     ]
-    
+
     # Simulation cost caps per plan
     FREE_SIMULATION_AGENTS = int(os.environ.get('FREE_SIMULATION_AGENTS', '25'))
     FREE_SIMULATION_ROUNDS = int(os.environ.get('FREE_SIMULATION_ROUNDS', '15'))
@@ -91,10 +94,21 @@ class Config:
     BUSINESS_SIMULATION_ROUNDS = int(os.environ.get('BUSINESS_SIMULATION_ROUNDS', '30'))
     ENTERPRISE_SIMULATION_AGENTS = int(os.environ.get('ENTERPRISE_SIMULATION_AGENTS', '200'))
     ENTERPRISE_SIMULATION_ROUNDS = int(os.environ.get('ENTERPRISE_SIMULATION_ROUNDS', '50'))
-    
+
+    @classmethod
+    def normalize_plan(cls, plan: str | None) -> str:
+        """Lowercase/strip profiles.plan for comparisons (e.g. 'Enterprise' stored in Supabase)."""
+        if plan is None:
+            return "free"
+        p = str(plan).strip().lower()
+        if p in ("", "null", "none", "undefined"):
+            return "free"
+        return p
+
     @classmethod
     def simulation_limits(cls, plan: str) -> tuple:
         """Return (max_agents, max_rounds) for a given plan."""
+        plan = cls.normalize_plan(plan)
         if plan in ('free', 'payg'):
             return cls.FREE_SIMULATION_AGENTS, cls.FREE_SIMULATION_ROUNDS
         if plan == 'business':
@@ -102,12 +116,12 @@ class Config:
         if plan == 'enterprise':
             return cls.ENTERPRISE_SIMULATION_AGENTS, cls.ENTERPRISE_SIMULATION_ROUNDS
         return cls.PRO_SIMULATION_AGENTS, cls.PRO_SIMULATION_ROUNDS
-    
+
     # Report Agent config
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
-    
+
     # Valued-output report payload v1 + grounding (domain-agnostic)
     ENABLE_REPORT_PAYLOAD_V1 = os.environ.get('ENABLE_REPORT_PAYLOAD_V1', 'true').lower() in ('1', 'true', 'yes')
     ENABLE_GROUNDING_FEATURES = os.environ.get('ENABLE_GROUNDING_FEATURES', 'true').lower() in ('1', 'true', 'yes')
@@ -115,15 +129,37 @@ class Config:
     GROUNDING_BLOCK_IF_STALE = os.environ.get('GROUNDING_BLOCK_IF_STALE', 'false').lower() in ('1', 'true', 'yes')
     GROUNDING_WARN_IF_STALE = os.environ.get('GROUNDING_WARN_IF_STALE', 'true').lower() in ('1', 'true', 'yes')
     ENABLE_WEB_ENRICHER = os.environ.get('ENABLE_WEB_ENRICHER', 'false').lower() in ('1', 'true', 'yes')
-    
+
     # Deep Research (OpenAI Responses API)
     DEEP_RESEARCH_ENABLED = os.environ.get('DEEP_RESEARCH_ENABLED', 'false').lower() in ('1', 'true', 'yes')
     DEEP_RESEARCH_MODEL = os.environ.get('DEEP_RESEARCH_MODEL', 'o4-mini-deep-research')
     DEEP_RESEARCH_MAX_TOOL_CALLS = int(os.environ.get('DEEP_RESEARCH_MAX_TOOL_CALLS', '50'))
-    
+    DEEP_RESEARCH_MAX_OUTPUT_TOKENS = int(os.environ.get('DEEP_RESEARCH_MAX_OUTPUT_TOKENS', '50000'))
+    RESEARCH_CLASSIFICATION_MODEL = os.environ.get('RESEARCH_CLASSIFICATION_MODEL', 'gpt-4o-mini')
+
+    # Tavily Search Research (iterative search + LLM refinement)
+    TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
+    SEARCH_RESEARCH_ENABLED = bool(TAVILY_API_KEY)
+    SEARCH_RESEARCH_MODEL = os.environ.get('SEARCH_RESEARCH_MODEL') or os.environ.get('LLM_MODEL_NAME') or 'gpt-4o-mini'
+    SEARCH_RESEARCH_MAX_ROUNDS = int(os.environ.get('SEARCH_RESEARCH_MAX_ROUNDS', '3'))
+    SEARCH_RESEARCH_QUALITY_THRESHOLD = float(os.environ.get('SEARCH_RESEARCH_QUALITY_THRESHOLD', '7.5'))
+
     # Decision layer
     ENABLE_DECISION_LAYER = os.environ.get('ENABLE_DECISION_LAYER', 'false').lower() in ('1', 'true', 'yes')
-    
+
+    # Probability guardrails (post-LLM caps / ordering for estimate_risks)
+    ENABLE_CALIBRATION_GUARDRAILS = os.environ.get('ENABLE_CALIBRATION_GUARDRAILS', 'true').lower() in ('1', 'true', 'yes')
+
+    # Multi-scenario bundle executive synthesis (reports + LLM merge + branch weights)
+    ENABLE_BUNDLE_SYNTHESIS = os.environ.get('ENABLE_BUNDLE_SYNTHESIS', 'true').lower() in ('1', 'true', 'yes')
+
+    # Graph snapshot disk cache (read-through, singleflight coalescing)
+    GRAPH_SNAPSHOT_CACHE_ENABLED = os.environ.get('GRAPH_SNAPSHOT_CACHE_ENABLED', '1').lower() in ('1', 'true', 'yes')
+    GRAPH_SNAPSHOT_SINGLEFLIGHT = os.environ.get('GRAPH_SNAPSHOT_SINGLEFLIGHT', '1').lower() in ('1', 'true', 'yes')
+    GRAPH_SNAPSHOT_TTL_SECONDS = int(os.environ.get('GRAPH_SNAPSHOT_TTL_SECONDS', '86400'))
+    GRAPH_SNAPSHOT_STALE_MAX_AGE_SECONDS = int(os.environ.get('GRAPH_SNAPSHOT_STALE_MAX_AGE_SECONDS', '604800'))
+    GRAPH_SNAPSHOT_MAX_DISK_MB = int(os.environ.get('GRAPH_SNAPSHOT_MAX_DISK_MB', '512'))
+
     @classmethod
     def validate(cls):
         """Validate configuration. Returns (errors, warnings)."""

@@ -1,14 +1,45 @@
 """JWT authentication middleware using Supabase."""
 
 import functools
-from flask import request, jsonify, g
+
 import jwt
+from flask import g, jsonify, request
+
 from ..config import Config
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.auth")
 
 ANONYMOUS_USER_ID = "anonymous"
+
+# JWKS is fetched from Supabase once and cached: creating a fresh PyJWKClient
+# per request fetches the keys on every call, and a flaky fetch means
+# intermittent 401s on otherwise-valid ES256 tokens.
+_jwks_client = None
+
+
+def _get_jwks_client():
+    global _jwks_client
+    if _jwks_client is None:
+        jwks_url = Config.SUPABASE_URL.rstrip("/") + "/auth/v1/.well-known/jwks.json"
+        _jwks_client = jwt.PyJWKClient(jwks_url)
+    return _jwks_client
+
+
+def _get_signing_key(token: str):
+    """Fetch the signing key with a bounded retry — JWKS fetches over a flaky
+    network (SSL EOF / broken pipe) would otherwise turn into spurious 401s."""
+    jwks_client = _get_jwks_client()
+    last_err = None
+    for attempt in range(3):
+        try:
+            return jwks_client.get_signing_key_from_jwt(token)
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                import time
+                time.sleep(0.5 * (attempt + 1))
+    raise last_err if last_err is not None else RuntimeError("JWKS signing key fetch failed")
 
 
 def _get_jwt_secret() -> str:
@@ -26,9 +57,8 @@ def _decode_supabase_jwt(token: str) -> dict:
     if alg == "HS256":
         return jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
 
-    jwks_url = Config.SUPABASE_URL.rstrip("/") + "/auth/v1/.well-known/jwks.json"
-    jwks_client = jwt.PyJWKClient(jwks_url)
-    signing_key = jwks_client.get_signing_key_from_jwt(token)
+    _get_jwks_client()
+    signing_key = _get_signing_key(token)
     return jwt.decode(token, signing_key.key, algorithms=[alg], audience="authenticated")
 
 
