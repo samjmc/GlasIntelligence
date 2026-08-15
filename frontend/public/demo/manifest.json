@@ -6,7 +6,7 @@
       "title": "Pharmacy First funding caps",
       "blurb": "Model how NHS England's Pharmacy First payment caps ripple through pharmacies, GPs, and patients.",
       "prompt": "Model the second-order effects of NHS England payment caps on Pharmacy First consultations from March 2026: pharmacy multiples, independents, GPs, patients, NHS England \u2014 financial strain, patient access, workforce attrition, policy escalation.",
-      "duration_ms": 2677037
+      "duration_ms": 23025840
     }
   ]
 }
