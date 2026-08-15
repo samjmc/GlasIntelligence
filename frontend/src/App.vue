@@ -1,9 +1,11 @@
 <template>
+  <DemoBanner v-if="isDemoMode" />
   <router-view />
 </template>
 
 <script setup>
-// Use Vue Router for page management
+import { isDemoMode } from './demo/config'
+import DemoBanner from './components/DemoBanner.vue'
 </script>
 
 <style>

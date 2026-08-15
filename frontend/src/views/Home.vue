@@ -129,6 +129,7 @@
                   01 / Describe Your Scenario
                 </span>
                 <button
+                  v-if="!isDemoMode"
                   class="enhance-btn"
                   :disabled="!formData.simulationRequirement.trim() || loading || enhancing"
                   @click="handleEnhancePrompt"
@@ -144,10 +145,13 @@
                   placeholder="What happens if Ofgem removes the energy price cap? What if the US imposes new tariffs on EU goods?"
                   rows="5"
                   :disabled="loading"
+                  :readonly="isDemoMode"
                 ></textarea>
                 <div class="model-badge">Engine: GLAS v1.0</div>
               </div>
             </div>
+
+            <DemoScenarioPicker v-if="isDemoMode" @select="onDemoScenarioSelected" />
 
             <!-- Starter Scenario Cards (shown when textarea is empty) -->
             <div v-if="!formData.simulationRequirement.trim()" class="starter-scenarios">
@@ -346,6 +350,10 @@ import { useApi } from '../composables/useApi'
 import { startDeepResearch, getDeepResearchStatus, getDeepResearchResult, createBundle } from '../api/simulation'
 import { getPendingUpload, clearPendingUpload, setPendingUpload } from '../store/pendingUpload'
 import { trackEvent } from '../lib/analytics'
+import { isDemoMode, SESSION_KEY } from '../demo/config'
+import { encodeDemoId } from '../demo/sessionId'
+import { setActiveScenario } from '../demo/adapter'
+import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -591,6 +599,22 @@ watch(fullAnalysisMode, async (enabled) => {
 
 const startSimulation = () => {
   if (!canSubmit.value || loading.value) return
+
+  // In demo mode, navigate directly to the pre-recorded simulation replay.
+  if (isDemoMode) {
+    if (!demoScenarioId.value) {
+      error.value = 'Select a demo scenario first.'
+      return
+    }
+    const sessionId = encodeDemoId(Date.now(), demoScenarioId.value)
+    // Store before navigation so adapter.js can rehydrate on a page reload.
+    localStorage.setItem(SESSION_KEY, sessionId)
+    setActiveScenario(demoScenarioId.value, sessionId)
+    const simId = `demo-${demoScenarioId.value}-sim`
+    router.push({ name: 'SimulationRun', params: { simulationId: simId } })
+    return
+  }
+
   if (!isPaidUser.value) {
     showUpgradeModal.value = true
     return
@@ -604,6 +628,19 @@ const startSimulation = () => {
 
   setPendingUpload(files.value, scenarioText, intake, researchDossier.value)
   router.push({ name: 'Process', params: { projectId: 'new' } })
+}
+
+// In demo mode, tracks the scenario chosen in the picker so startSimulation
+// can navigate directly to the pre-recorded simulation replay.
+const demoScenarioId = ref('')
+
+function onDemoScenarioSelected({ scenarioId, prompt }) {
+  formData.value.simulationRequirement = prompt
+  demoScenarioId.value = scenarioId || ''
+  // Session id is minted later, at the moment startSimulation() fires, so that
+  // the virtual clock starts exactly when the run begins (not at picker-click).
+  // At 20x speedup even a 5 s pause between picker and run-start would burn
+  // 100 s of tape and skip straight to the completed state.
 }
 </script>
 

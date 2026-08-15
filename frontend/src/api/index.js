@@ -1,12 +1,15 @@
 import axios from 'axios'
 import { getAccessToken } from '../store/auth'
+import { isDemoMode } from '../demo/config'
+import { demoAdapter } from '../demo/adapter'
 
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 300000,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  ...(isDemoMode ? { adapter: demoAdapter } : {})
 })
 
 service.interceptors.request.use(
