@@ -68,3 +68,4 @@ visuals_s2/
 *.bak
 celerybeat-schedule
 celerybeat.pid
+.superpowers/
