@@ -28,6 +28,9 @@ logger = get_logger('glas.simulation_runner')
 # Flag for whether cleanup function has been registered
 _cleanup_registered = False
 
+# Error message when a run completes with zero actions across all enabled platforms
+ZERO_ACTIONS_ERROR = "Simulation completed with zero actions across all platforms — check model/API key configuration."
+
 # Platform detection
 IS_WINDOWS = sys.platform == 'win32'
 
@@ -635,9 +638,14 @@ class SimulationRunner:
                                     # If two platforms were run, both must complete
                                     all_completed = cls._check_all_platforms_completed(state)
                                     if all_completed:
-                                        state.runner_status = RunnerStatus.COMPLETED
                                         state.completed_at = datetime.now().isoformat()
-                                        logger.info(f"All platform simulations completed: {state.simulation_id}")
+                                        if cls._completed_with_zero_actions(state):
+                                            state.runner_status = RunnerStatus.FAILED
+                                            state.error = ZERO_ACTIONS_ERROR
+                                            logger.warning(f"Simulation completed with zero actions across all platforms: {state.simulation_id}")
+                                        else:
+                                            state.runner_status = RunnerStatus.COMPLETED
+                                            logger.info(f"All platform simulations completed: {state.simulation_id}")
                                 
                                 # Update round info (from round_end events)
                                 elif event_type == "round_end":
@@ -717,6 +725,40 @@ class SimulationRunner:
         # At least one platform is enabled and completed
         return twitter_enabled or reddit_enabled
     
+    @classmethod
+    def _completed_with_zero_actions(cls, state: SimulationRunState) -> bool:
+        """
+        Check whether all enabled platforms completed with zero total actions
+
+        Mirrors the enablement logic of _check_all_platforms_completed (a
+        platform is enabled if its actions.jsonl file exists) and additionally
+        requires that no actions were recorded at all, which indicates a
+        model/API key configuration failure rather than a successful run.
+
+        Returns:
+            True if all enabled platforms completed with zero actions
+        """
+        sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
+        twitter_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
+        reddit_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
+
+        # Check which platforms are enabled (determined by file existence)
+        twitter_enabled = os.path.exists(twitter_log)
+        reddit_enabled = os.path.exists(reddit_log)
+
+        # If platform is enabled but not completed, return False
+        if twitter_enabled and not state.twitter_completed:
+            return False
+        if reddit_enabled and not state.reddit_completed:
+            return False
+
+        # At least one platform is enabled and completed
+        if not (twitter_enabled or reddit_enabled):
+            return False
+
+        # All enabled platforms completed with zero actions
+        return state.twitter_actions_count + state.reddit_actions_count == 0
+
     @classmethod
     def _terminate_process(cls, process: subprocess.Popen, simulation_id: str, timeout: int = 10):
         """

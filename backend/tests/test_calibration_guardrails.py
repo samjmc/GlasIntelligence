@@ -1,6 +1,7 @@
 """Tests for calibration_guardrails (glas-core discipline adapted for 0–100%)."""
 
 import math
+from typing import Any
 
 import pytest
 
@@ -103,6 +104,38 @@ class TestApplyEvidenceCorrelationDiscount:
     def test_short_matrix_falls_back(self):
         lr = apply_evidence_correlation_discount([2.0, 2.0], correlation_matrix=[[1.0]])
         assert 1.0 < lr <= 20.0
+
+    def test_matrix_path_between_uncorrelated_and_no_discount(self):
+        lr = apply_evidence_correlation_discount(
+            [2.0, 8.0], correlation_matrix=[[1.0, 0.3], [0.3, 1.0]]
+        )
+        uncorrelated = apply_evidence_correlation_discount([2.0, 8.0])
+        no_discount = 16.0
+        assert math.isfinite(lr)
+        assert 1.0 / 20.0 <= lr <= 20.0
+        assert lr != pytest.approx(uncorrelated)
+        assert uncorrelated <= lr <= no_discount
+
+    def test_matrix_asymmetric_weights_strictly_between(self):
+        lr = apply_evidence_correlation_discount(
+            [2.0, 6.0], correlation_matrix=[[1.0, 0.1], [0.9, 1.0]]
+        )
+        uncorrelated = apply_evidence_correlation_discount([2.0, 6.0])
+        no_discount = 12.0
+        assert uncorrelated < lr < no_discount
+
+    def test_matrix_too_few_rows_falls_back_to_uncorrelated(self):
+        matrix_lr = apply_evidence_correlation_discount(
+            [2.0, 8.0], correlation_matrix=[[1.0]]
+        )
+        uncorrelated = apply_evidence_correlation_discount([2.0, 8.0])
+        assert matrix_lr == pytest.approx(uncorrelated)
+
+    def test_malformed_matrix_falls_back_to_uncorrelated(self):
+        malformed: Any = [[1.0, "x"], [0.3, 1.0]]
+        matrix_lr = apply_evidence_correlation_discount([2.0, 8.0], correlation_matrix=malformed)
+        uncorrelated = apply_evidence_correlation_discount([2.0, 8.0])
+        assert matrix_lr == pytest.approx(uncorrelated)
 
 
 class TestBayesianUpdateWithCaps:

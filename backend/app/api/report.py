@@ -11,6 +11,7 @@ from flask import request, jsonify, send_file, g
 from . import report_bp
 from ..config import Config
 from ..middleware.auth import require_auth
+from ..services.case_predictions import record_predictions_for_report
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -148,6 +149,10 @@ def generate_report():
                 ReportManager.save_report(report)
                 
                 if report.status == ReportStatus.COMPLETED:
+                    try:
+                        record_predictions_for_report(simulation_id, report.report_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to record case predictions: {e}")
                     task_manager.complete_task(
                         task_id,
                         result={
