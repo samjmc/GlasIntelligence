@@ -525,6 +525,17 @@ const fetchRunStatus = async () => {
       const isCompleted = data.runner_status === 'completed' || data.runner_status === 'stopped'
       const platformsCompleted = checkPlatformsCompleted(data)
       
+      // A run the backend explicitly failed (e.g. zero actions across all
+      // platforms — model/API key config failure) must surface as an error,
+      // not hang in an eternal polling spinner.
+      if (data.runner_status === 'failed') {
+        addLog(`✗ Simulation failed: ${data.error || 'Unknown error'}`)
+        startError.value = data.error || 'Simulation failed'
+        stopPolling()
+        emit('update-status', 'failed')
+        return
+      }
+      
       if (isCompleted || platformsCompleted) {
         if (platformsCompleted && !isCompleted) {
           addLog('✓ All platform simulations completed')
