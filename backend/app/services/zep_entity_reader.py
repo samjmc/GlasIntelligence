@@ -4,14 +4,15 @@ Reads nodes from a Zep graph and filters those matching predefined entity types
 """
 
 import time
-from typing import Dict, Any, List, Optional, Set, Callable, TypeVar
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Set, TypeVar
 
 from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
-from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
+from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
+from .graph_snapshot_cache import try_get_lists_for_entity_reader
 
 logger = get_logger('glas.zep_entity_reader')
 
@@ -128,12 +129,21 @@ class ZepEntityReader:
         """
         Get all nodes from the graph (paginated)
 
+        Reuses the snapshot cache on HIT (same generation + TTL rules);
+        misses fall through to Zep as before.
+
         Args:
             graph_id: Graph ID
 
         Returns:
             List of nodes
         """
+        cached = try_get_lists_for_entity_reader(graph_id)
+        if cached is not None:
+            cached_nodes, _cached_edges = cached
+            logger.info(f"Loaded {len(cached_nodes)} nodes from snapshot cache for graph {graph_id}")
+            return cached_nodes
+
         logger.info(f"Fetching all nodes for graph {graph_id}...")
 
         nodes = fetch_all_nodes(self.client, graph_id)
@@ -155,12 +165,21 @@ class ZepEntityReader:
         """
         Get all edges from the graph (paginated)
 
+        Reuses the snapshot cache on HIT (same generation + TTL rules);
+        misses fall through to Zep as before.
+
         Args:
             graph_id: Graph ID
 
         Returns:
             List of edges
         """
+        cached = try_get_lists_for_entity_reader(graph_id)
+        if cached is not None:
+            _cached_nodes, cached_edges = cached
+            logger.info(f"Loaded {len(cached_edges)} edges from snapshot cache for graph {graph_id}")
+            return cached_edges
+
         logger.info(f"Fetching all edges for graph {graph_id}...")
 
         edges = fetch_all_edges(self.client, graph_id)

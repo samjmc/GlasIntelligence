@@ -15,6 +15,13 @@ from ..middleware.auth import require_auth
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
 from ..services.graph_enrichment_service import GraphEnrichmentService
+from ..services.graph_snapshot_cache import (
+    CacheOutcome,
+    get_graph_data_cached,
+    invalidate,
+    try_stale_fallback,
+    write_snapshot,
+)
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
 from ..utils.llm_client import LLMClient
@@ -595,6 +602,8 @@ def build_graph():
                 
                 build_logger.info(f"[{task_id}] Graph build complete: graph_id={graph_id}, nodes={node_count}, edges={edge_count}")
                 
+                write_snapshot(graph_id, graph_data)
+                
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.COMPLETED,
@@ -689,6 +698,11 @@ def list_tasks():
 def get_graph_data(graph_id: str):
     """
     Get graph data (nodes and edges)
+
+    Uses the on-disk snapshot cache when GRAPH_SNAPSHOT_CACHE_ENABLED=1;
+    `refresh=true` forces a Zep fetch and re-primes the cache. Response
+    headers X-Glas-Graph-Cache and X-Glas-Graph-Cache-Age report the outcome.
+    On Zep failure, serves a stale snapshot within the stale max age.
     """
     try:
         if not Config.ZEP_API_KEY:
@@ -697,16 +711,37 @@ def get_graph_data(graph_id: str):
                 "error": "ZEP_API_KEY not configured"
             }), 500
         
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
-        graph_data = builder.get_graph_data(graph_id)
+        refresh = request.args.get('refresh', 'false').lower() in ('1', 'true', 'yes')
         
-        return jsonify({
+        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        graph_data, outcome, age = get_graph_data_cached(
+            graph_id,
+            lambda: builder.get_graph_data(graph_id),
+            refresh=refresh,
+        )
+        
+        resp = jsonify({
             "success": True,
             "data": graph_data
         })
+        resp.headers["X-Glas-Graph-Cache"] = outcome.value
+        if age is not None:
+            resp.headers["X-Glas-Graph-Cache-Age"] = str(int(age))
+        return resp
         
     except Exception as e:
         logger.error(f"Get graph data failed: {e}")
+        stale = try_stale_fallback(graph_id)
+        if stale.outcome == CacheOutcome.STALE and stale.data:
+            logger.warning(f"Serving stale graph data for {graph_id} after Zep failure: {e}")
+            resp = jsonify({
+                "success": True,
+                "data": stale.data
+            })
+            resp.headers["X-Glas-Graph-Cache"] = "STALE"
+            if stale.age_seconds is not None:
+                resp.headers["X-Glas-Graph-Cache-Age"] = str(int(stale.age_seconds))
+            return resp
         return jsonify({
             "success": False,
             "error": "Failed to retrieve graph data"
@@ -728,6 +763,7 @@ def delete_graph(graph_id: str):
         
         builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
         builder.delete_graph(graph_id)
+        invalidate(graph_id)
         
         return jsonify({
             "success": True,

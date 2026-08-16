@@ -16,6 +16,7 @@ from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
+from .graph_snapshot_cache import bump_mutation_generation
 
 logger = get_logger('glas.zep_graph_memory_updater')
 
@@ -413,6 +414,7 @@ class ZepGraphMemoryUpdater:
                 
                 self._total_sent += 1
                 self._total_items_sent += len(activities)
+                bump_mutation_generation(self.graph_id)
                 display_name = self._get_platform_display_name(platform)
                 logger.info(f"Successfully batch sent {len(activities)} {display_name} activities to graph {self.graph_id}")
                 logger.debug(f"Batch content preview: {combined_text[:200]}...")

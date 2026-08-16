@@ -29,7 +29,7 @@ See also **[zep-footprint.md](./zep-footprint.md)** for browser polling, `refres
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `GRAPH_SNAPSHOT_CACHE_ENABLED` | `1` | Master switch |
-| `GRAPH_SNAPSHOT_TTL_SECONDS` | `86400` | Max age for a normal HIT |
+| `GRAPH_SNAPSHOT_TTL_SECONDS` | `604800` | Max age for a normal HIT (7 days; mutation-generation bumps are the primary invalidation, TTL is the time-based safety net) |
 | `GRAPH_SNAPSHOT_STALE_MAX_AGE_SECONDS` | `604800` | Max age to serve STALE after Zep failure |
 | `GRAPH_SNAPSHOT_MAX_DISK_MB` | `512` | Total quota; LRU eviction of oldest graph dirs (`0` = no quota enforcement) |
 | `GRAPH_SNAPSHOT_SINGLEFLIGHT` | `1` | Serialize Zep fetches per `graph_id` in-process |

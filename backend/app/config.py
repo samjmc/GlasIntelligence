@@ -164,7 +164,7 @@ class Config:
     # Graph snapshot disk cache (read-through, singleflight coalescing)
     GRAPH_SNAPSHOT_CACHE_ENABLED = os.environ.get('GRAPH_SNAPSHOT_CACHE_ENABLED', '1').lower() in ('1', 'true', 'yes')
     GRAPH_SNAPSHOT_SINGLEFLIGHT = os.environ.get('GRAPH_SNAPSHOT_SINGLEFLIGHT', '1').lower() in ('1', 'true', 'yes')
-    GRAPH_SNAPSHOT_TTL_SECONDS = int(os.environ.get('GRAPH_SNAPSHOT_TTL_SECONDS', '86400'))
+    GRAPH_SNAPSHOT_TTL_SECONDS = int(os.environ.get('GRAPH_SNAPSHOT_TTL_SECONDS', '604800'))
     GRAPH_SNAPSHOT_STALE_MAX_AGE_SECONDS = int(os.environ.get('GRAPH_SNAPSHOT_STALE_MAX_AGE_SECONDS', '604800'))
     GRAPH_SNAPSHOT_MAX_DISK_MB = int(os.environ.get('GRAPH_SNAPSHOT_MAX_DISK_MB', '512'))
 
