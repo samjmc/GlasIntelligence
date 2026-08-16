@@ -180,7 +180,10 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+        # Blocking on purpose: a leaked secret is the one failure mode this
+        # repo cannot absorb silently (it is public). pip-audit/npm
+        # audit/semgrep stay advisory (noisy false-positive profiles), but a
+        # secrets leak must fail CI. Verified green at the time of change.
 
       - name: Semgrep (SAST)
         uses: semgrep/semgrep-action@v1

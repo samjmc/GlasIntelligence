@@ -184,6 +184,21 @@ create index if not exists idx_scenario_sessions_project_graph
   on scenario_sessions (project_id)
   where project_id is not null and project_id <> '' and graph_id is not null and graph_id <> '';
 
+-- RLS on scenario_sessions (the app's central user table: prompts, research
+-- dossiers, uploaded-file metadata). Safe to enable: the backend accesses this
+-- table exclusively via the service-role key, which bypasses RLS — this policy
+-- only blocks direct anon-key reads of other users' sessions. The backend's
+-- service-role writes are unaffected.
+alter table scenario_sessions enable row level security;
+create policy "Users can read own sessions" on scenario_sessions
+  for select using (auth.uid() = user_id);
+create policy "Users can update own sessions" on scenario_sessions
+  for update using (auth.uid() = user_id);
+create policy "Users can insert own sessions" on scenario_sessions
+  for insert with check (auth.uid() = user_id);
+create policy "Users can delete own sessions" on scenario_sessions
+  for delete using (auth.uid() = user_id);
+
 -- Indexes
 create index if not exists idx_projects_user_id on projects(user_id);
 create index if not exists idx_simulations_user_id on simulations(user_id);
