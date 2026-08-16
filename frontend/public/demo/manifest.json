@@ -2,10 +2,11 @@
   "schema_version": 1,
   "scenarios": [
     {
-      "id": "demo-e2e",
-      "title": "Pharmacy First commissioning",
-      "blurb": "NHS England commissions community pharmacies to treat minor illnesses without a GP appointment.",
-      "prompt": "What happens if NHS England commissions community pharmacies to treat minor illnesses under Pharmacy First?"
+      "id": "pharmacy-first-caps",
+      "title": "Pharmacy First funding caps",
+      "blurb": "Model how NHS England's Pharmacy First payment caps ripple through pharmacies, GPs, and patients.",
+      "prompt": "Model the second-order effects of NHS England payment caps on Pharmacy First consultations from March 2026: pharmacy multiples, independents, GPs, patients, NHS England \u2014 financial strain, patient access, workforce attrition, policy escalation.",
+      "duration_ms": 23025840
     }
   ]
 }
