@@ -91,6 +91,7 @@
       <div class="action-controls">
         <button 
           class="action-btn primary"
+          data-test="simulation-complete"
           :disabled="phase !== 2 || isGeneratingReport"
           @click="handleNextStep"
         >

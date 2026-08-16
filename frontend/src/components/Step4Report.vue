@@ -769,6 +769,7 @@
             <div
               v-for="(step, sidx) in workflowSteps"
               :key="step.key"
+              :data-test="step.key === 'planning' ? undefined : 'agent-log-entry'"
               class="wf-step"
               :class="`wf-step--${step.status}`"
             >
@@ -788,7 +789,7 @@
           </div>
 
           <!-- Next Step Button - shown when complete -->
-          <button v-if="isComplete" class="next-step-btn" @click="goToInteraction">
+          <button v-if="isComplete" data-test="report-complete" class="next-step-btn" @click="goToInteraction">
             <span>Proceed to Deep Interaction</span>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="5" y1="12" x2="19" y2="12"></line>

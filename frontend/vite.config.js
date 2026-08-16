@@ -3,8 +3,11 @@ import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '..', '')
-  const isDemo = env.VITE_DEMO_MODE === '1'
+  // loadEnv reads .env files; process.env carries CI job variables
+  // (the demo-e2e job sets VITE_DEMO_MODE via the job's env). A demo build
+  // must be detected from either source.
+  const fileEnv = loadEnv(mode, '..', '')
+  const isDemo = (fileEnv.VITE_DEMO_MODE || process.env.VITE_DEMO_MODE) === '1'
 
   // Demo builds must be keyless and zero-external-origins: the static bundle
   // must never contain the Supabase URL/anon key (they'd leak credentials and

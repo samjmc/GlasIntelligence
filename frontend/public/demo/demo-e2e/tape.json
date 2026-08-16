@@ -1,267 +1,473 @@
 {
-  "schema_version": 1,
-  "scenario": "demo-e2e",
-  "duration_ms": 6000,
-  "entries": [
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/billing/status",
-      "status": 200,
-      "body": { "success": true, "data": { "plan": "pro", "research_credits": 0 } }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/session/active",
-      "status": 200,
-      "body": { "success": true, "data": [] }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/simulation/history",
-      "status": 200,
-      "body": { "success": true, "data": [] }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/simulation/:id",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "id": "demo-e2e-sim",
-          "status": "running",
-          "project_id": null
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/simulation/:id/config",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "time_config": {
-            "time_scale": { "unit": "hour", "per_round": 1 },
-            "minutes_per_round": 60,
-            "total_simulation_hours": 2
-          }
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/simulation/:id/run-status",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "runner_status": "running",
-          "twitter_running": true,
-          "reddit_running": true,
-          "twitter_completed": false,
-          "reddit_completed": false,
-          "twitter_current_round": 1,
-          "reddit_current_round": 1,
-          "total_rounds": 2,
-          "twitter_actions_count": 0,
-          "reddit_actions_count": 0
-        }
-      }
-    },
-    {
-      "t_ms": 3000,
-      "method": "GET",
-      "path": "/api/simulation/:id/run-status",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "runner_status": "running",
-          "twitter_running": true,
-          "reddit_running": true,
-          "twitter_completed": false,
-          "reddit_completed": false,
-          "twitter_current_round": 2,
-          "reddit_current_round": 2,
-          "total_rounds": 2,
-          "twitter_actions_count": 3,
-          "reddit_actions_count": 2
-        }
-      }
-    },
-    {
-      "t_ms": 6000,
-      "method": "GET",
-      "path": "/api/simulation/:id/run-status",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "runner_status": "completed",
-          "twitter_running": false,
-          "reddit_running": false,
-          "twitter_completed": true,
-          "reddit_completed": true,
-          "twitter_current_round": 2,
-          "reddit_current_round": 2,
-          "total_rounds": 2,
-          "twitter_actions_count": 5,
-          "reddit_actions_count": 3
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/simulation/:id/run-status/detail",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "all_actions": [
-            {
-              "id": "act-001",
-              "agent_id": "agent-pharmacy-1",
-              "agent_name": "NHS England Analyst",
-              "platform": "twitter",
-              "action_type": "CREATE_POST",
-              "timestamp": "2026-01-01T01:00:00Z",
-              "action_args": {
-                "content": "Pharmacy First is expanding access to healthcare for minor ailments — expect increased footfall in community pharmacies."
-              }
-            },
-            {
-              "id": "act-002",
-              "agent_id": "agent-pharmacy-2",
-              "agent_name": "Independent Pharmacist",
-              "platform": "reddit",
-              "action_type": "CREATE_POST",
-              "timestamp": "2026-01-01T02:00:00Z",
-              "action_args": {
-                "content": "Our pharmacy has seen a 30% uplift in consultations since Pharmacy First launched. Staff workload is the key challenge."
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "POST",
-      "path": "/api/report/generate",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": { "report_id": "demo-e2e-report" }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/report/:id",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "id": "demo-e2e-report",
-          "simulation_id": "demo-e2e-sim",
-          "status": "generating"
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/report/:id/agent-log?from_line=0",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "from_line": 0,
-          "logs": [
-            {
-              "action": "report_start",
-              "timestamp": "2026-01-01T03:00:00Z",
-              "details": { "simulation_id": "demo-e2e-sim", "simulation_requirement": "Pharmacy First commissioning impact" }
-            },
-            {
-              "action": "planning_complete",
-              "timestamp": "2026-01-01T03:00:05Z",
-              "details": {
-                "outline": {
-                  "title": "Pharmacy First Commissioning: Stakeholder Impact Analysis",
-                  "summary": "An assessment of how NHS England commissioning community pharmacies for minor illnesses will affect key stakeholders.",
-                  "sections": [
-                    { "index": 1, "title": "Market Dynamics" },
-                    { "index": 2, "title": "Stakeholder Responses" }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/report/:id/agent-log?from_line=2",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "from_line": 2,
-          "logs": [
-            {
-              "action": "report_complete",
-              "timestamp": "2026-01-01T03:00:30Z",
-              "details": {}
-            }
-          ]
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/report/:id/payload",
-      "status": 200,
-      "body": {
-        "success": true,
-        "data": {
-          "decision": {
-            "verdict": "Go",
-            "confidence": "high",
-            "reasoning": "Simulation shows broad stakeholder alignment on expanding Pharmacy First to minor illness commissioning.",
-            "confidence_rationale": "High-confidence based on multi-round agent consensus.",
-            "key_drivers": [],
-            "causal_chain": [],
-            "sensitivity": [],
-            "flip_conditions": []
-          }
-        }
-      }
-    },
-    {
-      "t_ms": 0,
-      "method": "GET",
-      "path": "/api/report/:id/console-log",
-      "status": 200,
-      "body": { "success": true, "data": { "from_line": 0, "logs": [] } }
-    },
-    {
-      "t_ms": 0,
-      "method": "POST",
-      "path": "/api/simulation/suggest-followups",
-      "status": 200,
-      "body": { "success": true, "data": { "suggestions": [] } }
+ "schema_version": 1,
+ "scenario": "demo-e2e",
+ "duration_ms": 6000,
+ "entries": [
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/billing/status",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "plan": "pro",
+     "research_credits": 0
     }
-  ]
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/session/active",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": []
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/simulation/history",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": []
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/simulation/:id",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "id": "demo-e2e-sim",
+     "status": "running",
+     "project_id": null
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/simulation/:id/config",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "time_config": {
+      "time_scale": {
+       "unit": "hour",
+       "per_round": 1
+      },
+      "minutes_per_round": 60,
+      "total_simulation_hours": 2
+     }
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/simulation/:id/run-status",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "runner_status": "running",
+     "twitter_running": true,
+     "reddit_running": true,
+     "twitter_completed": false,
+     "reddit_completed": false,
+     "twitter_current_round": 1,
+     "reddit_current_round": 1,
+     "total_rounds": 2,
+     "twitter_actions_count": 0,
+     "reddit_actions_count": 0
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/simulation/:id/run-status/detail",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "all_actions": [
+      {
+       "id": "act-001",
+       "agent_id": "agent-pharmacy-1",
+       "agent_name": "NHS England Analyst",
+       "platform": "twitter",
+       "action_type": "CREATE_POST",
+       "timestamp": "2026-01-01T01:00:00Z",
+       "action_args": {
+        "content": "Pharmacy First is expanding access to healthcare for minor ailments \u2014 expect increased footfall in community pharmacies."
+       }
+      },
+      {
+       "id": "act-002",
+       "agent_id": "agent-pharmacy-2",
+       "agent_name": "Independent Pharmacist",
+       "platform": "reddit",
+       "action_type": "CREATE_POST",
+       "timestamp": "2026-01-01T02:00:00Z",
+       "action_args": {
+        "content": "Our pharmacy has seen a 30% uplift in consultations since Pharmacy First launched. Staff workload is the key challenge."
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "POST",
+   "path": "/api/report/generate",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "report_id": "demo-e2e-report"
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/report/:id",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "id": "demo-e2e-report",
+     "simulation_id": "demo-e2e-sim",
+     "status": "generating"
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/report/:id/agent-log?from_line=0",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "from_line": 0,
+     "logs": [
+      {
+       "action": "report_start",
+       "timestamp": "2026-01-01T03:00:00Z",
+       "details": {
+        "simulation_id": "demo-e2e-sim",
+        "simulation_requirement": "Pharmacy First commissioning impact"
+       }
+      },
+      {
+       "action": "planning_complete",
+       "timestamp": "2026-01-01T03:00:05Z",
+       "details": {
+        "outline": {
+         "title": "Pharmacy First Commissioning: Stakeholder Impact Analysis",
+         "summary": "An assessment of how NHS England commissioning community pharmacies for minor illnesses will affect key stakeholders.",
+         "sections": [
+          {
+           "index": 1,
+           "title": "Market Dynamics"
+          },
+          {
+           "index": 2,
+           "title": "Stakeholder Responses"
+          }
+         ]
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/report/:id/agent-log?from_line=2",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "from_line": 2,
+     "logs": [
+      {
+       "action": "report_complete",
+       "timestamp": "2026-01-01T03:00:30Z",
+       "details": {}
+      }
+     ]
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/report/:id/payload",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "decision": {
+      "verdict": "Go",
+      "confidence": "high",
+      "reasoning": "Simulation shows broad stakeholder alignment on expanding Pharmacy First to minor illness commissioning.",
+      "confidence_rationale": "High-confidence based on multi-round agent consensus.",
+      "key_drivers": [],
+      "causal_chain": [],
+      "sensitivity": [],
+      "flip_conditions": []
+     }
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "GET",
+   "path": "/api/report/:id/console-log",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "from_line": 0,
+     "logs": []
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "POST",
+   "path": "/api/simulation/suggest-followups",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "suggestions": []
+    }
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "POST",
+   "path": "/api/simulation/create",
+   "status": 200,
+   "body": {
+    "data": {
+     "config_generated": false,
+     "config_reasoning": "",
+     "created_at": "2026-08-14T21:09:17.485861",
+     "current_round": 0,
+     "enable_reddit": true,
+     "enable_twitter": true,
+     "entities_count": 0,
+     "entity_types": [],
+     "error": null,
+     "graph_id": "glas_422ac1152bf04d9d",
+     "profiles_count": 0,
+     "project_id": "proj_b4d3684d5f41",
+     "reddit_status": "not_started",
+     "simulation_id": "sim_17a78fae63da",
+     "status": "created",
+     "twitter_status": "not_started",
+     "updated_at": "2026-08-14T21:09:17.486110",
+     "warnings": []
+    },
+    "success": true
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "POST",
+   "path": "/api/simulation/prepare",
+   "status": 200,
+   "body": {
+    "data": {
+     "already_prepared": false,
+     "entity_types": [
+      "Organization",
+      "StakeholderCommunity",
+      "PharmacyMultiple",
+      "Person",
+      "PharmacySectorBody"
+     ],
+     "expected_entities_count": 8,
+     "message": "Preparation task started, query progress via /api/simulation/prepare/status",
+     "simulation_id": "sim_17a78fae63da",
+     "status": "preparing",
+     "task_id": "demo0000-7d8d-fd27-3044-7686f38a794d"
+    },
+    "success": true
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "POST",
+   "path": "/api/simulation/prepare/status",
+   "status": 200,
+   "body": {
+    "data": {
+     "already_prepared": false,
+     "created_at": "2026-08-14T21:09:18.326548",
+     "error": null,
+     "message": "[1/4] Reading graph entities: Scanning untyped nodes for representative voices...",
+     "metadata": {
+      "project_id": "proj_b4d3684d5f41",
+      "simulation_id": "sim_17a78fae63da"
+     },
+     "progress": 17,
+     "progress_detail": {
+      "current_item": 0,
+      "current_stage": "reading",
+      "current_stage_name": "Reading graph entities",
+      "item_description": "Scanning untyped nodes for representative voices...",
+      "stage_index": 1,
+      "stage_progress": 85,
+      "total_items": 0,
+      "total_stages": 4
+     },
+     "result": null,
+     "status": "processing",
+     "task_id": "demo0000-7d8d-fd27-3044-7686f38a794d",
+     "task_type": "simulation_prepare",
+     "updated_at": "2026-08-14T21:09:18.335594"
+    },
+    "success": true
+   }
+  },
+  {
+   "t_ms": 0,
+   "method": "POST",
+   "path": "/api/simulation/start",
+   "status": 200,
+   "body": {
+    "data": {
+     "completed_at": null,
+     "current_round": 0,
+     "current_time_label": "",
+     "error": null,
+     "force_restarted": false,
+     "graph_memory_update_enabled": false,
+     "max_rounds_applied": 25,
+     "process_pid": 13619,
+     "progress_percent": 0.0,
+     "reddit_actions_count": 0,
+     "reddit_completed": false,
+     "reddit_current_round": 0,
+     "reddit_running": true,
+     "reddit_simulated_hours": 0,
+     "runner_status": "running",
+     "simulated_hours": 0,
+     "simulation_id": "sim_17a78fae63da",
+     "started_at": "2026-08-14T21:10:59.308105",
+     "time_scale": {
+      "per_round": 1,
+      "start_date": "",
+      "total_duration": 0,
+      "unit": "hour"
+     },
+     "total_actions_count": 0,
+     "total_rounds": 25,
+     "total_simulation_hours": 72,
+     "twitter_actions_count": 0,
+     "twitter_completed": false,
+     "twitter_current_round": 0,
+     "twitter_running": true,
+     "twitter_simulated_hours": 0,
+     "updated_at": "2026-08-14T21:10:59.308117"
+    },
+    "success": true
+   }
+  },
+  {
+   "t_ms": 3000,
+   "method": "GET",
+   "path": "/api/simulation/:id/run-status",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "runner_status": "running",
+     "twitter_running": true,
+     "reddit_running": true,
+     "twitter_completed": false,
+     "reddit_completed": false,
+     "twitter_current_round": 2,
+     "reddit_current_round": 2,
+     "total_rounds": 2,
+     "twitter_actions_count": 3,
+     "reddit_actions_count": 2
+    }
+   }
+  },
+  {
+   "t_ms": 4000,
+   "method": "POST",
+   "path": "/api/simulation/prepare/status",
+   "status": 200,
+   "body": {
+    "data": {
+     "already_prepared": true,
+     "message": "Preparation already complete",
+     "prepare_info": {
+      "config_generated": true,
+      "created_at": "2026-08-14T21:09:17.485861",
+      "entities_count": 8,
+      "entity_types": [
+       "Organization",
+       "StakeholderCommunity",
+       "PharmacyMultiple",
+       "Person",
+       "PharmacySectorBody"
+      ],
+      "existing_files": [
+       "state.json",
+       "simulation_config.json",
+       "reddit_profiles.json",
+       "twitter_profiles.csv"
+      ],
+      "profiles_count": 8,
+      "status": "ready",
+      "updated_at": "2026-08-14T21:10:45.200930"
+     },
+     "progress": 100,
+     "simulation_id": "sim_17a78fae63da",
+     "status": "ready"
+    },
+    "success": true
+   }
+  },
+  {
+   "t_ms": 6000,
+   "method": "GET",
+   "path": "/api/simulation/:id/run-status",
+   "status": 200,
+   "body": {
+    "success": true,
+    "data": {
+     "runner_status": "completed",
+     "twitter_running": false,
+     "reddit_running": false,
+     "twitter_completed": true,
+     "reddit_completed": true,
+     "twitter_current_round": 2,
+     "reddit_current_round": 2,
+     "total_rounds": 2,
+     "twitter_actions_count": 5,
+     "reddit_actions_count": 3
+    }
+   }
+  }
+ ]
 }
