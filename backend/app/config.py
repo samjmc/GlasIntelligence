@@ -153,7 +153,10 @@ class Config:
     # Correlation discount heuristic: average pairwise correlation assumed when
     # combining likelihood ratios without a correlation matrix (default 0.5,
     # no formal derivation; preserved for behavioral compatibility).
-    CORRELATION_DEFAULT_AVG_CORRELATION = float(os.environ.get('CORRELATION_DEFAULT_AVG_CORRELATION', '0.5'))
+    try:
+        CORRELATION_DEFAULT_AVG_CORRELATION = float(os.environ.get('CORRELATION_DEFAULT_AVG_CORRELATION', '0.5'))
+    except ValueError:
+        CORRELATION_DEFAULT_AVG_CORRELATION = 0.5
 
     # Multi-scenario bundle executive synthesis (reports + LLM merge + branch weights)
     ENABLE_BUNDLE_SYNTHESIS = os.environ.get('ENABLE_BUNDLE_SYNTHESIS', 'true').lower() in ('1', 'true', 'yes')

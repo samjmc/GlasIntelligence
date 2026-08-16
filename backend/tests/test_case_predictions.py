@@ -202,14 +202,13 @@ class TestRecordCaseMeta:
         assert meta_table.inserts[0]["title"] == "Some requirement text"
         assert meta_table.inserts[0]["start_year"] == meta_table.inserts[0]["end_year"]
 
-    def test_updates_when_row_exists(self):
+    def test_existing_row_left_untouched(self):
         fake = _FakeClient({"historical_cases": [{"case_id": "sim_x", "title": "old"}]})
         with patch.object(SupabaseDB, "client", return_value=fake):
             record_case_meta("sim_x", "New requirement text")
         meta_table = fake.tables["historical_cases"]
         assert meta_table.inserts == []
-        assert len(meta_table.updates) == 1
-        assert meta_table.updates[0]["title"] == "New requirement text"
+        assert meta_table.updates == []
 
     def test_title_truncated_to_200_chars(self):
         fake = _FakeClient()
@@ -251,5 +250,92 @@ class TestRecordPredictionsForReport:
             record_predictions_for_report("sim_x", "report_1")
         meta_table = fake.tables["historical_cases"]
         assert meta_table.inserts == []
-        assert len(meta_table.updates) == 1
-        assert meta_table.updates[0]["title"] == "Forecast the outcome of the 2026 trade deal"
+        assert meta_table.updates == []
+
+
+class TestCaseMetaInsertOnly:
+    def test_record_case_meta_inserts_when_missing(self):
+        from unittest.mock import patch
+
+        from app.services import case_predictions as cp
+
+        calls = {}
+
+        class FakeClient:
+            def __init__(self):
+                self._responses = iter(
+                    [type("R", (), {"data": []})(), type("R", (), {"data": [{"id": "x"}]})()]
+                )
+
+            def table(self, name):
+                return self
+
+            def select(self, *a, **k):
+                return self
+
+            def eq(self, *a, **k):
+                return self
+
+            def execute(self):
+                return next(self._responses)
+
+            def insert(self, fields):
+                calls["inserted"] = fields
+                return self
+
+            def update(self, fields):
+                calls["updated"] = fields
+                return self
+
+        with patch.object(cp.SupabaseDB, "client", return_value=FakeClient()):
+            cp.record_case_meta("sim_x", "requirement text")
+        assert calls["inserted"]["case_id"] == "sim_x"
+        assert "updated" not in calls
+
+    def test_record_case_meta_skips_when_exists(self):
+        from unittest.mock import patch
+
+        from app.services import case_predictions as cp
+
+        calls = {}
+
+        class FakeClient:
+            def __init__(self):
+                self._responses = iter(
+                    [type("R", (), {"data": [{"case_id": "sim_y"}]})()]
+                )
+
+            def table(self, name):
+                return self
+
+            def select(self, *a, **k):
+                return self
+
+            def eq(self, *a, **k):
+                return self
+
+            def execute(self):
+                return next(self._responses)
+
+            def insert(self, fields):
+                calls["inserted"] = fields
+                return self
+
+        with patch.object(cp.SupabaseDB, "client", return_value=FakeClient()):
+            cp.record_case_meta("sim_y", "requirement text")
+        assert "inserted" not in calls
+
+
+class TestNonStringNameSkipped:
+    def test_numeric_scenario_name_skipped(self):
+        from app.services.case_predictions import predictions_from_payload
+
+        payload = {
+            "scenarios": [
+                {"name": 123, "probability_range": {"low": 10, "mid": 50, "high": 90}},
+                {"name": "real scenario", "probability_range": {"low": 10, "mid": 50, "high": 90}},
+            ]
+        }
+        rows = predictions_from_payload(payload, "sim_1")
+        assert len(rows) == 1
+        assert rows[0]["dimension"] == "real scenario"

@@ -140,3 +140,37 @@ class TestBiasSign:
         assert grades["dimension_accuracies"] == {"dim1": 0.0}
         assert grades["overall_accuracy"] == 0.0
         assert grades["binary"]["n"] == 1
+
+
+class TestNullScoreRows:
+    def test_null_scores_are_skipped(self):
+        grades = compute_calibration_grades(
+            predictions=[
+                {"case_id": "sim_a", "dimension": "dim1", "predicted_score": None},
+                {"case_id": "sim_a", "dimension": "dim1", "predicted_score": 70},
+                {"case_id": "sim_b", "dimension": "dim2", "predicted_score": None},
+            ],
+            outcomes=[
+                {"case_id": "sim_a", "dimension": "dim1", "actual_score": None},
+                {"case_id": "sim_a", "dimension": "dim1", "actual_score": 60},
+                {"case_id": "sim_b", "dimension": "dim2", "actual_score": 50},
+            ],
+        )
+        assert grades["n_predictions"] == 1
+        assert grades["errors"] == {"dim1": [10.0]}
+        assert grades["total_cases"] == 1
+
+
+class TestDuplicateOutcomeRows:
+    def test_newest_created_at_wins(self):
+        grades = compute_calibration_grades(
+            predictions=[
+                {"case_id": "sim_a", "dimension": "dim1", "predicted_score": 70},
+            ],
+            outcomes=[
+                {"case_id": "sim_a", "dimension": "dim1", "actual_score": 60, "created_at": "2026-01-01T00:00:00Z"},
+                {"case_id": "sim_a", "dimension": "dim1", "actual_score": 90, "created_at": "2026-06-01T00:00:00Z"},
+            ],
+        )
+        assert grades["errors"] == {"dim1": [-20.0]}
+        assert grades["dimension_biases"] == {"dim1": -20.0}

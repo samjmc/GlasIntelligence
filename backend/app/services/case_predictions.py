@@ -43,7 +43,7 @@ def predictions_from_payload(payload: dict, simulation_id: str) -> list[dict]:
         if not _is_numeric(mid):
             continue
         name = scenario.get("name")
-        if name is None:
+        if not isinstance(name, str):
             continue
         meta = scenario.get("_meta") or {}
         mc_mean = meta.get("mc_mean") if isinstance(meta, dict) else None
@@ -94,10 +94,16 @@ def record_case_predictions(simulation_id: str, payload: dict) -> None:
 
 
 def record_case_meta(simulation_id: str, requirement: str) -> None:
-    """Upsert the historical_cases row for a simulation (title, requirement, years)."""
+    """Insert the historical_cases row for a simulation if missing.
+
+    Existing rows are left untouched so any future curation survives report
+    reruns; the requirement text is immutable per simulation.
+    """
     try:
         client = SupabaseDB.client()
         resp = client.table("historical_cases").select("*").eq("case_id", simulation_id).execute()
+        if resp.data:
+            return
         year = datetime.now().year
         fields: dict[str, Any] = {
             "case_id": simulation_id,
@@ -108,10 +114,7 @@ def record_case_meta(simulation_id: str, requirement: str) -> None:
             "key_year": year,
             "sources": [],
         }
-        if resp.data:
-            client.table("historical_cases").update(fields).eq("case_id", simulation_id).execute()
-        else:
-            client.table("historical_cases").insert(fields).execute()
+        client.table("historical_cases").insert(fields).execute()
     except Exception as e:
         logger.warning("Failed to record case meta for case_id=%s: %s", simulation_id, e)
 

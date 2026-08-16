@@ -30,15 +30,24 @@ def compute_calibration_grades(predictions: list[dict], outcomes: list[dict]) ->
     Predictions without a matching outcome (and vice versa) are excluded.
     Empty inputs return a zero-shaped result without raising.
     """
-    outcome_map = {}
+    outcome_map: dict[tuple[str, str], tuple[float, str]] = {}
     for outcome in outcomes:
-        outcome_map[(outcome["case_id"], outcome["dimension"])] = float(outcome["actual_score"])
+        actual = outcome.get("actual_score")
+        if actual is None:
+            continue
+        key = (outcome["case_id"], outcome["dimension"])
+        entry = (float(actual), outcome.get("created_at") or "")
+        if key not in outcome_map or entry[1] > outcome_map[key][1]:
+            outcome_map[key] = entry
 
     matched = []
     for pred in predictions:
         key = (pred["case_id"], pred["dimension"])
+        predicted = pred.get("predicted_score")
+        if predicted is None:
+            continue
         if key in outcome_map:
-            matched.append((key, float(pred["predicted_score"]), outcome_map[key]))
+            matched.append((key, float(predicted), outcome_map[key][0]))
     matched.sort(key=lambda item: item[0])
 
     errors_by_dimension: dict[str, list[float]] = defaultdict(list)
