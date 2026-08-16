@@ -69,3 +69,4 @@ visuals_s2/
 celerybeat-schedule
 celerybeat.pid
 .superpowers/
+.review/
