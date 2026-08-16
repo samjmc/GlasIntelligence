@@ -75,6 +75,11 @@ class Config:
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')
 
+    # Static demo mode: serve canned agent interviews instead of requiring a
+    # live OASIS subprocess (the demo replays a recorded run, so the process
+    # is gone). Set alongside the frontend's VITE_DEMO_MODE=1 build.
+    DEMO_MODE = os.environ.get('DEMO_MODE', 'false').lower() in ('1', 'true', 'yes')
+
     # OASIS platform available actions config
     OASIS_TWITTER_ACTIONS = [
         'CREATE_POST', 'LIKE_POST', 'REPOST', 'FOLLOW', 'DO_NOTHING', 'QUOTE_POST'

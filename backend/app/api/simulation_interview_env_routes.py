@@ -10,6 +10,8 @@ from . import simulation_bp
 from .simulation_helpers import optimize_interview_prompt
 from ..middleware.auth import require_auth
 from ..models.project import ProjectManager
+from ..config import Config
+from ..services.demo_interviews import canned_batch
 from ..services.report_agent import ReportManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
@@ -196,6 +198,13 @@ def interview_agents_batch():
                 return jsonify(
                     {"success": False, "error": f"Interview list item {i + 1} platform must be 'twitter' or 'reddit'"}
                 ), 400
+
+        # Demo mode: the OASIS subprocess does not exist for a recorded run,
+        # so serve canned, scenario-grounded responses instead (shape-compatible
+        # with the live path — see demo_interviews.py). Checked before the
+        # env-alive guard because the subprocess is always gone in a replay.
+        if Config.DEMO_MODE:
+            return jsonify(canned_batch(simulation_id, interviews, platform))
 
         if not SimulationRunner.check_env_alive(simulation_id):
             return jsonify(
@@ -478,158 +487,3 @@ def close_simulation_env():
 
 
 # ============== Follow-Up Suggestions ==============
-
-FOLLOWUP_SYSTEM_PROMPT = """\
-You generate structured follow-up simulation scenarios for a business decision analysis tool.
-Given a completed simulation and its results, suggest 4 follow-up scenarios the user should test next.
-
-Each follow-up must vary a specific, concrete parameter. You MUST include:
-1. One cost or price variation (e.g. "+20% costs", "price cut to $X")
-2. One timing or horizon variation (e.g. "6-month horizon instead of 12", "delayed by 1 year")
-3. One external factor variation (e.g. regulatory change, competitor entry, macro shock)
-4. One scale or geography variation (e.g. "expand to EU market", "double capacity")
-
-Return ONLY valid JSON array:
-[
-  {
-    "title": "Short descriptive title",
-    "scenario": "Full scenario text for re-simulation",
-    "change_summary": "What differs from the original",
-    "variation_type": "cost",
-    "parameter": "the specific variable changed",
-    "magnitude": "+20%"
-  }
-]
-
-variation_type must be exactly one of these four strings: "cost", "timing", "external", "scale".
-
-Rules:
-- Be specific — include concrete numbers, percentages, timeframes, or named changes.
-- scenario must be a complete, standalone prompt suitable for re-simulation.
-- variation_type must be exactly one of: cost, timing, external, scale.
-"""
-
-
-@simulation_bp.route("/suggest-followups", methods=["POST"])
-@require_auth
-def suggest_followups():
-    """Generate LLM-powered follow-up scenario suggestions based on a completed simulation."""
-    try:
-        data = request.get_json() or {}
-        simulation_id = data.get("simulation_id")
-        report_id = data.get("report_id")
-
-        if not simulation_id and not report_id:
-            return jsonify({"success": False, "error": "Provide simulation_id or report_id"}), 400
-
-        scenario_text = ""
-        payload_context = ""
-
-        if report_id:
-            report = ReportManager.get_report(report_id)
-            if report:
-                simulation_id = simulation_id or report.simulation_id
-                payload = ReportManager.load_payload_v1(report_id)
-                if payload:
-                    scenario_text = payload.get("simulation_requirement", "")
-                    decision = payload.get("decision", {}) or {}
-                    scenarios = payload.get("scenarios", []) or []
-                    payload_context = json.dumps(
-                        {
-                            "verdict": decision.get("verdict", ""),
-                            "confidence": decision.get("confidence", ""),
-                            "key_drivers": decision.get("key_drivers", []),
-                            "scenarios_tested": [s.get("name", "") for s in scenarios],
-                        },
-                        indent=2,
-                    )
-
-        if not scenario_text and simulation_id:
-            manager = SimulationManager()
-            state = manager.get_simulation(simulation_id)
-            if state:
-                project = ProjectManager.get_project(state.project_id)
-                if project:
-                    scenario_text = project.simulation_requirement or ""
-
-        if not scenario_text:
-            return jsonify({"success": False, "error": "Could not resolve scenario context"}), 404
-
-        user_msg = f'Original scenario: "{scenario_text}"'
-        if payload_context:
-            user_msg += f"\n\nResults:\n{payload_context}"
-
-        llm = LLMClient()
-        raw = llm.chat(
-            messages=[
-                {"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=0.8,
-            max_tokens=1024,
-        )
-
-        try:
-            suggestions = json.loads(raw)
-        except json.JSONDecodeError:
-            suggestions = []
-            match = re.search(r"\[.*\]", raw, re.DOTALL)
-            if match:
-                try:
-                    suggestions = json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
-
-        return jsonify({"success": True, "data": {"suggestions": suggestions}})
-
-    except Exception as e:
-        logger.error(f"Follow-up suggestions failed: {e}", exc_info=True)
-        return jsonify({"success": False, "error": "Failed to generate suggestions"}), 500
-
-
-# ============== Simulation Reminders ==============
-
-
-@simulation_bp.route("/reminder", methods=["POST"])
-@require_auth
-def create_reminder():
-    """Create a simulation reminder."""
-    try:
-        data = request.get_json() or {}
-        simulation_id = data.get("simulation_id", "")
-        scenario = data.get("scenario", "")
-        remind_at = data.get("remind_at", "")
-
-        if not remind_at:
-            return jsonify({"success": False, "error": "remind_at is required"}), 400
-
-        from datetime import datetime
-
-        try:
-            datetime.fromisoformat(remind_at.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            return jsonify({"success": False, "error": "remind_at must be a valid ISO datetime"}), 400
-
-        reminder = SupabaseDB.create_reminder(
-            user_id=g.user_id,
-            simulation_id=simulation_id,
-            scenario=scenario,
-            remind_at=remind_at,
-        )
-        return jsonify({"success": True, "data": reminder})
-
-    except Exception as e:
-        logger.error(f"Create reminder failed: {e}", exc_info=True)
-        return jsonify({"success": False, "error": "Failed to create reminder"}), 500
-
-
-@simulation_bp.route("/reminders", methods=["GET"])
-@require_auth
-def list_reminders():
-    """List user's pending simulation reminders."""
-    try:
-        reminders = SupabaseDB.list_reminders(g.user_id)
-        return jsonify({"success": True, "data": reminders})
-    except Exception as e:
-        logger.error(f"List reminders failed: {e}", exc_info=True)
-        return jsonify({"success": False, "error": "Failed to load reminders"}), 500
