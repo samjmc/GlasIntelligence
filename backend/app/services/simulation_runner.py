@@ -4,6 +4,7 @@ Runs simulations in the background, records each Agent's actions, and supports r
 """
 
 import os
+import re
 import sys
 import json
 import tempfile
@@ -25,6 +26,28 @@ from .simulation_ipc import SimulationIPCClient
 logger = get_logger("glas.simulation_runner")
 
 _ALLOWED_TIME_UNITS = frozenset({"hour", "day", "week", "month", "year"})
+
+# A run reaching a terminal state with fewer than this many combined actions is
+# treated as a swallowed failure (e.g. every agent LLM call 401'd) rather than a
+# hollow success. Any real run produces far more; see _apply_health_gate.
+MIN_SIMULATION_ACTIONS = 5
+
+# Known LLM failure signals counted in the simulation.log tail (line-based).
+# Covers the class that killed the golden demo run: an Anthropic key in the
+# OpenAI slot produced a clean exit-0 run with zero actions and 401s throughout.
+_LLM_ERROR_PATTERNS = (
+    re.compile(r"401", re.IGNORECASE),
+    re.compile(r"403", re.IGNORECASE),
+    re.compile(r"429", re.IGNORECASE),
+    re.compile(r"insufficient_quota", re.IGNORECASE),
+    re.compile(r"rate[ _]?limit", re.IGNORECASE),
+    re.compile(r"authentication", re.IGNORECASE),
+    re.compile(r"incorrect api key", re.IGNORECASE),
+    re.compile(r"invalid api key", re.IGNORECASE),
+    re.compile(r"unauthorized", re.IGNORECASE),
+)
+
+ZERO_ACTION_ERROR = "Simulation produced no agent actions — check LLM configuration and key/endpoint setup"
 
 
 def merge_time_config_patch(base_time_config: dict | None, patch: dict | None) -> dict:
@@ -166,6 +189,10 @@ class SimulationRunState:
     # Error information
     error: str | None = None
 
+    # LLM failure signal: lines in simulation.log matching known LLM error
+    # patterns (401/403/insufficient_quota/rate limit/authentication/...)
+    llm_error_count: int = 0
+
     # Process ID (for stopping)
     process_pid: int | None = None
 
@@ -211,6 +238,7 @@ class SimulationRunState:
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
             "error": self.error,
+            "llm_error_count": self.llm_error_count,
             "process_pid": self.process_pid,
             "time_scale": self.time_scale,
             "current_time_label": self.current_time_label,
@@ -301,6 +329,7 @@ class SimulationRunner:
                 updated_at=data.get("updated_at", datetime.now().isoformat()),
                 completed_at=data.get("completed_at"),
                 error=data.get("error"),
+                llm_error_count=data.get("llm_error_count", 0),
                 process_pid=data.get("process_pid"),
             )
 
@@ -619,6 +648,9 @@ class SimulationRunner:
                 state.runner_status = RunnerStatus.COMPLETED
                 state.completed_at = datetime.now().isoformat()
                 logger.info(f"Simulation completed: {simulation_id}")
+                # A clean exit is not proof of success: a zero-action run (e.g.
+                # every LLM call 401'd) must fail loudly, not report hollow success.
+                cls._apply_health_gate(state)
             else:
                 state.runner_status = RunnerStatus.FAILED
                 # Read error info from main log file
@@ -631,6 +663,9 @@ class SimulationRunner:
                 except Exception:
                     pass
                 state.error = f"Process exit code: {exit_code}, error: {error_info}"
+                state.llm_error_count = cls._count_llm_errors(sim_dir)
+                if state.llm_error_count:
+                    state.error += f" | {state.llm_error_count} LLM error line(s) in simulation.log"
                 logger.error(f"Simulation failed: {simulation_id}, error={state.error}")
 
             state.twitter_running = False
@@ -728,6 +763,7 @@ class SimulationRunner:
                                         state.runner_status = RunnerStatus.COMPLETED
                                         state.completed_at = datetime.now().isoformat()
                                         logger.info(f"All platform simulations completed: {state.simulation_id}")
+                                        cls._apply_health_gate(state)
 
                                 # Update round info (from round_end events)
                                 elif event_type == "round_end":
@@ -798,6 +834,67 @@ class SimulationRunner:
         except Exception as e:
             logger.warning(f"Failed to read action log: {log_path}, error={e}")
             return position
+
+    @classmethod
+    def _count_llm_errors(cls, sim_dir: str) -> int:
+        """
+        Count lines matching known LLM failure patterns in the simulation log tail.
+
+        Scans the last 2000 lines of simulation.log so the count stays bounded
+        on long runs. Returns 0 when the log is missing/unreadable.
+        """
+        main_log_path = os.path.join(sim_dir, "simulation.log")
+        if not os.path.exists(main_log_path):
+            return 0
+        try:
+            with open(main_log_path, encoding="utf-8", errors="replace") as f:
+                tail = f.readlines()[-2000:]
+        except OSError:
+            return 0
+        return sum(1 for line in tail if any(pattern.search(line) for pattern in _LLM_ERROR_PATTERNS))
+
+    @classmethod
+    def _apply_health_gate(cls, state: SimulationRunState) -> bool:
+        """
+        Fail loudly when a run reaches a terminal state with no real agent actions.
+
+        Guards the hollow-success failure class (see portfolio-technical-
+        assessment.md Story D2-3): a run whose every agent LLM call failed
+        (e.g. all 401 due to a bad key) used to exit cleanly, log a normal
+        completion, and surface as "successful" with zero actions. This gate
+        flips such runs to FAILED with a diagnostic error so the UI and
+        run-state surface the failure instead.
+
+        Always records llm_error_count (matching lines in simulation.log tail)
+        on the state so run_state.json carries the LLM-error signal.
+
+        Returns:
+            True if the run may stay completed, False if it was marked FAILED.
+        """
+        total_actions = state.twitter_actions_count + state.reddit_actions_count
+        sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
+        state.llm_error_count = cls._count_llm_errors(sim_dir)
+
+        if total_actions >= MIN_SIMULATION_ACTIONS:
+            return True
+
+        if total_actions == 0:
+            message = ZERO_ACTION_ERROR
+        else:
+            message = (
+                f"Simulation produced too few agent actions "
+                f"({total_actions} < {MIN_SIMULATION_ACTIONS}) — check LLM configuration and key/endpoint setup"
+            )
+        if state.llm_error_count:
+            message += f" ({state.llm_error_count} LLM error line(s) in simulation.log)"
+
+        state.runner_status = RunnerStatus.FAILED
+        state.error = message
+        logger.error(
+            f"Simulation health gate failed: {state.simulation_id}, "
+            f"total_actions={total_actions}, llm_error_count={state.llm_error_count}"
+        )
+        return False
 
     @classmethod
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:

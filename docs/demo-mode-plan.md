@@ -103,6 +103,8 @@ There is nothing to cache until a run completes. Everything else is blocked on t
 
 Then re-run Phase 0's traverse with the recorder on. That produces the tape.
 
+Before committing a fresh recording, compact it: `python3 scripts/compact_tape.py <tape.json> [out]` drops every repeated identical body per `(method, path)` key, keeping only the first occurrence — lossless for replay, since `resolve()` serves the last snapshot with `t_ms <= elapsed` per key, so repeated identical bodies are replay-equivalent no matter how interleaved. Query strings stay part of the path, so cursor entries like `GET /api/report/:id/agent-log?from_line=N` survive per cursor value. The original schema (`schema_version`, `scenario`, `duration_ms`, entries with inline bodies) is preserved; the Pharmacy First golden tape went from 633MB recorded to 18.8MB compacted. Run it on a copy first, spot-check the output, and only then commit.
+
 ### Phase 2 — In-browser replay
 
 **Status: shipped.** Replay runs entirely client-side. `frontend/src/demo/` contains:
