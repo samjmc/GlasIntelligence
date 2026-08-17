@@ -239,7 +239,7 @@ class GraphBuilderService:
             edge_class.__doc__ = description
 
             source_targets = []
-            for st in edge_def.get("source_targets", []):
+            for st in edge_def.get("source_targets", [])[:10]:
                 source_targets.append(
                     EntityEdgeSourceTarget(source=st.get("source", "Entity"), target=st.get("target", "Entity"))
                 )
