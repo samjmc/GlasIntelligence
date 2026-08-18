@@ -127,10 +127,27 @@ export function resolve(index, method, path, elapsedMs) {
   return { status: chosen.status, body: chosen.body }
 }
 
+// Skip offset: lets the demo viewer fast-forward the virtual clock without
+// touching the session id. DemoBanner's skip controls add to it; it resets
+// whenever a new scenario starts (adapter.setActiveScenario).
+let skipMs = 0
+
+export function addSkipMs(ms) {
+  skipMs = Math.max(0, skipMs + ms)
+}
+
+export function getSkipMs() {
+  return skipMs
+}
+
+export function resetSkipMs() {
+  skipMs = 0
+}
+
 export function elapsedFor(sessionId, now = Date.now()) {
   const decoded = decodeDemoId(sessionId)
   if (!decoded) return 0
-  return (now - decoded.startMs) * DEMO_SPEEDUP
+  return ((now - decoded.startMs) + skipMs) * DEMO_SPEEDUP
 }
 
 const cache = new Map()

@@ -2,6 +2,10 @@
   <!-- Main sticky demo banner -->
   <div v-if="visible" data-test="demo-banner" class="demo-banner">
     <span>Demo &#8212; replaying a recorded simulation</span>
+    <span class="demo-banner-controls">
+      <button class="demo-banner-skip" data-test="demo-skip" aria-label="Skip forward" @click="skip()">Skip &#9654;&#9654;</button>
+      <button class="demo-banner-skip" data-test="demo-skip-end" aria-label="Skip to the end" @click="skipToEnd()">Skip to report &#9654;&#9654;|</button>
+    </span>
     <button class="demo-banner-dismiss" data-test="banner-dismiss" aria-label="Dismiss" @click="visible = false">&times;</button>
   </div>
 
@@ -36,12 +40,70 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { addSkipMs, getSkipMs, loadTape } from '../demo/tape'
+import { getActiveSessionId } from '../demo/adapter'
+import { decodeDemoId } from '../demo/sessionId'
+import { DEMO_SPEEDUP } from '../demo/config'
 
 const visible = ref(true)
 const notRecorded = ref(false)
 const notRecordedPath = ref('')
 const tapeFailed = ref(false)
 const tapeFailedPath = ref('')
+
+const SKIP_STEP_MS = 90_000 // 90s of tape time per click
+
+function skip() {
+  addSkipMs(SKIP_STEP_MS)
+  persistSkip()
+}
+
+async function skipToEnd() {
+  const scenario = decodeScenarioFromSession()
+  if (!scenario) return
+  try {
+    const tape = await loadTape(scenario)
+    // Clock: elapsed_tape_ms = (wall_base + skip) * SPEEDUP. To reach the end
+    // we need skip such that (base + skip) * SPEEDUP = duration_ms.
+    const id = getActiveSessionId()
+    const decoded = decodeDemoId(id)
+    const wallBase = decoded ? (Date.now() - decoded.startMs) : 0
+    const needed = tape.duration_ms / DEMO_SPEEDUP - wallBase - getSkipMs()
+    addSkipMs(Math.max(0, needed))
+    persistSkip()
+  } catch {
+    // tape already failed loudly via the watchdog; nothing to do here
+  }
+}
+
+function decodeScenarioFromSession() {
+  const id = getActiveSessionId()
+  if (!id) return null
+  const decoded = decodeDemoId(id)
+  return decoded?.scenario || null
+}
+
+// Keep skip progress across a reload so a refresh doesn't restart the walk.
+function persistSkip() {
+  const id = getActiveSessionId()
+  if (!id) return
+  try {
+    sessionStorage.setItem(`demo-skip-${id}`, String(getSkipMs()))
+  } catch {
+    /* storage unavailable — skip persistence is best-effort */
+  }
+}
+
+function restoreSkip() {
+  const id = getActiveSessionId()
+  if (!id) return
+  try {
+    const stored = sessionStorage.getItem(`demo-skip-${id}`)
+    if (stored) addSkipMs(Number(stored) || 0)
+  } catch {
+    /* best-effort */
+  }
+}
 
 function onNotRecorded(e) {
   notRecordedPath.value = e.detail?.path || ''
@@ -60,6 +122,7 @@ function reload() {
 onMounted(() => {
   window.addEventListener('demo:not-recorded', onNotRecorded)
   window.addEventListener('demo:tape-load-failed', onTapeLoadFailed)
+  restoreSkip()
 })
 
 onUnmounted(() => {
@@ -81,6 +144,22 @@ onUnmounted(() => {
   font-size: 0.875rem;
   background: #1f2937;
   color: #e5e7eb;
+}
+.demo-banner-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+.demo-banner-skip {
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.demo-banner-skip:hover {
+  background: #4b5563;
 }
 
 .demo-banner-dismiss {

@@ -1,4 +1,4 @@
-import { loadTape, resolve, elapsedFor, NOT_RECORDED, TAPE_LOAD_FAILED } from './tape'
+import { loadTape, resolve, elapsedFor, resetSkipMs, NOT_RECORDED, TAPE_LOAD_FAILED } from './tape'
 import { decodeDemoId } from './sessionId'
 import { SESSION_KEY } from './config'
 
@@ -42,6 +42,11 @@ if (typeof window !== 'undefined') {
 export function setActiveScenario(scenario, sessionId) {
   activeScenario = scenario
   activeSessionId = sessionId ?? null
+  resetSkipMs()
+}
+
+export function getActiveSessionId() {
+  return activeSessionId
 }
 
 function announceIfMissing(body, path) {

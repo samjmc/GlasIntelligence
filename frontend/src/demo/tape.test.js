@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { normalisePath, indexEntries, resolve, NOT_RECORDED, canonicalQuery } from './tape'
+import { normalisePath, indexEntries, resolve, NOT_RECORDED, canonicalQuery, elapsedFor, addSkipMs, getSkipMs, resetSkipMs } from './tape'
+import { encodeDemoId } from './sessionId'
 import synthetic from './fixtures/synthetic-tape.json'
 
 describe('normalisePath', () => {
@@ -120,5 +121,33 @@ describe('query-string disambiguation (agent-log cursor)', () => {
     const r = resolve(index, 'GET', '/api/report/demo-report-1/agent-log?from_line=99', 99999)
     // The fallback must not return NOT_RECORDED since the path IS in the tape.
     expect(r.body.error).not.toBe(NOT_RECORDED)
+  })
+})
+
+describe('skip clock', () => {
+  const id = encodeDemoId(1_000_000, 'energy-price-cap')
+
+  it('elapsedFor starts at zero skip', () => {
+    resetSkipMs()
+    expect(elapsedFor(id, 2_000_000)).toBe(1_000_000)
+  })
+
+  it('addSkipMs advances the clock', () => {
+    resetSkipMs()
+    addSkipMs(5000)
+    expect(elapsedFor(id, 2_000_000)).toBe(1_005_000)
+  })
+
+  it('never goes negative and clamps to zero', () => {
+    resetSkipMs()
+    addSkipMs(-99999)
+    expect(getSkipMs()).toBe(0)
+  })
+
+  it('resetSkipMs clears the offset', () => {
+    addSkipMs(10_000)
+    resetSkipMs()
+    expect(getSkipMs()).toBe(0)
+    expect(elapsedFor(id, 2_000_000)).toBe(1_000_000)
   })
 })
