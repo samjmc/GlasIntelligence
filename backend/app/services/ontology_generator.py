@@ -219,6 +219,26 @@ class OntologyGenerator:
         entity_inventory = self._extract_entity_inventory(combined_text, simulation_requirement)
         logger.info(f"Entity inventory extracted: {len(entity_inventory)} entities found")
 
+        # Knowledge-expansion pass: the inventory pre-scan only finds entities
+        # IN the research text. expand_entities() names additional real
+        # stakeholders from domain knowledge and verifies each with a live
+        # search before adding them (fail-soft: never blocks the build).
+        from ..config import Config
+
+        if Config.ENTITY_EXPANSION_ENABLED:
+            from .entity_expansion import expand_entities
+
+            existing = [e.get("name", "") for e in entity_inventory]
+            additions = expand_entities(
+                simulation_requirement,
+                combined_text,
+                existing,
+                target=Config.ENTITY_EXPANSION_TARGET,
+            )
+            entity_inventory.extend(additions)
+            if additions:
+                logger.info(f"Entity inventory expanded: +{len(additions)} verified stakeholders")
+
         user_message = self._build_user_message(
             document_texts,
             simulation_requirement,

@@ -305,6 +305,15 @@ class Config:
 
     # Tavily Search Research (iterative search + LLM refinement)
     TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+    # Entity knowledge-expansion: an LLM pass names additional real
+    # stakeholders beyond the research text, each verified by a live Tavily
+    # search before entering the graph (see services/entity_expansion.py).
+    ENTITY_EXPANSION_ENABLED = os.environ.get("ENTITY_EXPANSION_ENABLED", "true").lower() in ("1", "true", "yes")
+    ENTITY_EXPANSION_TARGET = _safe_int(
+        os.environ.get("ENTITY_EXPANSION_TARGET", "20"),
+        20,
+        env_key="ENTITY_EXPANSION_TARGET",
+    )
     SEARCH_RESEARCH_ENABLED = bool(TAVILY_API_KEY)
     # Model for the search-research chain (query gen, synthesis, critique,
     # verification). Defaults to the general LLM model; for Claude runs set it
