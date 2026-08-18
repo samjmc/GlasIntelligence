@@ -711,6 +711,19 @@ def list_tasks():
 
 
 def _graph_data_response(graph_data: dict, outcome: CacheOutcome, age_seconds: float | None):
+    # Zep NER pulls quantitative anchors ('2.7%', '£17', '2026') as typed
+    # nodes; filter them at the serve point so every cache outcome and the
+    # demo tapes present stakeholder-only graphs.
+    from ..services.graph_noise_filter import filter_quant_noise
+
+    nodes, edges = graph_data.get("nodes") or [], graph_data.get("edges") or []
+    filtered_nodes, filtered_edges = filter_quant_noise(nodes, edges)
+    if len(filtered_nodes) != len(nodes):
+        graph_data["nodes"] = filtered_nodes
+        graph_data["edges"] = filtered_edges
+        graph_data["node_count"] = len(filtered_nodes)
+        graph_data["edge_count"] = len(filtered_edges)
+
     resp = make_response(jsonify({"success": True, "data": graph_data}))
     resp.headers["X-Glas-Graph-Cache"] = outcome.value
     if age_seconds is not None:
