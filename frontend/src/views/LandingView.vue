@@ -56,6 +56,16 @@
       <router-link to="/pricing" class="section-link">View Full Pricing →</router-link>
     </section>
 
+    <!-- Worked Examples (demo mode) -->
+    <section v-if="isDemoMode" class="demo-section">
+      <h2 class="section-heading">Worked Examples</h2>
+      <p class="demo-section-blurb">
+        Run a complete recorded run end to end — research, knowledge graph, agent
+        simulation, and report — replaying in about 90 seconds.
+      </p>
+      <DemoScenarioPicker @select="onDemoScenarioSelected" />
+    </section>
+
     <!-- Footer -->
     <footer class="landing-footer">
       <div class="footer-inner">
@@ -77,6 +87,18 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+import { isDemoMode } from '../demo/config'
+import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
+
+const router = useRouter()
+
+function onDemoScenarioSelected({ prompt, scenarioId }) {
+  // Home prefills from these query params; the session id is minted there at
+  // run-start so the virtual clock begins when the run begins, not at click.
+  router.push({ path: '/home', query: { demoPrompt: prompt, demoScenario: scenarioId || '' } })
+}
+
 const steps = [
   {
     num: '01',

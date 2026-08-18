@@ -653,6 +653,13 @@ const scenarioCount = ref(5)
 const wasFullAnalysisEnabled = ref(false)
 
 onMounted(async () => {
+  // Arriving from the landing page's demo section: prefill the prompt and
+  // scenario so the picker step is skipped. The session id is still minted
+  // at run-start, keeping the virtual clock aligned with the run.
+  if (route.query.demoPrompt) {
+    formData.value.simulationRequirement = String(route.query.demoPrompt)
+    demoScenarioId.value = String(route.query.demoScenario || '')
+  }
   const full = 'Simulate the future'
   let i = 0
   typewriterTimer = setInterval(() => {

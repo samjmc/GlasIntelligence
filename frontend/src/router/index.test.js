@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 
-const publicPaths = ['/login', '/signup', '/pricing', '/feed', '/landing', '/terms', '/privacy', '/health']
+const publicPaths = ['/login', '/signup', '/pricing', '/feed', '/', '/terms', '/privacy', '/health']
 const authPaths = ['/dashboard', '/compare']
 
 describe('Router configuration', () => {
