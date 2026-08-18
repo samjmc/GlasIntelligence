@@ -29,7 +29,7 @@ def _payload(graph_id: str, node_count: int) -> dict:
     return {
         "graph_id": graph_id,
         "nodes": [
-            {"uuid": f"n{i}", "name": f"N{i}", "labels": ["Entity"], "summary": "", "attributes": {}}
+            {"uuid": f"n{i}", "name": f"Stakeholder {i}", "labels": ["Organization"], "summary": "", "attributes": {}}
             for i in range(node_count)
         ],
         "edges": [],
