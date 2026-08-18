@@ -51,7 +51,7 @@ const routes = [
     meta: { public: true },
   },
   {
-    path: '/',
+    path: '/landing',
     name: 'Landing',
     component: LandingView,
     meta: { public: true },
@@ -93,7 +93,7 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/home',
+    path: '/',
     name: 'Home',
     component: Home,
   },

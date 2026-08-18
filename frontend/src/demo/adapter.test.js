@@ -204,6 +204,42 @@ describe('time progression through the adapter', () => {
   })
 })
 
+describe('skip offset and active session id', () => {
+  it('getActiveSessionId returns null initially and the id passed to setActiveScenario', async () => {
+    const { setActiveScenario, getActiveSessionId } = await import('./adapter')
+    expect(getActiveSessionId()).toBe(null)
+
+    const sessionId = encodeDemoId(Date.now(), 'synthetic')
+    setActiveScenario('synthetic', sessionId)
+    expect(getActiveSessionId()).toBe(sessionId)
+  })
+
+  it('setActiveScenario resets the skip offset', async () => {
+    const { setActiveScenario } = await import('./adapter')
+    const tape = await import('./tape')
+
+    tape.addSkipMs(5000)
+    expect(tape.getSkipMs()).toBe(5000)
+
+    setActiveScenario('synthetic')
+    expect(tape.getSkipMs()).toBe(0)
+  })
+
+  it('resolves an advanced snapshot when skip pushes elapsed forward', async () => {
+    const { demoAdapter, setActiveScenario } = await import('./adapter')
+    const tape = await import('./tape')
+
+    // Minted now, so wall elapsed ≈ 0; the skip offset alone pushes virtual
+    // elapsed across t=10000, which the tape snapshots as twitter round 1.
+    const sessionId = encodeDemoId(Date.now(), 'synthetic')
+    setActiveScenario('synthetic', sessionId)
+    tape.addSkipMs(10000)
+
+    const res = await demoAdapter({ url: '/api/simulation/status/demo_a_b_c', method: 'get' })
+    expect(res.data.data.twitter_current_round).toBe(1)
+  })
+})
+
 describe('demoFetch tape-load failure', () => {
   it('resolves (does not reject) when fetch rejects', async () => {
     makeFetchReject()

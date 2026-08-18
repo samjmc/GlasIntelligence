@@ -2,8 +2,8 @@
   <div class="bundle-results-view">
     <header class="bundle-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/home')">GLAS</div>
-        <button class="nav-btn" @click="router.push('/home')">
+        <div class="brand" @click="router.push('/')">GLAS</div>
+        <button class="nav-btn" @click="router.push('/')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           Home
         </button>
@@ -216,7 +216,7 @@
         <div class="error-card">
           <h3>Analysis Failed</h3>
           <p>{{ status.error || 'An error occurred during the analysis.' }}</p>
-          <button class="retry-btn" @click="router.push('/home')">Return Home</button>
+          <button class="retry-btn" @click="router.push('/')">Return Home</button>
         </div>
       </div>
 

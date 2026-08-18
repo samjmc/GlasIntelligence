@@ -11,11 +11,11 @@ Glas Intelligence uses large language models and multi-agent social simulation (
 - **Frontend**: Vue 3 + Vite
 - **Backend**: Python / Flask
 - **Simulation**: OASIS (camel-ai) multi-agent framework
-- **Knowledge Graph**: Zep Cloud (temporal knowledge graph with entity and relationship extraction)
+- **Knowledge Graph**: Zep Cloud (GraphRAG)
 - **Auth & DB**: Supabase (PostgreSQL + Auth)
 - **Billing**: Stripe
 - **Task Queue**: Celery + Redis
-- **Deployment**: Vite frontend builds on Cloudflare Pages
+- **Deployment**: Docker Compose + Nginx + GitHub Actions CI/CD
 
 ## Local Development
 
@@ -101,15 +101,26 @@ All checks must pass before a PR can be merged to `main`:
 | **build-and-e2e** | Docker build + Playwright E2E tests |
 | **docker-scan** | Trivy vulnerability scan on production Docker image |
 
-### Static Demo Hosting
+### Continuous Deployment (on merge to main)
 
-The portfolio demo (`feat/static-demo-hosting`) is a fully static, keyless build that replays a recorded simulation in the browser — no backend, no Supabase, no API keys. See `docs/demo-mode-plan.md` and `docs/superpowers/specs/2026-08-08-static-demo-hosting-design.md` for architecture and implementation details.
+```
+merge to main
+  → build Docker image + push to GHCR
+  → run database migrations (Supabase CLI)
+  → deploy to staging (staging.glasinsight.com)
+  → smoke test staging
+  → deploy to production (glasinsight.com)
+  → health check with auto-rollback
+```
 
-Cloudflare Pages is not yet configured. Once the golden recording is committed and Pages is wired up, merging to `main` will trigger an automatic build and deploy.
+If the production health check fails within 60 seconds, the system automatically rolls back to the previous working image.
 
-| Job | What it does |
-|-----|--------------|
-| **demo-e2e** | Builds `VITE_DEMO_MODE=1` bundle (no secrets), serves it, runs Playwright against the fixture tape |
+### Environments
+
+| Environment | URL | Trigger |
+|-------------|-----|---------|
+| **Production** | https://glasinsight.com | Merge to `main` (after staging passes) |
+| **Staging** | https://staging.glasinsight.com | Merge to `main` (before production) |
 
 ## Monitoring & Observability
 
@@ -142,47 +153,65 @@ make monitoring-down
 - **Warning**: CPU > 80%, Redis memory > 80%, error rate > 5%, latency p95 > 5s
 - **Info**: SSL cert expiring < 14 days
 
+## Production Deployment
+
+Automated via GitHub Actions on merge to `main`. Manual fallback:
+
+```bash
+# Build and deploy
+make deploy-prod
+
+# Or using the deploy script on the server
+./deploy.sh start
+```
+
 ## Environment Variables
 
-See `.env.example` for all required configuration. The static demo build is intentionally keyless — the only variables it uses are:
+See `.env.example` for all required configuration. Key additions for CI/CD:
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_DEMO_MODE` | Enable fixture-based replay (set to `1` for demo builds). When unset, all demo branches are dead-code-eliminated by Vite. |
-| `VITE_DEMO_SPEEDUP` | Clock multiplier for the virtual tape clock (defaults to `1`; set to `run_duration_ms / 90000` for a ~90 s traverse). Not required for the CI demo-e2e job, which runs at the default. |
+| `SENTRY_DSN` | Sentry error tracking |
+| `ENABLE_PROMETHEUS` | Enable `/api/metrics` endpoint |
+| `SENTRY_ENVIRONMENT` | Sentry environment tag |
 
-Do **not** set `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` in the demo build — the demo makes no Supabase calls, and including those values would violate the zero-external-origins constraint.
+## GitHub Secrets Required
+
+| Secret | Purpose |
+|--------|---------|
+| `DEPLOY_SSH_KEY` | SSH private key for deploying to the server |
+| `VITE_SUPABASE_URL` | Supabase URL for frontend build |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key for frontend build |
+| `SUPABASE_ACCESS_TOKEN` | Supabase CLI access token for migrations |
+| `SUPABASE_PROJECT_REF` | Supabase project reference for migrations |
 
 ## Project Structure
 
 ```
 ├── .github/workflows/     # CI/CD pipeline
-│   └── ci.yml             # PR checks (lint, test, security, E2E)
+│   ├── ci.yml             # PR checks (lint, test, security, E2E)
+│   └── deploy.yml         # Automated deployment
 ├── backend/               # Flask API
 │   ├── app/               # Application code
 │   ├── tests/             # Unit + integration tests
 │   └── pyproject.toml     # Python dependencies
-├── frontend/              # Vue 3 SPA + Vite build
-│   ├── src/               # Components, views, router
-│   └── dist/              # Built static site (Cloudflare Pages)
+├── frontend/              # Vue 3 SPA
+│   └── src/               # Components, views, router
 ├── e2e/                   # Playwright E2E tests
-├── docs/                  # Reference artifacts and design specs
-│   ├── reports/           # Markdown sources for client/PDF reports
-│   ├── schema/            # Reference SQL (Supabase schema snapshot)
-│   ├── demo-mode-plan.md  # Portfolio demo replay architecture
-│   └── superpowers/       # Implementation plans and design specs
-├── tasks/                 # Local task tracking (todo.md)
-├── scripts/               # PDF/visual/DB utilities
+├── monitoring/            # Observability configs
+│   ├── prometheus.yml
+│   ├── alert-rules.yml
+│   ├── loki-config.yml
+│   ├── promtail-config.yml
+│   └── grafana/           # Dashboards + datasources
 ├── docker-compose.yml         # Local dev
+├── docker-compose.prod.yml    # Production
+├── docker-compose.staging.yml # Staging
 ├── docker-compose.monitoring.yml  # Observability stack
 ├── docker-compose.ci.yml     # CI E2E testing
 ├── Makefile               # Developer commands
 └── .pre-commit-config.yaml
 ```
-
-## Status
-
-![CI](https://github.com/samjmc/GlasIntelligence/actions/workflows/ci.yml/badge.svg)
 
 ## License
 

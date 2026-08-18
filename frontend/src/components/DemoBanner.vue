@@ -1,6 +1,6 @@
 <template>
-  <!-- Main sticky demo banner -->
-  <div v-if="visible" data-test="demo-banner" class="demo-banner">
+  <!-- Main sticky demo banner — only during a walkthrough (see showBanner) -->
+  <div v-if="showBanner" data-test="demo-banner" class="demo-banner">
     <span>Demo &#8212; replaying a recorded simulation</span>
     <span class="demo-banner-controls">
       <button class="demo-banner-skip" data-test="demo-skip" aria-label="Skip forward" @click="skip()">Skip &#9654;&#9654;</button>
@@ -39,11 +39,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { addSkipMs, getSkipMs, loadTape } from '../demo/tape'
 import { getActiveSessionId } from '../demo/adapter'
 import { decodeDemoId } from '../demo/sessionId'
 import { DEMO_SPEEDUP } from '../demo/config'
+
+const route = useRoute()
 
 const visible = ref(true)
 const notRecorded = ref(false)
@@ -51,7 +54,15 @@ const notRecordedPath = ref('')
 const tapeFailed = ref(false)
 const tapeFailedPath = ref('')
 
-const SKIP_STEP_MS = 90_000 // 90s of tape time per click
+const SKIP_STEP_MS = 90_000 // 90 s of tape time per click
+const WALKTHROUGH_ROUTES = ['SimulationRun', 'Report', 'Interaction']
+
+// The banner only appears during a walkthrough. Adapter state is plain module
+// state (not Vue-reactive), so getActiveSessionId() is re-read inside the
+// computed; route.name is reactive, so the computed re-evaluates on navigation,
+// which is when the session is set (all launch paths set the session before
+// router.push).
+const showBanner = computed(() => visible.value && WALKTHROUGH_ROUTES.includes(route.name) && Boolean(getActiveSessionId()))
 
 function skip() {
   addSkipMs(SKIP_STEP_MS)
@@ -79,8 +90,7 @@ async function skipToEnd() {
 function decodeScenarioFromSession() {
   const id = getActiveSessionId()
   if (!id) return null
-  const decoded = decodeDemoId(id)
-  return decoded?.scenario || null
+  return decodeDemoId(id)?.scenario || null
 }
 
 // Keep skip progress across a reload so a refresh doesn't restart the walk.
@@ -145,10 +155,12 @@ onUnmounted(() => {
   background: #1f2937;
   color: #e5e7eb;
 }
+
 .demo-banner-controls {
   display: flex;
   gap: 0.5rem;
 }
+
 .demo-banner-skip {
   background: #374151;
   border: 1px solid #4b5563;
@@ -158,6 +170,7 @@ onUnmounted(() => {
   font-size: 0.8rem;
   cursor: pointer;
 }
+
 .demo-banner-skip:hover {
   background: #4b5563;
 }

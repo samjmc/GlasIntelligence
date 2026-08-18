@@ -79,3 +79,72 @@ jobs:
           path: |
             e2e/test-results/
             e2e/playwright-report/
+
+  # Practical-use-case counterpart to demo-e2e: replays the REAL golden tapes
+  # (Pharmacy First + Energy Caps) end-to-end. Unlike the synthetic job above,
+  # this build does NOT stage the e2e fixture — frontend/public/demo already
+  # contains the real manifest + tapes, so what is built is exactly the bundle
+  # that ships to Cloudflare Pages. Real tapes are large (~35 MB pharmacy), so
+  # the spec raises its per-test timeout to 240 s.
+  demo-e2e-real:
+    name: Real golden-tape replay
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # No fixture copy step — the real manifest and tapes are already committed
+      # under frontend/public/demo/.
+      # No secrets, no .env, no backend. No speedup overrides — this builds
+      # exactly the bundle that ships to Cloudflare Pages.
+      - name: Build the demo bundle
+        run: npm ci && npm run build
+        working-directory: frontend
+        env:
+          VITE_DEMO_MODE: '1'
+
+      - name: Serve the bundle
+        run: npx --yes serve -s dist -l 4174 &
+        working-directory: frontend
+
+      # Wait for the static file server to be ready before running tests.
+      # Without this gate a timing race causes Playwright to report opaque
+      # "connection refused" errors that look like test failures rather than
+      # server startup failures.
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:4174/ > /dev/null 2>&1; then
+              echo "Server is ready"
+              exit 0
+            fi
+            echo "Waiting for server... ($i/20)"
+            sleep 1
+          done
+          echo "Server failed to start within 20 s" >&2
+          exit 1
+
+      - name: Install Playwright
+        run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Run demo-real tests
+        run: npx playwright test --config playwright.real.config.js
+        working-directory: e2e
+        env:
+          BASE_URL: http://localhost:4174
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: demo-e2e-real-results
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/

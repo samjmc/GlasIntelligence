@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..config import Config
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.calibration_guardrails")
@@ -194,8 +195,15 @@ def bound_likelihood_ratio(lr: float, max_lr: float = MAX_LIKELIHOOD_RATIO) -> f
 
 
 def _uncorrelated_combined_log_lr(bounded: list[float]) -> float:
-    """Effective-sample-size adjustment with default average correlation (no matrix)."""
-    avg_correlation = 0.5
+    """
+    Effective-sample-size adjustment with average correlation (no matrix).
+
+    Documented heuristic (no formal derivation): average pairwise correlation
+    between evidence sources is taken as
+    Config.CORRELATION_DEFAULT_AVG_CORRELATION (default 0.5, preserved from the
+    original hardcoded constant for behavioral compatibility).
+    """
+    avg_correlation = Config.CORRELATION_DEFAULT_AVG_CORRELATION
     n = len(bounded)
     effective_n = n / (1.0 + (n - 1) * avg_correlation)
     log_lr_sum = sum(math.log(lr) for lr in bounded)

@@ -1,74 +1,15 @@
 """
 Ontology generation service
 API 1: Analyze text content and generate entity and relationship type definitions for social simulation
-
-`OntologyGenerator.generate` is the main pipeline entry used by the app (e.g. graph/ontology routes).
-
-`generate_python_code` is optional tooling to emit Python/Zep-style class strings; it is not invoked
-by the main request pipeline—only call it from scripts or future tooling if needed.
 """
 
-from typing import Any
+import json
+from typing import Dict, Any, List, Optional
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 
-logger = get_logger("glas.ontology_generator")
+logger = get_logger('glas.ontology_generator')
 
-
-# The 6 base entity types that are always included in every ontology.
-# The LLM adds up to 4 scenario-specific types on top of these.
-BASE_ENTITY_TYPES = [
-    {
-        "name": "PoliticalLeader",
-        "description": "Heads of state, ministers, diplomats, elected officials, party leaders",
-        "attributes": [
-            {"name": "full_name", "type": "text", "description": "Full name of the leader"},
-            {"name": "title", "type": "text", "description": "Official title or position"},
-        ],
-    },
-    {
-        "name": "MilitaryOrSecurity",
-        "description": "Military commanders, intelligence chiefs, police, paramilitary leaders",
-        "attributes": [
-            {"name": "full_name", "type": "text", "description": "Full name"},
-            {"name": "rank_or_role", "type": "text", "description": "Military rank or security role"},
-        ],
-    },
-    {
-        "name": "BusinessLeader",
-        "description": "CEOs, executives, investors, fund managers, entrepreneurs",
-        "attributes": [
-            {"name": "full_name", "type": "text", "description": "Full name"},
-            {"name": "position", "type": "text", "description": "Corporate title or investment role"},
-        ],
-    },
-    {
-        "name": "MediaOrJournalist",
-        "description": "Media outlets, journalists, commentators, influencers, bloggers",
-        "attributes": [
-            {"name": "full_name", "type": "text", "description": "Name of person or outlet"},
-            {"name": "media_role", "type": "text", "description": "Journalist, anchor, editor, outlet, etc."},
-        ],
-    },
-    {
-        "name": "Person",
-        "description": "Any individual not fitting the above specific person types",
-        "attributes": [
-            {"name": "full_name", "type": "text", "description": "Full name of the person"},
-            {"name": "role", "type": "text", "description": "Role or occupation"},
-        ],
-    },
-    {
-        "name": "Organization",
-        "description": "Any institution, company, government body, NGO, agency, or group",
-        "attributes": [
-            {"name": "org_name", "type": "text", "description": "Name of the organization"},
-            {"name": "org_type", "type": "text", "description": "Type of organization"},
-        ],
-    },
-]
-
-BASE_ENTITY_TYPE_NAMES = {t["name"] for t in BASE_ENTITY_TYPES}
 
 # System prompt for ontology generation
 ONTOLOGY_SYSTEM_PROMPT = """You are a professional knowledge graph ontology design expert. Your task is to analyze the given text content and simulation requirements, and design entity types and relationship types suitable for **social media opinion simulation**.
@@ -90,6 +31,7 @@ Therefore, **entities must be real-world subjects that can post and interact on 
 - Organizations and institutions (universities, associations, NGOs, unions, etc.)
 - Government departments and regulatory agencies
 - Media organizations (newspapers, TV stations, self-media, websites)
+- Social media platforms themselves
 - Representatives of specific groups (e.g., alumni associations, fan groups, advocacy groups, etc.)
 
 **Not acceptable**:
@@ -133,32 +75,32 @@ Please output JSON format with the following structure:
 
 ## Design Guidelines (Extremely Important!)
 
-### 1. Entity Type Design - HYBRID BASE + DYNAMIC SCHEME
+### 1. Entity Type Design - Must Be Strictly Followed
 
-**Total: Exactly 10 entity types.**
+**Quantity requirement: Exactly 10 entity types**
 
-**6 BASE TYPES (locked — you MUST include these exactly as specified):**
+**Hierarchy requirements (must include both specific types and fallback types)**:
 
-1. `PoliticalLeader` — Heads of state, ministers, diplomats, elected officials, party leaders
-2. `MilitaryOrSecurity` — Military commanders, intelligence chiefs, police, paramilitary leaders
-3. `BusinessLeader` — CEOs, executives, investors, fund managers, entrepreneurs
-4. `MediaOrJournalist` — Media outlets, journalists, commentators, influencers, bloggers
-5. `Person` — Fallback for any individual not matching the 4 specific individual types above
-6. `Organization` — Fallback for any institution, company, government body, NGO, agency, or group
+Your 10 entity types must include the following layers:
 
-These 6 base types MUST appear first in your output, in the order above, with the exact names shown. You may add examples and refine their attributes, but do NOT rename them or omit any.
+A. **Fallback types (must include, placed as the last 2 in the list)**:
+   - `Person`: Fallback type for any individual person. When a person does not fit other more specific person types, they belong here.
+   - `Organization`: Fallback type for any organization. When an organization does not fit other more specific organization types, it belongs here.
 
-**4 DYNAMIC TYPES (you design these based on the text and entity inventory):**
+B. **Specific types (8, designed based on text content)**:
+   - Design more specific types based on the main roles appearing in the text
+   - Example: For academic events, you might have `Student`, `Professor`, `University`
+   - Example: For business events, you might have `Company`, `CEO`, `Employee`
 
-After the 6 base types, add exactly 4 additional entity types that capture clusters of entities from the inventory that do NOT fit neatly into the 6 base types.
+**Why fallback types are needed**:
+- The text may mention various people, such as "elementary school teacher", "passerby", "some netizen"
+- If no specific type matches, they should be classified under `Person`
+- Similarly, small organizations, temporary groups, etc. should be classified under `Organization`
 
-Rules for dynamic types:
-- They must represent real-world actors or groups that can post/interact on social media
-- They should cover the LARGEST uncovered entity clusters in the inventory
-- Prefer granular actor types over broad categories
-- Do NOT duplicate or heavily overlap with the 6 base types
-- Good examples: `MilitantGroup`, `ReligiousLeader`, `InternationalOrganization`, `AcademicResearcher`, `LaborUnion`, `RegulatoryAgency`, `CommunityGroup`, `LegalExpert`
-- Bad examples: `Government` (overlaps Organization), `PublicFigure` (overlaps Person), `NewsMedia` (overlaps MediaOrJournalist)
+**Design principles for specific types**:
+- Identify high-frequency or key role types from the text
+- Each specific type should have clear boundaries to avoid overlap
+- Description must clearly explain how this type differs from the fallback type
 
 ### 2. Relationship Type Design
 
@@ -172,9 +114,37 @@ Rules for dynamic types:
 - **Note**: Attribute names cannot use `name`, `uuid`, `group_id`, `created_at`, `summary` (these are system reserved words)
 - Recommended: `full_name`, `title`, `role`, `position`, `location`, `description`, etc.
 
+## Entity Type Reference
+
+**Individual (Specific)**:
+- Student: Student
+- Professor: Professor/Scholar
+- Journalist: Journalist
+- Celebrity: Celebrity/Influencer
+- Executive: Executive
+- Official: Government official
+- Lawyer: Lawyer
+- Doctor: Doctor
+
+**Individual (Fallback)**:
+- Person: Any individual (used when not fitting other specific person types)
+
+**Organization (Specific)**:
+- University: University
+- Company: Corporation/Enterprise
+- GovernmentAgency: Government agency
+- MediaOutlet: Media organization
+- Hospital: Hospital
+- School: K-12 school
+- NGO: Non-governmental organization
+
+**Organization (Fallback)**:
+- Organization: Any organization (used when not fitting other specific organization types)
+
 ## Relationship Type Reference
 
 - WORKS_FOR: Works for
+- STUDIES_AT: Studies at
 - AFFILIATED_WITH: Affiliated with
 - REPRESENTS: Represents
 - REGULATES: Regulates
@@ -185,7 +155,6 @@ Rules for dynamic types:
 - OPPOSES: Opposes
 - COLLABORATES_WITH: Collaborates with
 - COMPETES_WITH: Competes with
-- COMMANDS: Commands or has authority over
 """
 
 
@@ -194,117 +163,98 @@ class OntologyGenerator:
     Ontology generator
     Analyzes text content and generates entity and relationship type definitions
     """
-
-    def __init__(self, llm_client: LLMClient | None = None):
+    
+    def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm_client = llm_client or LLMClient()
-
+    
     def generate(
-        self, document_texts: list[str], simulation_requirement: str, additional_context: str | None = None
-    ) -> dict[str, Any]:
+        self,
+        document_texts: List[str],
+        simulation_requirement: str,
+        additional_context: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Generate ontology definition with entity inventory pre-scan.
-
+        
         Args:
             document_texts: List of document texts
             simulation_requirement: Simulation requirement description
             additional_context: Additional context
-
+            
         Returns:
             Ontology definition (entity_types, edge_types, entity_inventory, etc.)
         """
         combined_text = "\n\n---\n\n".join(document_texts)
         if len(combined_text) > self.MAX_TEXT_LENGTH_FOR_LLM:
-            combined_text = combined_text[: self.MAX_TEXT_LENGTH_FOR_LLM]
+            combined_text = combined_text[:self.MAX_TEXT_LENGTH_FOR_LLM]
 
         entity_inventory = self._extract_entity_inventory(combined_text, simulation_requirement)
         logger.info(f"Entity inventory extracted: {len(entity_inventory)} entities found")
 
-        # Knowledge-expansion pass: the inventory pre-scan only finds entities
-        # IN the research text. expand_entities() names additional real
-        # stakeholders from domain knowledge and verifies each with a live
-        # search before adding them (fail-soft: never blocks the build).
-        from ..config import Config
-
-        if Config.ENTITY_EXPANSION_ENABLED:
-            from .entity_expansion import expand_entities
-
-            existing = [e.get("name", "") for e in entity_inventory]
-            additions = expand_entities(
-                simulation_requirement,
-                combined_text,
-                existing,
-                target=Config.ENTITY_EXPANSION_TARGET,
-            )
-            entity_inventory.extend(additions)
-            if additions:
-                logger.info(f"Entity inventory expanded: +{len(additions)} verified stakeholders")
-
         user_message = self._build_user_message(
-            document_texts,
+            document_texts, 
             simulation_requirement,
             additional_context,
             entity_inventory=entity_inventory,
         )
-
-        messages = [{"role": "system", "content": ONTOLOGY_SYSTEM_PROMPT}, {"role": "user", "content": user_message}]
-
-        # Output cap was 4096 tokens: a rich dossier (the full research
-        # dossier the frontend uploads) pushes the ontology JSON past it,
-        # truncating mid-JSON and failing every retry (V8 verification,
-        # 2026-08-14). 16384 comfortably fits a 10-20 entity ontology.
-        result = self.llm_client.chat_json(messages=messages, temperature=0.3, max_tokens=16384)
-
+        
+        messages = [
+            {"role": "system", "content": ONTOLOGY_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message}
+        ]
+        
+        result = self.llm_client.chat_json(
+            messages=messages,
+            temperature=0.3,
+            max_tokens=4096
+        )
+        
         result = self._validate_and_process(result)
         result["entity_inventory"] = entity_inventory
-
+        
         return result
 
     def _extract_entity_inventory(
         self,
         text: str,
         simulation_requirement: str,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """
         Pre-scan text to build a comprehensive inventory of all concrete entities.
-
+        
         Returns:
             List of dicts: [{"name": "Shell", "category": "company", "context": "..."}]
         """
         system_prompt = (
             "You are an entity extraction specialist. Your task is to identify EVERY concrete, "
             "real-world entity mentioned in the provided text that could act as a social media "
-            "agent (post, comment, interact) or be a meaningful stakeholder in the scenario.\n\n"
+            "agent (post, comment, interact).\n\n"
             "Include:\n"
-            "- Named individuals (politicians, executives, experts, activists, community leaders, academics)\n"
-            "- Companies, corporations, and subsidiaries\n"
-            "- Government departments, agencies, and local authorities\n"
-            "- Regulatory bodies and oversight committees\n"
-            "- NGOs, advocacy groups, unions, industry bodies, professional associations\n"
-            "- Media outlets and journalists\n"
+            "- Named individuals (politicians, executives, experts, activists)\n"
+            "- Companies and corporations\n"
+            "- Government departments and agencies\n"
+            "- Regulatory bodies\n"
+            "- NGOs, advocacy groups, unions, industry bodies\n"
+            "- Media outlets\n"
             "- International organizations\n"
-            "- Named community groups, coalitions, or citizen groups\n"
-            "- Specific projects, programs, or initiatives that have an organizational identity\n"
-            "- Research institutions, universities, and think tanks\n"
-            "- Affected communities, neighborhoods, or demographic groups with a distinct identity\n"
-            "- Suppliers, contractors, and service providers mentioned by name\n\n"
-            "IMPORTANT — also extract entities that are IMPLIED but not explicitly named. For example:\n"
-            "- If the text mentions 'the CEO of Acme Corp' without naming them, include 'CEO of Acme Corp' as an individual\n"
-            "- If a regulatory approval is discussed, include the relevant regulatory agency even if only alluded to\n"
-            "- If community opposition is mentioned, include a representative community group entity\n\n"
+            "- Named community groups or coalitions\n"
+            "- Specific projects, programs, or initiatives that have an organizational identity\n\n"
             "Do NOT include:\n"
             "- Abstract concepts, topics, or themes\n"
-            "- Generic unnamed groups ('some people', 'critics') unless they represent a coherent stakeholder group\n"
+            "- Generic unnamed groups ('some people', 'critics')\n"
             "- Policies or laws unless they have an organizational body behind them\n\n"
-            "Aim for AT LEAST 15-30 entities. A richer entity set produces a better simulation. "
-            "It is better to include a borderline entity than to miss one.\n\n"
+            "Be exhaustive. It is better to include a borderline entity than to miss one.\n\n"
             "Return JSON:\n"
             '{"entities": [\n'
-            '  {"name": "Entity name", "category": "individual|company|government|regulator|ngo|media|international_org|industry_body|research|community|other", '
-            '"context": "One sentence explaining who/what this entity is and their stake in the scenario"}\n'
+            '  {"name": "Entity name", "category": "individual|company|government|regulator|ngo|media|international_org|industry_body|other", '
+            '"context": "One sentence explaining who/what this entity is"}\n'
             "]}"
         )
 
-        user_prompt = f"Simulation requirement: {simulation_requirement}\n\nDocument text:\n{text[:40000]}"
+        user_prompt = (
+            f"Simulation requirement: {simulation_requirement}\n\n"
+            f"Document text:\n{text[:30000]}"
+        )
 
         try:
             result = self.llm_client.chat_json(
@@ -313,14 +263,12 @@ class OntologyGenerator:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.1,
-                max_tokens=8192,
+                max_tokens=4096,
             )
-            entities = result.get("entities") or []
+            entities = result.get("entities", [])
             seen = set()
             deduped = []
             for e in entities:
-                if not isinstance(e, dict):
-                    continue
                 key = e.get("name", "").strip().lower()
                 if key and key not in seen:
                     seen.add(key)
@@ -329,26 +277,26 @@ class OntologyGenerator:
         except Exception as e:
             logger.warning(f"Entity inventory extraction failed, continuing without it: {e}")
             return []
-
+    
     # Max text length sent to LLM (50,000 characters)
     MAX_TEXT_LENGTH_FOR_LLM = 50000
-
+    
     def _build_user_message(
         self,
-        document_texts: list[str],
+        document_texts: List[str],
         simulation_requirement: str,
-        additional_context: str | None,
-        entity_inventory: list[dict[str, Any]] | None = None,
+        additional_context: Optional[str],
+        entity_inventory: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """Build user message, optionally enriched with entity inventory."""
-
+        
         combined_text = "\n\n---\n\n".join(document_texts)
         original_length = len(combined_text)
-
+        
         if len(combined_text) > self.MAX_TEXT_LENGTH_FOR_LLM:
-            combined_text = combined_text[: self.MAX_TEXT_LENGTH_FOR_LLM]
+            combined_text = combined_text[:self.MAX_TEXT_LENGTH_FOR_LLM]
             combined_text += f"\n\n...(Original text: {original_length} chars, truncated to first {self.MAX_TEXT_LENGTH_FOR_LLM} chars for ontology analysis)..."
-
+        
         message = f"""## Simulation Requirement
 
 {simulation_requirement}
@@ -357,14 +305,14 @@ class OntologyGenerator:
 
 {combined_text}
 """
-
+        
         if additional_context:
             message += f"""
 ## Additional Notes
 
 {additional_context}
 """
-
+        
         if entity_inventory:
             inventory_lines = []
             for e in entity_inventory:
@@ -378,7 +326,7 @@ The following {len(entity_inventory)} concrete entities were identified in the d
 {inventory_text}
 
 **Use these actual entities as `examples` in your entity type definitions — do NOT use generic examples.**
-**Your 4 DYNAMIC types should target the biggest uncovered clusters in this inventory** — entities that don't fit neatly into PoliticalLeader, MilitaryOrSecurity, BusinessLeader, MediaOrJournalist, Person, or Organization.
+**Prefer more granular types over broad ones.** For example, if multiple government departments are listed, consider types like GovernmentDepartment and RegulatoryAgency rather than a single GovernmentAgency type.
 """
 
         message += """
@@ -386,218 +334,210 @@ Based on the above content, design entity types and relationship types suitable 
 
 **Rules that must be followed**:
 1. Must output exactly 10 entity types
-2. The FIRST 6 must be the locked base types in this exact order: PoliticalLeader, MilitaryOrSecurity, BusinessLeader, MediaOrJournalist, Person, Organization
-3. The LAST 4 are dynamic types YOU design based on the text content and entity inventory
+2. The last 2 must be fallback types: Person (individual fallback) and Organization (organization fallback)
+3. The first 8 are specific types designed based on text content
 4. All entity types must be real-world subjects that can post and interact, not abstract concepts
 5. Attribute names cannot use name, uuid, group_id and other reserved words; use full_name, org_name, etc. instead
 6. The `examples` field for each entity type must use real entity names from the Entity Inventory above
 """
-
+        
         return message
-
-    def _validate_and_process(self, result: Any) -> dict[str, Any]:
-        """Validate and post-process results.
-
-        Enforces the hybrid 6-base + 4-dynamic entity type scheme:
-        - All 6 BASE_ENTITY_TYPES are guaranteed present (injected if LLM omitted any)
-        - LLM-provided dynamic types are kept up to 4 slots
-        - Total is clamped to exactly 10 entity types
-        """
-        MAX_ENTITY_TYPES = 10
-        MAX_EDGE_TYPES = 10
-        MAX_DYNAMIC_TYPES = MAX_ENTITY_TYPES - len(BASE_ENTITY_TYPES)  # 4
-
-        if not isinstance(result, dict):
-            logger.error(f"Ontology LLM returned non-dict root: {type(result)}. Returning empty ontology.")
-            return {"entity_types": [], "edge_types": [], "analysis_summary": ""}
-
+    
+    def _validate_and_process(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and post-process results"""
+        
+        # Ensure required fields exist
         if "entity_types" not in result:
             result["entity_types"] = []
         if "edge_types" not in result:
             result["edge_types"] = []
         if "analysis_summary" not in result:
             result["analysis_summary"] = ""
-
-        RESERVED = {"name", "uuid", "id", "type", "label"}
+        
+        # Validate entity types
         for entity in result["entity_types"]:
-            if not isinstance(entity, dict):
-                continue
-            entity["description"] = str(entity.get("description", ""))[:200]
-            attrs = entity.get("attributes", [])
-            entity["attributes"] = [a for a in attrs if isinstance(a, dict) and a.get("name") not in RESERVED]
+            if "attributes" not in entity:
+                entity["attributes"] = []
             if "examples" not in entity:
                 entity["examples"] = []
-
+            # Ensure description does not exceed 100 characters
+            if len(entity.get("description", "")) > 100:
+                entity["description"] = entity["description"][:97] + "..."
+        
+        # Validate edge types
         for edge in result["edge_types"]:
-            if not isinstance(edge, dict):
-                continue
-            edge["description"] = str(edge.get("description", ""))[:200]
             if "source_targets" not in edge:
                 edge["source_targets"] = []
             if "attributes" not in edge:
                 edge["attributes"] = []
-
-        # Separate LLM output into base types (may have enriched examples) and dynamic types
-        llm_base = {}
-        dynamic_types = []
-        for et in result["entity_types"]:
-            if isinstance(et, dict) and et.get("name") in BASE_ENTITY_TYPE_NAMES:
-                llm_base[et["name"]] = et
-            elif isinstance(et, dict):
-                dynamic_types.append(et)
-
-        # Build final base types: use LLM version if it exists (richer examples), else use defaults
-        final_base = []
-        for base_def in BASE_ENTITY_TYPES:
-            if base_def["name"] in llm_base:
-                final_base.append(llm_base[base_def["name"]])
-            else:
-                logger.warning(f"LLM omitted base type '{base_def['name']}', injecting default")
-                final_base.append(dict(base_def))
-
-        # Trim dynamic types to available slots
-        if len(dynamic_types) > MAX_DYNAMIC_TYPES:
-            logger.info(f"LLM returned {len(dynamic_types)} dynamic types, trimming to {MAX_DYNAMIC_TYPES}")
-            dynamic_types = dynamic_types[:MAX_DYNAMIC_TYPES]
-
-        result["entity_types"] = final_base + dynamic_types
-
+            if len(edge.get("description", "")) > 100:
+                edge["description"] = edge["description"][:97] + "..."
+        
+        # Zep API limit: max 10 custom entity types, max 10 custom edge types
+        MAX_ENTITY_TYPES = 10
+        MAX_EDGE_TYPES = 10
+        
+        # Fallback type definitions
+        person_fallback = {
+            "name": "Person",
+            "description": "Any individual person not fitting other specific person types.",
+            "attributes": [
+                {"name": "full_name", "type": "text", "description": "Full name of the person"},
+                {"name": "role", "type": "text", "description": "Role or occupation"}
+            ],
+            "examples": ["ordinary citizen", "anonymous netizen"]
+        }
+        
+        organization_fallback = {
+            "name": "Organization",
+            "description": "Any organization not fitting other specific organization types.",
+            "attributes": [
+                {"name": "org_name", "type": "text", "description": "Name of the organization"},
+                {"name": "org_type", "type": "text", "description": "Type of organization"}
+            ],
+            "examples": ["small business", "community group"]
+        }
+        
+        # Check if fallback types already exist
+        entity_names = {e["name"] for e in result["entity_types"]}
+        has_person = "Person" in entity_names
+        has_organization = "Organization" in entity_names
+        
+        # Fallback types to add
+        fallbacks_to_add = []
+        if not has_person:
+            fallbacks_to_add.append(person_fallback)
+        if not has_organization:
+            fallbacks_to_add.append(organization_fallback)
+        
+        if fallbacks_to_add:
+            current_count = len(result["entity_types"])
+            needed_slots = len(fallbacks_to_add)
+            
+            # If adding would exceed 10, remove some existing types
+            if current_count + needed_slots > MAX_ENTITY_TYPES:
+                # Calculate how many to remove
+                to_remove = current_count + needed_slots - MAX_ENTITY_TYPES
+                # Remove from end (keep the more important specific types at front)
+                result["entity_types"] = result["entity_types"][:-to_remove]
+            
+            # Add fallback types
+            result["entity_types"].extend(fallbacks_to_add)
+        
+        # Final check to ensure limits are not exceeded (defensive programming)
         if len(result["entity_types"]) > MAX_ENTITY_TYPES:
             result["entity_types"] = result["entity_types"][:MAX_ENTITY_TYPES]
-
+        
         if len(result["edge_types"]) > MAX_EDGE_TYPES:
             result["edge_types"] = result["edge_types"][:MAX_EDGE_TYPES]
-
-        logger.info(
-            f"Ontology validated: {len(final_base)} base + {len(dynamic_types)} dynamic entity types, "
-            f"{len(result['edge_types'])} edge types"
-        )
-
+        
         return result
-
-    def generate_python_code(self, ontology: dict[str, Any]) -> str:
+    
+    def generate_python_code(self, ontology: Dict[str, Any]) -> str:
         """
         Convert ontology definition to Python code (similar to ontology.py)
-
+        
         Args:
             ontology: Ontology definition
-
+            
         Returns:
             Python code string
         """
         code_lines = [
             '"""',
-            "Custom entity type definitions",
-            "Auto-generated for social opinion simulation",
+            'Custom entity type definitions',
+            'Auto-generated for social opinion simulation',
             '"""',
-            "",
-            "from pydantic import Field",
-            "from zep_cloud.external_clients.ontology import EntityModel, EntityText, EdgeModel",
-            "",
-            "",
-            "# ============== Entity Type Definitions ==============",
-            "",
+            '',
+            'from pydantic import Field',
+            'from zep_cloud.external_clients.ontology import EntityModel, EntityText, EdgeModel',
+            '',
+            '',
+            '# ============== Entity Type Definitions ==============',
+            '',
         ]
-
+        
         # Generate entity types
         for entity in ontology.get("entity_types", []):
-            name = entity.get("name")
-            if not name:
-                logger.warning(f"Entity in generate_python_code missing name: {entity}. Skipping.")
-                continue
+            name = entity["name"]
             desc = entity.get("description", f"A {name} entity.")
-
-            code_lines.append(f"class {name}(EntityModel):")
+            
+            code_lines.append(f'class {name}(EntityModel):')
             code_lines.append(f'    """{desc}"""')
-
+            
             attrs = entity.get("attributes", [])
             if attrs:
                 for attr in attrs:
-                    attr_name = attr.get("name")
-                    if not attr_name:
-                        logger.warning(f"Attribute in entity {name} missing name: {attr}. Skipping.")
-                        continue
+                    attr_name = attr["name"]
                     attr_desc = attr.get("description", attr_name)
-                    code_lines.append(f"    {attr_name}: EntityText = Field(")
+                    code_lines.append(f'    {attr_name}: EntityText = Field(')
                     code_lines.append(f'        description="{attr_desc}",')
-                    code_lines.append("        default=None")
-                    code_lines.append("    )")
+                    code_lines.append(f'        default=None')
+                    code_lines.append(f'    )')
             else:
-                code_lines.append("    pass")
-
-            code_lines.append("")
-            code_lines.append("")
-
-        code_lines.append("# ============== Edge Type Definitions ==============")
-        code_lines.append("")
-
+                code_lines.append('    pass')
+            
+            code_lines.append('')
+            code_lines.append('')
+        
+        code_lines.append('# ============== Edge Type Definitions ==============')
+        code_lines.append('')
+        
         # Generate edge types
         for edge in ontology.get("edge_types", []):
-            name = edge.get("name")
-            if not name:
-                logger.warning(f"Edge in generate_python_code missing name: {edge}. Skipping.")
-                continue
+            name = edge["name"]
             # Convert to PascalCase class name
-            class_name = "".join(word.capitalize() for word in name.split("_"))
+            class_name = ''.join(word.capitalize() for word in name.split('_'))
             desc = edge.get("description", f"A {name} relationship.")
-
-            code_lines.append(f"class {class_name}(EdgeModel):")
+            
+            code_lines.append(f'class {class_name}(EdgeModel):')
             code_lines.append(f'    """{desc}"""')
-
+            
             attrs = edge.get("attributes", [])
             if attrs:
                 for attr in attrs:
-                    attr_name = attr.get("name")
-                    if not attr_name:
-                        logger.warning(f"Attribute in edge {name} missing name: {attr}. Skipping.")
-                        continue
+                    attr_name = attr["name"]
                     attr_desc = attr.get("description", attr_name)
-                    code_lines.append(f"    {attr_name}: EntityText = Field(")
+                    code_lines.append(f'    {attr_name}: EntityText = Field(')
                     code_lines.append(f'        description="{attr_desc}",')
-                    code_lines.append("        default=None")
-                    code_lines.append("    )")
+                    code_lines.append(f'        default=None')
+                    code_lines.append(f'    )')
             else:
-                code_lines.append("    pass")
-
-            code_lines.append("")
-            code_lines.append("")
-
+                code_lines.append('    pass')
+            
+            code_lines.append('')
+            code_lines.append('')
+        
         # Generate type dictionaries
-        code_lines.append("# ============== Type Configuration ==============")
-        code_lines.append("")
-        code_lines.append("ENTITY_TYPES = {")
+        code_lines.append('# ============== Type Configuration ==============')
+        code_lines.append('')
+        code_lines.append('ENTITY_TYPES = {')
         for entity in ontology.get("entity_types", []):
-            ent_name = entity.get("name")
-            if not ent_name:
-                continue
-            code_lines.append(f'    "{ent_name}": {ent_name},')
-        code_lines.append("}")
-        code_lines.append("")
-        code_lines.append("EDGE_TYPES = {")
+            name = entity["name"]
+            code_lines.append(f'    "{name}": {name},')
+        code_lines.append('}')
+        code_lines.append('')
+        code_lines.append('EDGE_TYPES = {')
         for edge in ontology.get("edge_types", []):
-            name = edge.get("name")
-            if not name:
-                continue
-            class_name = "".join(word.capitalize() for word in name.split("_"))
+            name = edge["name"]
+            class_name = ''.join(word.capitalize() for word in name.split('_'))
             code_lines.append(f'    "{name}": {class_name},')
-        code_lines.append("}")
-        code_lines.append("")
-
+        code_lines.append('}')
+        code_lines.append('')
+        
         # Generate edge source_targets mapping
-        code_lines.append("EDGE_SOURCE_TARGETS = {")
+        code_lines.append('EDGE_SOURCE_TARGETS = {')
         for edge in ontology.get("edge_types", []):
-            name = edge.get("name")
-            if not name:
-                continue
+            name = edge["name"]
             source_targets = edge.get("source_targets", [])
             if source_targets:
-                st_list = ", ".join(
-                    [
-                        f'{{"source": "{st.get("source", "Entity")}", "target": "{st.get("target", "Entity")}"}}'
-                        for st in source_targets
-                    ]
-                )
+                st_list = ', '.join([
+                    f'{{"source": "{st.get("source", "Entity")}", "target": "{st.get("target", "Entity")}"}}'
+                    for st in source_targets
+                ])
                 code_lines.append(f'    "{name}": [{st_list}],')
-        code_lines.append("}")
+        code_lines.append('}')
+        
+        return '\n'.join(code_lines)
 
-        return "\n".join(code_lines)
+

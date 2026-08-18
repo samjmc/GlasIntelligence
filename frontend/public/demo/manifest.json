@@ -12,7 +12,7 @@
       "id": "energy-price-cap",
       "title": "Energy price cap",
       "blurb": "Model how a retail energy price cap hits suppliers, generators, Ofgem, and consumers.",
-      "prompt": "Model the second-order effects of a retail energy price cap introduced in the UK from January 2027: how energy suppliers, generators, Ofgem, the Treasury, and consumers respond over 12 months \u2014 supplier financial strain and exits, tariff restructuring, consumer switching behavior, investment signals for generation, and regulatory escalation.",
+      "prompt": "Model the second-order effects of a retail energy price cap introduced in the UK from January 2027: how energy suppliers, generators, Ofgem, the Treasury, and consumers respond over 12 months — supplier financial strain and exits, tariff restructuring, consumer switching behavior, investment signals for generation, and regulatory escalation.",
       "duration_ms": 6074562
     }
   ]

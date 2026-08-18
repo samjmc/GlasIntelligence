@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { normalisePath, indexEntries, resolve, NOT_RECORDED, canonicalQuery, elapsedFor, addSkipMs, getSkipMs, resetSkipMs } from './tape'
+import { readFileSync } from 'node:fs'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { normalisePath, indexEntries, resolve, NOT_RECORDED, canonicalQuery, addSkipMs, getSkipMs, resetSkipMs, elapsedFor } from './tape'
 import { encodeDemoId } from './sessionId'
+import { DEMO_SPEEDUP } from './config'
 import synthetic from './fixtures/synthetic-tape.json'
 
 describe('normalisePath', () => {
@@ -124,30 +126,78 @@ describe('query-string disambiguation (agent-log cursor)', () => {
   })
 })
 
-describe('skip clock', () => {
-  const id = encodeDemoId(1_000_000, 'energy-price-cap')
-
-  it('elapsedFor starts at zero skip', () => {
+describe('skip offset', () => {
+  beforeEach(() => {
     resetSkipMs()
-    expect(elapsedFor(id, 2_000_000)).toBe(1_000_000)
   })
 
-  it('addSkipMs advances the clock', () => {
+  it('accumulates addSkipMs calls', () => {
+    addSkipMs(1000)
+    addSkipMs(500)
+    expect(getSkipMs()).toBe(1500)
+  })
+
+  it('clamps addSkipMs at zero', () => {
+    addSkipMs(-5000)
+    expect(getSkipMs()).toBe(0)
+  })
+
+  it('resetSkipMs zeroes the accumulated skip', () => {
+    addSkipMs(3000)
     resetSkipMs()
+    expect(getSkipMs()).toBe(0)
+  })
+
+  it('elapsedFor includes the skip offset', () => {
+    const startMs = 1_000_000
+    const sessionId = encodeDemoId(startMs, 'synthetic')
+    const now = startMs + 1000
+    addSkipMs(1000)
+    expect(elapsedFor(sessionId, now)).toBe((1000 + 1000) * DEMO_SPEEDUP)
+  })
+
+  it('returns wall-only elapsed after resetSkipMs', () => {
+    const startMs = 1_000_000
+    const sessionId = encodeDemoId(startMs, 'synthetic')
+    const now = startMs + 1000
     addSkipMs(5000)
-    expect(elapsedFor(id, 2_000_000)).toBe(1_005_000)
+    resetSkipMs()
+    expect(elapsedFor(sessionId, now)).toBe(1000 * DEMO_SPEEDUP)
+  })
+})
+
+describe('energy-price-cap tape smoke', () => {
+  // The ported energy tape has no unit or e2e coverage (adversary finding #2).
+  // Read the real fixture from disk so a re-record or path move breaks this
+  // test rather than silently diverging from what ships to Cloudflare Pages.
+  // The test file sits two levels above the public dir, so a relative file: URL
+  // resolves to the shipped fixture. vite-node rewrites import.meta.url to an
+  // http://localhost:@fs/... URL on cold runs and leaves a file: URL on warm
+  // ones — normalize either form to a file: base so readFileSync accepts it.
+  const tapeBase = import.meta.url.startsWith('file:')
+    ? import.meta.url
+    : import.meta.url.replace(/^https?:\/\/[^/]+\/@fs\//, 'file:///')
+  const tape = JSON.parse(
+    readFileSync(new URL('../../public/demo/energy-price-cap/tape.json', tapeBase), 'utf8'),
+  )
+  const index = indexEntries(tape.entries)
+
+  it('matches the manifest-registered schema and duration', () => {
+    expect(tape.schema_version).toBe(1)
+    expect(tape.duration_ms).toBe(6_074_562)
+    expect(tape.entries.length).toBeGreaterThan(0)
   })
 
-  it('never goes negative and clamps to zero', () => {
-    resetSkipMs()
-    addSkipMs(-99999)
-    expect(getSkipMs()).toBe(0)
+  it('clamps run-status to completed past the end of the tape', () => {
+    const r = resolve(index, 'GET', '/api/simulation/:id/run-status', 10 ** 9)
+    expect(r.body.data.runner_status).toBe('completed')
   })
 
-  it('resetSkipMs clears the offset', () => {
-    addSkipMs(10_000)
-    resetSkipMs()
-    expect(getSkipMs()).toBe(0)
-    expect(elapsedFor(id, 2_000_000)).toBe(1_000_000)
+  it('delivers the terminal report_complete agent-log entry at the end', () => {
+    // Terminal action verified against the tape itself (t_ms 6059382, the last
+    // from_line=0 snapshot) — do not hardcode without re-reading the data.
+    const r = resolve(index, 'GET', '/api/report/:id/agent-log?from_line=0', tape.duration_ms)
+    const logs = r.body.data.logs
+    expect(logs.at(-1).action).toBe('report_complete')
   })
 })

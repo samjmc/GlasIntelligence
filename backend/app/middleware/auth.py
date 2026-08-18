@@ -1,8 +1,10 @@
 """JWT authentication middleware using Supabase."""
 
 import functools
-from flask import request, jsonify, g
+
 import jwt
+from flask import g, jsonify, request
+
 from ..config import Config
 from ..utils.logger import get_logger
 
@@ -37,7 +39,7 @@ def _get_signing_key(token: str):
             if attempt < 2:
                 import time
                 time.sleep(0.5 * (attempt + 1))
-    raise last_err
+    raise last_err if last_err is not None else RuntimeError("JWKS signing key fetch failed")
 
 
 def _get_jwt_secret() -> str:
@@ -55,7 +57,7 @@ def _decode_supabase_jwt(token: str) -> dict:
     if alg == "HS256":
         return jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
 
-    jwks_client = _get_jwks_client()
+    _get_jwks_client()
     signing_key = _get_signing_key(token)
     return jwt.decode(token, signing_key.key, algorithms=[alg], audience="authenticated")
 

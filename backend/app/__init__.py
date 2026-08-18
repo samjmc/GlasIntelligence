@@ -7,11 +7,11 @@ import warnings
 
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, request
-from flask_cors import CORS
+from flask import Flask, request  # noqa: E402  (warnings filter must run before flask import)
+from flask_cors import CORS  # noqa: E402
 
-from .config import Config
-from .utils.logger import setup_logger, get_logger
+from .config import Config  # noqa: E402
+from .utils.logger import get_logger, setup_logger  # noqa: E402
 
 
 def _init_sentry(app):
@@ -21,8 +21,8 @@ def _init_sentry(app):
         return
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.flask import FlaskIntegration
         from sentry_sdk.integrations.celery import CeleryIntegration
+        from sentry_sdk.integrations.flask import FlaskIntegration
 
         sentry_sdk.init(
             dsn=dsn,
@@ -40,9 +40,9 @@ def _init_prometheus(app):
     if os.environ.get("ENABLE_PROMETHEUS", "").lower() not in ("1", "true", "yes"):
         return
     try:
-        from prometheus_flask_exporter import PrometheusMetrics
+        from prometheus_flask_instrumentator import Instrumentator
 
-        PrometheusMetrics(app, path="/api/metrics")
+        Instrumentator().instrument(app).expose(app, endpoint="/api/metrics")
     except ImportError:
         pass
 
@@ -52,15 +52,15 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    if hasattr(app, "json") and hasattr(app.json, "ensure_ascii"):
+    if hasattr(app, 'json') and hasattr(app.json, 'ensure_ascii'):
         app.json.ensure_ascii = False
 
     _init_sentry(app)
 
-    logger = setup_logger("glas")
+    logger = setup_logger('glas')
 
-    is_reloader_process = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
-    debug_mode = app.config.get("DEBUG", False)
+    is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    debug_mode = app.config.get('DEBUG', False)
     should_log_startup = not debug_mode or is_reloader_process
 
     if should_log_startup:
@@ -69,16 +69,14 @@ def create_app(config_class=Config):
         logger.info("=" * 50)
 
     # Enable CORS
-    allowed_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+    allowed_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
     CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in allowed_origins]}})
 
     from .middleware.auth import extract_user_from_request
-
     app.before_request(extract_user_from_request)
 
     # Register simulation process cleanup (ensure all simulation processes are terminated on server shutdown)
     from .services.simulation_runner import SimulationRunner
-
     SimulationRunner.register_cleanup()
     if should_log_startup:
         logger.info("Simulation process cleanup registered")
@@ -86,67 +84,49 @@ def create_app(config_class=Config):
     # Request logging middleware
     @app.before_request
     def log_request():
-        logger = get_logger("glas.request")
+        logger = get_logger('glas.request')
         logger.debug(f"Request: {request.method} {request.path}")
-        if request.content_type and "json" in request.content_type:
+        if request.content_type and 'json' in request.content_type:
             logger.debug(f"Request body: {request.get_json(silent=True)}")
 
     @app.after_request
     def log_response(response):
-        logger = get_logger("glas.request")
+        logger = get_logger('glas.request')
         logger.debug(f"Response: {response.status_code}")
         return response
 
-    # Demo tape recorder. Off unless explicitly recording a golden run.
-    if os.environ.get("DEMO_RECORD") == "1":
-        from .middleware.demo_recorder import init_recorder
-
-        init_recorder(
-            app,
-            out_path=os.environ.get("DEMO_TAPE_PATH", "demo-tape.json"),
-            scenario=os.environ.get("DEMO_SCENARIO", "scenario-1"),
-        )
-        logger.info("Demo recorder enabled")
-
     # Register blueprints
-    from .api import graph_bp, simulation_bp, report_bp
-
-    app.register_blueprint(graph_bp, url_prefix="/api/graph")
-    app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
-    app.register_blueprint(report_bp, url_prefix="/api/report")
+    from .api import graph_bp, report_bp, simulation_bp
+    app.register_blueprint(graph_bp, url_prefix='/api/graph')
+    app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
+    app.register_blueprint(report_bp, url_prefix='/api/report')
 
     from .api.billing import billing_bp
-
-    app.register_blueprint(billing_bp, url_prefix="/api/billing")
+    app.register_blueprint(billing_bp, url_prefix='/api/billing')
 
     from .api.bundle import bundle_bp
-
-    app.register_blueprint(bundle_bp, url_prefix="/api/bundle")
+    app.register_blueprint(bundle_bp, url_prefix='/api/bundle')
 
     from .api.feed import feed_bp
-
-    app.register_blueprint(feed_bp, url_prefix="/api/feed")
+    app.register_blueprint(feed_bp, url_prefix='/api/feed')
 
     from .api.dashboard import dashboard_bp
-
-    app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
+    app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
 
     from .api.source_agent import source_agent_bp
-
-    app.register_blueprint(source_agent_bp, url_prefix="/api/source")
+    app.register_blueprint(source_agent_bp, url_prefix='/api/source')
 
     from .api.session import session_bp
-
-    app.register_blueprint(session_bp, url_prefix="/api/session")
+    app.register_blueprint(session_bp, url_prefix='/api/session')
 
     _init_prometheus(app)
 
-    @app.route("/health")
+    @app.route('/health')
     def health():
         return {
-            "status": "ok",
-            "service": "Glas Intelligence Backend",
-            "cors_locked": os.environ.get("CORS_ORIGINS", "*") != "*",
+            'status': 'ok',
+            'service': 'Glas Intelligence Backend',
+            'cors_locked': os.environ.get('CORS_ORIGINS', '*') != '*',
         }
 
     _recover_orphaned_research(logger)
@@ -161,9 +141,10 @@ def create_app(config_class=Config):
 def _recover_orphaned_research(logger):
     """Re-queue any sessions stuck in 'processing' or 'claiming' from a previous crash or deploy."""
     try:
+        from celery.result import AsyncResult
+
         from .services.supabase_client import SupabaseDB
         from .tasks.research_tasks import run_deep_research_task
-        from celery.result import AsyncResult
 
         rows = (
             SupabaseDB.client()
@@ -208,7 +189,8 @@ STALE_SIMULATING_HOURS = 4
 def _sweep_stale_simulating_sessions(logger):
     """Mark sessions stuck in 'simulating' for too long as 'sim_failed'."""
     try:
-        from datetime import datetime, UTC, timedelta
+        from datetime import UTC, datetime, timedelta
+
         from .services.supabase_client import SupabaseDB
 
         cutoff = (datetime.now(UTC) - timedelta(hours=STALE_SIMULATING_HOURS)).isoformat()
@@ -224,3 +206,4 @@ def _sweep_stale_simulating_sessions(logger):
             logger.info(f"Swept {len(resp.data)} stale simulating session(s) to sim_failed")
     except Exception:
         logger.warning("Stale simulating session sweep failed", exc_info=True)
+

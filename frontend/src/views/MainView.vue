@@ -39,9 +39,8 @@
       <div class="panel-wrapper left" :style="leftPanelStyle">
         <GraphPanel 
           :graphData="graphData"
-          :loading="graphLoading || graphRefreshing"
+          :loading="graphLoading"
           :currentPhase="currentPhase"
-          :graph-load-error="graphLoadError"
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
@@ -58,7 +57,6 @@
           :buildProgress="buildProgress"
           :graphData="graphData"
           :systemLogs="systemLogs"
-          :bundleData="bundleData"
           @next-step="handleNextStep"
         />
         <!-- Step 2: Environment Setup -->
@@ -77,15 +75,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
-import { getGraphPollIntervalMs, graphSkipPollWhenDocumentHidden } from '../config/zepFootprint'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
-import { getSession, getSessionFileUrl, updateSession } from '../api/simulation'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,28 +91,23 @@ const viewMode = ref('split') // graph | split | workbench
 
 // Step State
 const currentStep = ref(1) // 1: Knowledge Graph, 2: Environment Setup, 3: Run Simulation, 4: Report Generation, 5: Deep Interaction
-const MAX_IMPLEMENTED_STEP = 2 // template only mounts Step1 + Step2; higher steps via ?step= would leave panel empty
 const stepNames = ['Knowledge Graph', 'Environment Setup', 'Run Simulation', 'Report Generation', 'Deep Interaction']
 
 // Data State
 const currentProjectId = ref(route.params.projectId)
 const loading = ref(false)
 const graphLoading = ref(false)
-const graphRefreshing = ref(false)
 const error = ref('')
 const projectData = ref(null)
 const graphData = ref(null)
-const graphLoadError = ref('')
 const currentPhase = ref(-1) // -1: Upload, 0: Ontology, 1: Build, 2: Complete
 const ontologyProgress = ref(null)
 const buildProgress = ref(null)
 const systemLogs = ref([])
-const bundleData = ref(null)
 
 // Polling timers
 let pollTimer = null
-let graphPollActive = false
-let graphPollTimeoutId = null
+let graphPollTimer = null
 
 // --- Computed Layout Styles ---
 const leftPanelStyle = computed(() => {
@@ -184,19 +175,6 @@ const handleGoBack = () => {
   }
 }
 
-/** e.g. ?step=1 from bundle results → show Knowledge Graph / ontology panel */
-function applyRouteStepQuery() {
-  const raw = route.query.step
-  if (raw === undefined || raw === null || raw === '') return
-  const s = Array.isArray(raw) ? raw[0] : raw
-  const n = parseInt(String(s), 10)
-  if (Number.isNaN(n) || n < 1 || n > MAX_IMPLEMENTED_STEP) return
-  if (currentStep.value !== n) {
-    currentStep.value = n
-    addLog(`Step ${n} (from link): ${stepNames[n - 1]}`)
-  }
-}
-
 // --- Data Logic ---
 
 const initProject = async () => {
@@ -210,31 +188,7 @@ const initProject = async () => {
 
 const handleNewProject = async () => {
   const pending = getPendingUpload()
-  let files = pending.files || []
-
-  if (pending.recoveredFromStorage && files.length === 0) {
-    addLog('Session recovered after refresh — downloading files from session...')
-    const sessionId = localStorage.getItem('glas_active_session') || route.query.session_id
-    if (sessionId) {
-      try {
-        const sess = await getSession(sessionId)
-        const uploadedFiles = sess?.data?.uploaded_files || []
-        for (const meta of uploadedFiles) {
-          const urlRes = await getSessionFileUrl(sessionId, meta.name)
-          if (urlRes?.data?.url) {
-            const resp = await fetch(urlRes.data.url)
-            const blob = await resp.blob()
-            files.push(new File([blob], meta.name, { type: meta.content_type || 'application/octet-stream' }))
-          }
-        }
-        addLog(`Recovered ${files.length} file(s) from session ${sessionId}`)
-      } catch (e) {
-        addLog(`Failed to recover files from session: ${e.message}`)
-      }
-    }
-  }
-
-  if (!pending.isPending || files.length === 0) {
+  if (!pending.isPending || pending.files.length === 0) {
     error.value = 'No pending files found.'
     addLog('Error: No pending files found for new project.')
     return
@@ -247,7 +201,7 @@ const handleNewProject = async () => {
     addLog('Starting ontology generation: Uploading files...')
     
     const formData = new FormData()
-    files.forEach(f => formData.append('files', f))
+    pending.files.forEach(f => formData.append('files', f))
     formData.append('simulation_requirement', pending.simulationRequirement)
     if (pending.decisionIntake) {
       formData.append('decision_intake', JSON.stringify(pending.decisionIntake))
@@ -256,30 +210,13 @@ const handleNewProject = async () => {
       formData.append('research_dossier', JSON.stringify(pending.researchDossier))
     }
     
-    if (pending.bundleData) {
-      bundleData.value = pending.bundleData
-      addLog(`Bundle mode: ${pending.bundleData.scenarios?.length || 0} scenarios`)
-    }
-
     const res = await generateOntology(formData)
     if (res.success) {
       clearPendingUpload()
       currentProjectId.value = res.data.project_id
       projectData.value = res.data
-
-      const rawSessionId = localStorage.getItem('glas_active_session') || route.query.session_id
-      const currentSessionId = Array.isArray(rawSessionId) ? rawSessionId[0] : rawSessionId
-      if (currentSessionId) {
-        updateSession(currentSessionId, { project_id: res.data.project_id }).catch(() => {})
-      }
-      router.replace({
-        name: 'Process',
-        params: { projectId: res.data.project_id },
-        query: {
-          ...route.query,
-          ...(currentSessionId ? { session_id: String(currentSessionId) } : {}),
-        },
-      })
+      
+      router.replace({ name: 'Process', params: { projectId: res.data.project_id } })
       ontologyProgress.value = null
       addLog(`Ontology generated successfully for project ${res.data.project_id}`)
       await startBuildGraph()
@@ -304,21 +241,7 @@ const loadProject = async () => {
       projectData.value = res.data
       updatePhaseByStatus(res.data.status)
       addLog(`Project loaded. Status: ${res.data.status}`)
-
-      if (!bundleData.value) {
-        const sessionId = localStorage.getItem('glas_active_session') || route.query.session_id
-        if (sessionId) {
-          try {
-            const sessRes = await getSession(sessionId)
-            const bc = sessRes?.data?.bundle_config
-            if (bc && bc.full_analysis && bc.bundle_id) {
-              bundleData.value = { bundleId: bc.bundle_id, scenarios: bc.scenarios || [] }
-              addLog(`Bundle mode restored: ${bc.scenarios?.length || 0} scenarios`)
-            }
-          } catch { /* non-critical */ }
-        }
-      }
-
+      
       if (res.data.status === 'ontology_generated' && !res.data.graph_id) {
         await startBuildGraph()
       } else if (res.data.status === 'graph_building' && res.data.graph_build_task_id) {
@@ -333,7 +256,6 @@ const loadProject = async () => {
       error.value = res.error
       addLog(`Error loading project: ${res.error}`)
     }
-    applyRouteStepQuery()
   } catch (err) {
     error.value = err.message
     addLog(`Exception in loadProject: ${err.message}`)
@@ -373,71 +295,26 @@ const startBuildGraph = async () => {
   }
 }
 
-let graphBackoffUntil = 0
-
-const graphBuildingActive = () =>
-  currentPhase.value === 1 || projectData.value?.status === 'graph_building'
-
 const startGraphPolling = () => {
   addLog('Started polling for graph data...')
-  stopGraphPolling()
-  graphPollActive = true
-  scheduleGraphPoll(0)
-}
-
-const scheduleGraphPoll = (delayMs) => {
-  if (!graphPollActive) return
-  if (graphPollTimeoutId !== null) {
-    clearTimeout(graphPollTimeoutId)
-    graphPollTimeoutId = null
-  }
-  graphPollTimeoutId = setTimeout(async () => {
-    graphPollTimeoutId = null
-    if (!graphPollActive) return
-    await fetchGraphData()
-    if (!graphPollActive) return
-    const base = getGraphPollIntervalMs({
-      documentHidden: document.hidden,
-      graphBuilding: graphBuildingActive(),
-    })
-    scheduleGraphPoll(base)
-  }, delayMs)
+  fetchGraphData()
+  graphPollTimer = setInterval(fetchGraphData, 10000)
 }
 
 const fetchGraphData = async () => {
-  if (graphSkipPollWhenDocumentHidden && document.hidden) return
-  if (Date.now() < graphBackoffUntil) return
   try {
-    let graphId = projectData.value?.graph_id
-    if (!graphId) {
-      const projRes = await getProject(currentProjectId.value)
-      if (projRes.success && projRes.data) {
-        projectData.value = projRes.data
-        graphId = projRes.data.graph_id
+    // Refresh project info to check for graph_id
+    const projRes = await getProject(currentProjectId.value)
+    if (projRes.success && projRes.data.graph_id) {
+      const gRes = await getGraphData(projRes.data.graph_id)
+      if (gRes.success) {
+        graphData.value = gRes.data
+        const nodeCount = gRes.data.node_count || gRes.data.nodes?.length || 0
+        const edgeCount = gRes.data.edge_count || gRes.data.edges?.length || 0
+        addLog(`Graph data refreshed. Nodes: ${nodeCount}, Edges: ${edgeCount}`)
       }
     }
-    if (!graphId) return
-
-    const gRes = await getGraphData(graphId)
-    if (gRes.success) {
-      graphBackoffUntil = 0
-      graphLoadError.value = ''
-      graphData.value = gRes.data
-      const nodeCount = gRes.data.node_count || gRes.data.nodes?.length || 0
-      const edgeCount = gRes.data.edge_count || gRes.data.edges?.length || 0
-      addLog(`Graph data refreshed. Nodes: ${nodeCount}, Edges: ${edgeCount}`)
-    }
   } catch (err) {
-    const status = err.response?.status
-    if (status === 429) {
-      const raSec = Number.parseInt(err.response?.headers?.['retry-after'] || '60', 10)
-      const backoffSec = Number.isFinite(raSec) && raSec > 0 ? raSec : 60
-      const clamped = Math.min(Math.max(backoffSec, 1), 300)
-      graphBackoffUntil = Date.now() + clamped * 1000
-      addLog(`Graph rate limited — backing off ~${clamped}s (server cache reduces repeat calls)`)
-    }
-    const detail = err.response?.data?.detail || err.response?.data?.error || err.message
-    graphLoadError.value = String(detail)
     console.warn('Graph fetch error:', err)
   }
 }
@@ -483,38 +360,28 @@ const pollTaskStatus = async (taskId) => {
   }
 }
 
-const loadGraph = async (graphId, options = {}) => {
+const loadGraph = async (graphId) => {
   graphLoading.value = true
-  graphLoadError.value = ''
   addLog(`Loading full graph data: ${graphId}`)
   try {
-    const res = await getGraphData(graphId, { refresh: !!options.refresh })
+    const res = await getGraphData(graphId)
     if (res.success) {
       graphData.value = res.data
       addLog('Graph data loaded successfully.')
     } else {
-      const msg = res.error || 'Unknown error'
-      graphLoadError.value = msg
-      addLog(`Failed to load graph data: ${msg}`)
+      addLog(`Failed to load graph data: ${res.error}`)
     }
   } catch (e) {
-    const detail = e.response?.data?.detail || e.response?.data?.error || e.message
-    graphLoadError.value = String(detail)
-    addLog(`Exception loading graph: ${detail}`)
+    addLog(`Exception loading graph: ${e.message}`)
   } finally {
     graphLoading.value = false
   }
 }
 
-const refreshGraph = async () => {
-  if (!projectData.value?.graph_id) return
-  if (graphRefreshing.value) return
-  graphRefreshing.value = true
-  try {
-    addLog('Manual graph refresh triggered (bypasses server cache).')
-    await loadGraph(projectData.value.graph_id, { refresh: true })
-  } finally {
-    graphRefreshing.value = false
+const refreshGraph = () => {
+  if (projectData.value?.graph_id) {
+    addLog('Manual graph refresh triggered.')
+    loadGraph(projectData.value.graph_id)
   }
 }
 
@@ -526,43 +393,18 @@ const stopPolling = () => {
 }
 
 const stopGraphPolling = () => {
-  graphPollActive = false
-  if (graphPollTimeoutId !== null) {
-    clearTimeout(graphPollTimeoutId)
-    graphPollTimeoutId = null
-  }
-  addLog('Graph polling stopped.')
-}
-
-const onGraphVisibilityChange = () => {
-  if (!document.hidden && graphPollActive) {
-    fetchGraphData()
+  if (graphPollTimer) {
+    clearInterval(graphPollTimer)
+    graphPollTimer = null
+    addLog('Graph polling stopped.')
   }
 }
-
-watch(
-  () => route.query.step,
-  () => {
-    if (!loading.value && currentProjectId.value && currentProjectId.value !== 'new') {
-      applyRouteStepQuery()
-    }
-  },
-)
-
-watch(
-  () => route.params.projectId,
-  () => {
-    graphLoadError.value = ''
-  },
-)
 
 onMounted(() => {
-  document.addEventListener('visibilitychange', onGraphVisibilityChange)
   initProject()
 })
 
 onUnmounted(() => {
-  document.removeEventListener('visibilitychange', onGraphVisibilityChange)
   stopPolling()
   stopGraphPolling()
 })

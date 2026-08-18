@@ -16,7 +16,6 @@ dependencies = [
     
     # LLM
     "openai>=1.0.0",
-    "anthropic>=0.40.0",
     
     # Zep Cloud
     "zep-cloud==3.13.0",
@@ -24,7 +23,6 @@ dependencies = [
     # OASIS social simulation
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
-    "duckduckgo-search>=7.0",
     
     # File processing
     "PyMuPDF>=1.24.0",
@@ -56,7 +54,7 @@ dev = [
     "mypy>=1.15.0",
     "pip-audit>=2.7.0",
     "sentry-sdk[flask]>=2.0.0",
-    "prometheus-flask-exporter>=0.23.0",
+    "prometheus-flask-instrumentator>=7.0.0",
 ]
 
 [build-system]
@@ -82,27 +80,7 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = [
-    "E402",   # module-level import not at top (Flask pattern)
-    "E501",   # line too long
-    "E741",   # ambiguous variable name
-    "I001",   # import sorting
-    "W291",   # trailing whitespace
-    "W292",   # no newline at end
-    "W293",   # whitespace before ':'
-    "F841",   # unused local variable (too noisy on existing code)
-    "SIM102", # collapsible-if
-    "SIM105", # suppressible-exception
-    "SIM108", # if-else-block-instead-of-if-exp
-    "SIM115", # open-file-with-context-handler
-    "UP042",  # replace-str-enum
-    "UP045",  # non-pep604-annotation
-    "B007",   # unused-loop-control-variable
-    "B023",   # function-uses-loop-variable
-    "B904",   # raise-without-from-inside-except
-    "E722",   # bare-except
-    "SIM103", # needless-bool
-]
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

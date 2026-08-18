@@ -38,135 +38,82 @@
       </section>
 
       <section class="dashboard-section">
-        <div class="left-panel anim-fade" :class="{ collapsed: leftPanelCollapsed }" style="--delay: .15s">
+        <div class="left-panel anim-fade" style="--delay: .15s">
           <div class="panel-header">
-            <span class="pulse-dot"></span>
-            <span v-if="!leftPanelCollapsed">System Status</span>
+            <span class="pulse-dot"></span> System Status
           </div>
 
-          <button class="left-panel-toggle" @click="leftPanelCollapsed = !leftPanelCollapsed" :title="leftPanelCollapsed ? 'Expand panel' : 'Collapse panel'">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline :points="leftPanelCollapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6'"/>
-            </svg>
-          </button>
+          <h2 class="section-title">Ready</h2>
+          <p class="section-desc">
+            Prediction engine on standby. Describe a scenario to begin.
+          </p>
 
-          <div class="left-panel-content" v-show="!leftPanelCollapsed">
-            <h2 class="section-title">Ready</h2>
-            <p class="section-desc">
-              Prediction engine on standby. Describe a scenario to begin.
-            </p>
-
-            <div class="metrics-row">
-              <div class="metric-card">
-                <div class="metric-icon">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <div class="metric-value">{{ planLimits.agents }}</div>
-                <div class="metric-label">Agents per simulation</div>
+          <div class="metrics-row">
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               </div>
-              <div class="metric-card">
-                <div class="metric-icon">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                </div>
-                <div class="metric-value">{{ planLimits.rounds }}</div>
-                <div class="metric-label">Decision rounds</div>
-              </div>
+              <div class="metric-value">{{ planLimits.agents }}</div>
+              <div class="metric-label">Agents per simulation</div>
             </div>
-
-            <div class="steps-container">
-              <div class="steps-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-                Getting Started
+            <div class="metric-card">
+              <div class="metric-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               </div>
-              <div class="guide-list">
-                <div class="guide-item">
-                  <span class="guide-number">1</span>
-                  <div class="guide-info">
-                    <div class="guide-title">Describe Your Scenario</div>
-                    <div class="guide-desc">Enter the situation or decision you want to simulate</div>
-                  </div>
-                </div>
-                <div class="guide-item">
-                  <span class="guide-number">2</span>
-                  <div class="guide-info">
-                    <div class="guide-title">Configure Scenarios</div>
-                    <div class="guide-desc">Define base, optimistic, and pessimistic variations to compare outcomes side-by-side</div>
-                  </div>
-                </div>
-                <div class="guide-item">
-                  <span class="guide-number">3</span>
-                  <div class="guide-info">
-                    <div class="guide-title">Run Deep Research</div>
-                    <div class="guide-desc">AI searches the web for real-time data relevant to each scenario — often 30–40 min; allow up to ~40 min</div>
-                  </div>
-                </div>
-                <div class="guide-item">
-                  <span class="guide-number">4</span>
-                  <div class="guide-info">
-                    <div class="guide-title">Add Supporting Documents</div>
-                    <div class="guide-desc">Upload reports, filings, or data to enrich the simulation context</div>
-                  </div>
-                </div>
-                <div class="guide-item">
-                  <span class="guide-number">5</span>
-                  <div class="guide-info">
-                    <div class="guide-title">Start Engine</div>
-                    <div class="guide-desc">Launch the simulation once your scenarios, research, and documents are set</div>
-                  </div>
-                </div>
-              </div>
+              <div class="metric-value">{{ planLimits.rounds }}</div>
+              <div class="metric-label">Decision rounds</div>
             </div>
+          </div>
 
-            <div class="steps-container">
-              <div class="steps-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                Under the Hood
+          <div class="steps-container">
+            <div class="steps-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Workflow
+            </div>
+            <div class="workflow-list">
+              <div class="workflow-item">
+                <div class="step-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                </div>
+                <div class="step-info">
+                  <div class="step-title">Knowledge Graph</div>
+                  <div class="step-desc">Document analysis, entity extraction, and GraphRAG construction</div>
+                </div>
               </div>
-              <div class="workflow-list">
-                <div class="workflow-item">
-                  <div class="step-icon-wrap">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-                  </div>
-                  <div class="step-info">
-                    <div class="step-title">Knowledge Graph</div>
-                    <div class="step-desc">Document analysis, entity extraction, and knowledge graph construction</div>
-                  </div>
+              <div class="workflow-item">
+                <div class="step-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                 </div>
-                <div class="workflow-item">
-                  <div class="step-icon-wrap">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                  </div>
-                  <div class="step-info">
-                    <div class="step-title">Environment Setup</div>
-                    <div class="step-desc">Entity extraction, persona generation, and simulation configuration</div>
-                  </div>
+                <div class="step-info">
+                  <div class="step-title">Environment Setup</div>
+                  <div class="step-desc">Entity extraction, persona generation, and simulation configuration</div>
                 </div>
-                <div class="workflow-item">
-                  <div class="step-icon-wrap">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  </div>
-                  <div class="step-info">
-                    <div class="step-title">Run Simulation</div>
-                    <div class="step-desc">Dual-platform parallel simulation with dynamic temporal memory</div>
-                  </div>
+              </div>
+              <div class="workflow-item">
+                <div class="step-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </div>
-                <div class="workflow-item">
-                  <div class="step-icon-wrap">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                  </div>
-                  <div class="step-info">
-                    <div class="step-title">Report Generation</div>
-                    <div class="step-desc">Report Agent uses specialized tools to analyze simulation data</div>
-                  </div>
+                <div class="step-info">
+                  <div class="step-title">Run Simulation</div>
+                  <div class="step-desc">Dual-platform parallel simulation with dynamic temporal memory</div>
                 </div>
-                <div class="workflow-item">
-                  <div class="step-icon-wrap">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                  </div>
-                  <div class="step-info">
-                    <div class="step-title">Deep Interaction</div>
-                    <div class="step-desc">Interview any simulated agent or chat with the Report Agent</div>
-                  </div>
+              </div>
+              <div class="workflow-item">
+                <div class="step-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </div>
+                <div class="step-info">
+                  <div class="step-title">Report Generation</div>
+                  <div class="step-desc">Report Agent uses specialized tools to analyze simulation data</div>
+                </div>
+              </div>
+              <div class="workflow-item">
+                <div class="step-icon-wrap">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div class="step-info">
+                  <div class="step-title">Deep Interaction</div>
+                  <div class="step-desc">Interview any simulated agent or chat with the Report Agent</div>
                 </div>
               </div>
             </div>
@@ -174,33 +121,6 @@
         </div>
 
         <div class="right-panel anim-fade" style="--delay: .3s">
-          <!-- Active Sessions Panel -->
-          <div v-if="activeSessions.length > 0" class="sessions-panel">
-            <div class="sessions-panel-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-              <span>Active Sessions</span>
-              <span class="sessions-count">{{ activeSessions.length }}</span>
-            </div>
-            <div class="sessions-list">
-              <div
-                v-for="s in activeSessions"
-                :key="s.id"
-                class="session-card"
-                :class="{ active: activeSessionId === s.id }"
-                @click="restoreFromSession(s)"
-              >
-                <div class="session-card-top">
-                  <span class="session-status-badge" :class="[s.status, s.research_status === 'failed' ? 'research-failed' : '', s.status === 'sim_failed' ? 'sim-failed' : '']">{{ sessionStatusLabel(s) }}</span>
-                  <span class="session-time">{{ timeAgo(s.created_at) }}</span>
-                </div>
-                <div class="session-card-prompt">{{ s.prompt?.slice(0, 80) }}{{ s.prompt?.length > 80 ? '...' : '' }}</div>
-                <button class="session-abandon-btn" @click.stop="handleAbandonSession(s.id)" title="Abandon session">&times;</button>
-              </div>
-            </div>
-          </div>
-
-          <DemoScenarioPicker v-if="isDemoMode" @select="onDemoScenarioSelected" />
-
           <div class="console-box">
             <div class="console-section">
               <div class="console-header">
@@ -230,6 +150,8 @@
                 <div class="model-badge">Engine: GLAS v1.0</div>
               </div>
             </div>
+
+            <DemoScenarioPicker v-if="isDemoMode" @select="onDemoScenarioSelected" />
 
             <!-- Starter Scenario Cards (shown when textarea is empty) -->
             <div v-if="!formData.simulationRequirement.trim()" class="starter-scenarios">
@@ -275,59 +197,38 @@
                     ↩ Restored from previous simulation
                   </div>
                 </div>
-              </div>
 
-              <div class="console-section bundle-toggle-section" v-if="isPaidUser">
-                <label class="bundle-toggle" :class="{ disabled: researchLoading }">
-                  <input type="checkbox" v-model="fullAnalysisMode" :disabled="researchLoading" />
-                  <span class="bundle-toggle-label">Run Full Decision Analysis</span>
-                  <span class="bundle-toggle-hint">Generate multiple scenario variations for comprehensive analysis</span>
-                </label>
-              </div>
-
-              <div v-if="fullAnalysisMode" class="console-section bundle-controls">
-                <div class="bundle-controls-row">
-                  <label class="bundle-count-label">
-                    Scenarios
-                    <select v-model="scenarioCount" class="bundle-count-select" :disabled="bundleLoading">
-                      <option v-for="n in [2,3,4,5,6,7]" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                  </label>
-                  <button class="bundle-generate-btn" @click="generateScenarios" :disabled="bundleLoading || !formData.simulationRequirement.trim()">
-                    <span v-if="bundleLoading"><span class="bundle-spinner-inline"></span> Generating...</span>
-                    <span v-else-if="bundlePlan.length > 0">Regenerate</span>
-                    <span v-else>Generate Scenarios</span>
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="fullAnalysisMode && bundlePlan.length > 0" class="console-section bundle-editor">
-                <div class="bundle-editor-header">
-                  <span class="bundle-preview-label">Analysis Plan</span>
-                  <span class="bundle-preview-count">{{ bundlePlan.length }} scenario{{ bundlePlan.length !== 1 ? 's' : '' }} · {{ bundlePlan.length }} credit{{ bundlePlan.length !== 1 ? 's' : '' }}</span>
-                </div>
-                <div class="bundle-editor-list">
-                  <div v-for="(s, i) in bundlePlan" :key="i" class="bundle-editor-item" :style="{ '--item-delay': (i * 0.06) + 's' }">
-                    <div class="bundle-editor-item-accent"></div>
-                    <div class="bundle-editor-item-body">
-                      <div class="bundle-editor-item-header">
-                        <span class="bundle-preview-idx">{{ String(i + 1).padStart(2, '0') }}</span>
-                        <input class="bundle-title-input" v-model="bundlePlan[i].title" placeholder="Scenario title" :disabled="researchLoading" />
-                        <button class="bundle-remove-btn" @click="removeScenario(i)" :disabled="bundlePlan.length <= 2" title="Remove scenario">
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                        </button>
-                      </div>
-                      <textarea class="bundle-scenario-textarea" v-model="bundlePlan[i].scenario" placeholder="Describe this scenario variation..." rows="3" :disabled="researchLoading"></textarea>
-                    </div>
-                  </div>
-                </div>
-                <button v-if="bundlePlan.length < 7" class="bundle-add-btn" @click="addScenario" :disabled="researchLoading">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                  Add Scenario
+                <!-- Deep Research Button -->
+                <button
+                  class="auto-research-btn"
+                  :class="{ disabled: !isPaidUser }"
+                  :disabled="researchLoading"
+                  @click="runDeepResearch"
+                  :title="isPaidUser ? 'Launch deep research with AI web search' : 'Upgrade to Pro or Business to unlock deep research'"
+                >
+                  <span v-if="!researchLoading">
+                    {{ isPaidUser ? 'Deep Research Briefing' : 'Deep Research (Paid Plans)' }}
+                  </span>
+                  <span v-else class="research-loading-content">
+                    <span class="pulse-indicator"></span>
+                    {{ researchStatusMessage }} ({{ researchElapsed }}s)
+                  </span>
                 </button>
-              </div>
 
-              <div v-if="!isDemoMode" class="console-section">
+                <div v-if="error" class="research-error">{{ error }}</div>
+
+                <div v-if="briefing" class="briefing-preview">
+                  <div class="briefing-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span class="briefing-title">{{ briefing.filename }}</span>
+                    <button class="briefing-toggle" @click="briefingExpanded = !briefingExpanded">
+                      {{ briefingExpanded ? 'Collapse' : 'Read' }}
+                    </button>
+                    <button class="remove-btn" @click="removeBriefing">&times;</button>
+                  </div>
+                  <div class="briefing-content" :class="{ expanded: briefingExpanded }">{{ briefingExpanded ? briefing.content_md : briefing.content_md.slice(0, 300) + '...' }}</div>
+                </div>
+
                 <div class="console-divider inner-divider">
                   <span>Upload Additional Documents</span>
                 </div>
@@ -365,144 +266,51 @@
                   <div v-else class="file-list">
                     <div v-for="(file, index) in files" :key="index" class="file-item">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-                      <span class="file-name file-name-link" @click.stop="openFile(file)">{{ file.name }}</span>
+                      <span class="file-name">{{ file.name }}</span>
                       <button @click.stop="removeFile(index)" class="remove-btn">&times;</button>
                     </div>
                   </div>
                 </div>
-
-                <!-- Deep Research Button -->
-                <div class="research-btn-row">
-                  <button
-                    class="auto-research-btn"
-                    :class="{ disabled: !isPaidUser }"
-                    :disabled="researchLoading"
-                    @click="runDeepResearch"
-                    :title="isPaidUser ? 'Launch deep research with AI web search' : 'Upgrade to Pro or Business to unlock deep research'"
-                  >
-                    <span v-if="!researchLoading">
-                      {{ isPaidUser ? 'Deep Research Briefing' : 'Deep Research (Paid Plans)' }}
-                      <span v-if="!isDemoMode && isPaidUser && researchCredits !== null" class="research-credits-badge">{{ researchCredits }}</span>
-                    </span>
-                    <span v-else class="research-loading-content">
-                      <span class="progress-bar-track">
-                        <span class="progress-bar-fill" :style="{ width: researchEstimatedProgress + '%' }"></span>
-                      </span>
-                      {{ researchStatusMessage }} — {{ researchEstimatedProgress }}% ({{ researchElapsedFormatted }})
-                    </span>
-                  </button>
-                  <button
-                    v-if="isPaidUser"
-                    class="research-settings-btn"
-                    :class="{ 'has-overrides': Object.keys(researchAngleOverrides).length > 0 }"
-                    :disabled="researchLoading"
-                    title="Configure research focus areas"
-                    @click="showResearchSettings = true"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                    </svg>
-                  </button>
-                </div>
-
-                <div class="research-info-callout" :class="{ active: researchLoading }">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  <div class="research-info-text">
-                    <template v-if="researchLoading">
-                      <strong>Research in progress.</strong> The AI agent is searching the web, reading sources, and synthesizing findings. Complex topics often take <strong>30–40 minutes</strong>; allow <strong>up to about 40 minutes</strong>. You can leave this tab open — progress is tracked automatically.
-                    </template>
-                    <template v-else>
-                      Launches an AI research agent that searches the web for real-time data, precedents, and quantitative anchors. If you have configured scenario variations above, research will target data relevant to each one. Typically takes 10–20 min.
-                    </template>
-                  </div>
-                </div>
-
-                <ResearchSettingsModal
-                  v-model="showResearchSettings"
-                  v-model:angleOverrides="researchAngleOverrides"
-                />
-
-                <!-- Buy Research Modal -->
-                <div v-if="showBuyResearchModal" class="buy-research-overlay" @click.self="showBuyResearchModal = false">
-                  <div class="buy-research-modal">
-                    <button class="modal-close" @click="showBuyResearchModal = false">&times;</button>
-                    <div class="modal-icon">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    </div>
-                    <h3>No research credits remaining</h3>
-                    <p class="modal-desc">Purchase additional research briefings to continue.</p>
-                    <div class="buy-options">
-                      <button class="buy-option primary" :disabled="buyingResearch" @click="handleBuyResearch('research_1')">
-                        <span class="buy-qty">1 briefing</span>
-                        <span class="buy-price">$7</span>
-                      </button>
-                      <button class="buy-option secondary" :disabled="buyingResearch" @click="handleBuyResearch('research_5')">
-                        <span class="buy-qty">5 briefings</span>
-                        <span class="buy-price">$30</span>
-                        <span class="buy-save">Save $5</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="error" class="research-error">{{ error }}</div>
-
-                <div v-if="briefing" class="briefing-preview" :class="{ 'briefing-empty': !briefingHasContent }">
-                  <div class="briefing-header">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    <span class="briefing-title" :class="{ 'briefing-title-link': briefingHasContent }" @click="briefingHasContent && (showDossierModal = true)">{{ briefing.filename }}</span>
-                    <button
-                      v-if="briefingHasContent"
-                      class="briefing-toggle"
-                      @click="showDossierModal = true"
-                    >
-                      Read
-                    </button>
-                    <button
-                      v-else
-                      class="briefing-toggle briefing-toggle-retry"
-                      :disabled="researchLoading"
-                      @click="retryEmptyResearch"
-                      title="The previous research returned no content. Click to retry."
-                    >
-                      Retry
-                    </button>
-                    <button class="remove-btn" @click="removeBriefing">&times;</button>
-                  </div>
-                  <div class="briefing-content">
-                    <template v-if="!briefingHasContent">
-                      <span class="briefing-empty-msg">
-                        Research completed but returned no content. This is a known intermittent issue with the research agent — click <strong>Retry</strong> above to run it again (your credit is preserved on failure).
-                      </span>
-                    </template>
-                    <template v-else>
-                      <span class="briefing-snippet">{{ briefing.content_md.slice(0, 220) }}{{ briefing.content_md.length > 220 ? '…' : '' }}</span>
-                    </template>
-                  </div>
-                </div>
-
-                <DossierModal
-                  v-model="showDossierModal"
-                  :content="briefing?.content_md || ''"
-                  :filename="briefing?.filename || 'deep_research_dossier.md'"
-                  @save="onDossierSave"
-                />
               </div>
 
+              <div class="console-section bundle-toggle-section" v-if="isPaidUser">
+                <label class="bundle-toggle">
+                  <input type="checkbox" v-model="fullAnalysisMode" />
+                  <span class="bundle-toggle-label">Run Full Decision Analysis</span>
+                  <span class="bundle-toggle-hint">Generates 3-5 related scenarios for a comprehensive analysis</span>
+                </label>
+              </div>
+
+              <div v-if="fullAnalysisMode && bundlePlan.length > 0" class="console-section bundle-preview">
+                <div class="bundle-preview-header">
+                  <span class="bundle-preview-label">Analysis Plan</span>
+                  <span class="bundle-preview-count">{{ bundlePlan.length }} scenarios</span>
+                </div>
+                <div class="bundle-preview-list">
+                  <div v-for="(s, i) in bundlePlan" :key="i" class="bundle-preview-item">
+                    <span class="bundle-preview-idx">{{ i + 1 }}</span>
+                    <div class="bundle-preview-info">
+                      <span class="bundle-preview-title">{{ s.title }}</span>
+                      <span class="bundle-preview-change">{{ s.change_summary }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="fullAnalysisMode && bundleLoading" class="console-section bundle-loading">
+                <div class="bundle-spinner"></div>
+                <span>Generating analysis plan...</span>
+              </div>
 
               <div class="console-section btn-section">
                 <button
                   class="start-engine-btn"
                   @click="startSimulation"
-                  :disabled="!canSubmit || loading || researchLoading || bundleLoading"
+                  :disabled="!canSubmit || loading"
                 >
                   <span v-if="!loading">{{ fullAnalysisMode ? 'Start Full Analysis' : 'Start Engine' }}</span>
                   <span v-else>Initializing...</span>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                 </button>
-                <div v-if="formData.simulationRequirement.trim() && !files.length && !briefing" class="submit-hint">
-                  Run Deep Research or upload a document to continue
-                </div>
               </div>
             </template>
           </div>
@@ -537,22 +345,15 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
 import AppNavbar from '../components/AppNavbar.vue'
-import ResearchSettingsModal from '../components/ResearchSettingsModal.vue'
-import DossierModal from '../components/DossierModal.vue'
+import { authState } from '../store/auth'
+import { useApi } from '../composables/useApi'
+import { startDeepResearch, getDeepResearchStatus, getDeepResearchResult, createBundle } from '../api/simulation'
+import { getPendingUpload, clearPendingUpload, setPendingUpload } from '../store/pendingUpload'
+import { trackEvent } from '../lib/analytics'
 import { isDemoMode, SESSION_KEY } from '../demo/config'
 import { encodeDemoId } from '../demo/sessionId'
 import { setActiveScenario } from '../demo/adapter'
 import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
-import { authState, refreshAccessToken } from '../store/auth'
-import { useApi } from '../composables/useApi'
-import {
-  createBundle, updateBundle,
-  createSession, getActiveSessions, getSession, updateSession,
-  uploadSessionFiles, startSessionResearch, getSessionResearchStatus, abandonSession,
-  canResearch, buyResearchCredits,
-} from '../api/simulation'
-import { getPendingUpload, clearPendingUpload, setPendingUpload } from '../store/pendingUpload'
-import { trackEvent } from '../lib/analytics'
 
 const router = useRouter()
 const route = useRoute()
@@ -565,30 +366,15 @@ const error = ref('')
 const isDragOver = ref(false)
 const fileInput = ref(null)
 
-// In demo mode, tracks the scenario chosen in the picker so startSimulation
-// can navigate directly to the pre-recorded simulation replay.
-const demoScenarioId = ref('')
-
 const enhancing = ref(false)
 const showUpgradeModal = ref(false)
 const researchLoading = ref(false)
 const briefing = ref(null)
-const showDossierModal = ref(false)
-const briefingHasContent = computed(() => !!(briefing.value?.content_md || '').trim())
-const leftPanelCollapsed = ref(false)
+const briefingExpanded = ref(false)
 
 const typewriterText = ref('')
 const typewriterDone = ref(false)
-
-/** Align with API Config.normalize_plan — avoids 'Enterprise' vs 'enterprise' and null plan bugs. */
-function normalizeClientPlan(raw) {
-  if (raw == null || raw === '') return 'free'
-  const s = String(raw).trim().toLowerCase()
-  if (s === 'null' || s === 'undefined' || s === 'none') return 'free'
-  return s
-}
-
-const userPlan = ref('free')
+const userPlan = ref(null)
 const prefillRestored = ref(false)
 const decisionForm = reactive({
   role: '',
@@ -600,66 +386,14 @@ const researchDossier = ref(null)
 const researchStatusMessage = ref('Researching...')
 const researchElapsed = ref(0)
 let researchElapsedTimer = null
-const researchElapsedFormatted = computed(() => {
-  const t = researchElapsed.value
-  const m = Math.floor(t / 60)
-  const s = t % 60
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-})
-function _elapsedSince(isoStr) {
-  if (!isoStr) return 0
-  return Math.max(0, Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000))
-}
-function startResearchTimer() {
-  if (researchElapsedTimer) clearInterval(researchElapsedTimer)
-  researchElapsedTimer = setInterval(() => { researchElapsed.value++ }, 1000)
-}
-function stopResearchTimer() {
-  if (researchElapsedTimer) { clearInterval(researchElapsedTimer); researchElapsedTimer = null }
-}
-const researchEstimatedProgress = computed(() => {
-  if (!researchLoading.value) return 0
-  const t = researchElapsed.value
-  // Slower rise so the indeterminate bar does not sit near 99% for most of a 40 min run
-  const pct = Math.round(100 * (1 - Math.exp(-t / 900)))
-  return Math.min(Math.max(pct, 1), 99)
-})
-const showResearchSettings = ref(false)
-const researchAngleOverrides = ref({})
-const researchCredits = ref(null)
-const showBuyResearchModal = ref(false)
-const buyingResearch = ref(false)
 let typewriterTimer = null
-
-// Session state
-const activeSessionId = ref(null)
-const activeSessions = ref([])
-// Concurrent pollSessionResearch calls share this one ref: one invocation's finally can clear the
-// flag while another is still running. If overlapping research polls become possible, use a poll
-// instance counter or AbortController per invocation instead.
-const researchPollActive = ref(false)
-let autoSaveTimer = null
-let suppressAutoSave = false
-const DRAFT_KEY = 'glas_form_draft'
-// SESSION_KEY imported from '../demo/config' — single source of truth shared with adapter.js
 
 const fullAnalysisMode = ref(false)
 const bundlePlan = ref([])
 const bundleLoading = ref(false)
 const activeBundleId = ref(null)
-const scenarioCount = ref(5)
-// Tracks whether the user (or a restored session/draft) ever had full-analysis enabled
-// in this browser context. Used to warn if they start without it after previously enabling.
-const wasFullAnalysisEnabled = ref(false)
 
-onMounted(async () => {
-  // Arriving from the landing page's demo section: prefill the prompt and
-  // scenario so the picker step is skipped. The session id is still minted
-  // at run-start, keeping the virtual clock aligned with the run.
-  if (route.query.demoPrompt) {
-    formData.value.simulationRequirement = String(route.query.demoPrompt)
-    demoScenarioId.value = String(route.query.demoScenario || '')
-  }
+onMounted(() => {
   const full = 'Simulate the future'
   let i = 0
   typewriterTimer = setInterval(() => {
@@ -673,13 +407,8 @@ onMounted(async () => {
   }, 70)
 
   apiGet('/billing/status').then(res => {
-    if (res?.success) {
-      userPlan.value = normalizeClientPlan(res.data?.plan)
-      researchCredits.value = res.data?.research_credits ?? null
-    }
-  }).catch(() => {
-    userPlan.value = 'free'
-  })
+    if (res?.success) userPlan.value = res.data?.plan || 'free'
+  }).catch(() => {})
 
   if (route.query.prefill) {
     const pending = getPendingUpload()
@@ -693,72 +422,23 @@ onMounted(async () => {
         prefillRestored.value = true
       }
       clearPendingUpload()
-      return
-    }
-  }
-
-  // Restore from localStorage draft (pre-session convenience)
-  try {
-    const draft = localStorage.getItem(DRAFT_KEY)
-    if (draft) {
-      const d = JSON.parse(draft)
-      suppressAutoSave = true
-      if (d.prompt && !formData.value.simulationRequirement) {
-        formData.value.simulationRequirement = d.prompt
-      }
-      if (d.decision_context) {
-        decisionForm.role = d.decision_context.role || ''
-        decisionForm.decision = d.decision_context.decision || ''
-        decisionForm.constraints = d.decision_context.constraints || ''
-        decisionForm.flip_conditions = d.decision_context.flip_conditions || ''
-      }
-      if (d.full_analysis_mode) {
-        fullAnalysisMode.value = true
-        wasFullAnalysisEnabled.value = true
-        if (Array.isArray(d.bundle_plan)) bundlePlan.value = d.bundle_plan
-        if (d.active_bundle_id) activeBundleId.value = d.active_bundle_id
-        if (typeof d.scenario_count === 'number') scenarioCount.value = d.scenario_count
-      }
-      setTimeout(() => { suppressAutoSave = false }, 100)
-    }
-  } catch { /* ignore corrupt draft */ }
-
-  // Restore active session — skipped in demo mode: the picker owns session state
-  // and restoreSession() would call /api/session/<id> (not in the tape), triggering
-  // the watchdog overlay and then wiping the stored session id that adapter.js relies on.
-  if (!isDemoMode) await restoreSession()
-
-  // Fetch sidebar sessions
-  loadActiveSessions()
-
-  // Handle return from Stripe research purchase (never happens in demo mode)
-  if (!isDemoMode && route.query.auto_research === 'true' && route.query.billing === 'success') {
-    const refreshRes = await apiGet('/billing/status').catch(() => null)
-    if (refreshRes?.success) researchCredits.value = refreshRes.data?.research_credits ?? 0
-    if (activeSessionId.value && researchCredits.value > 0) {
-      router.replace({ query: {} })
-      runDeepResearch()
     }
   }
 })
 
 onUnmounted(() => {
   if (typewriterTimer) clearInterval(typewriterTimer)
-  researchPollActive.value = false
-  stopResearchTimer()
-  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  if (researchElapsedTimer) clearInterval(researchElapsedTimer)
 })
 
 const isPaidUser = computed(() => {
-  const p = normalizeClientPlan(userPlan.value)
-  return ['pro', 'business', 'enterprise', 'payg'].includes(p)
+  return ['pro', 'business', 'enterprise', 'payg'].includes(userPlan.value)
 })
 
 const planLimits = computed(() => {
-  const p = normalizeClientPlan(userPlan.value)
-  if (p === 'business') return { agents: 75, rounds: 30 }
-  if (p === 'enterprise') return { agents: 200, rounds: 50 }
-  if (p === 'pro' || p === 'payg') return { agents: 50, rounds: 25 }
+  if (userPlan.value === 'business') return { agents: 75, rounds: 30 }
+  if (userPlan.value === 'enterprise') return { agents: 200, rounds: 50 }
+  if (userPlan.value === 'pro' || userPlan.value === 'payg') return { agents: 50, rounds: 25 }
   return { agents: 25, rounds: 15 }
 })
 
@@ -773,12 +453,7 @@ const starterExamples = [
 
 
 const canSubmit = computed(() => {
-  const hasPrompt = formData.value.simulationRequirement.trim() !== ''
-  // In demo mode the file-upload section is hidden and files are not needed;
-  // the adapter replays from the tape, so a prompt alone is sufficient.
-  if (isDemoMode) return hasPrompt
-  const hasSources = files.value.length > 0 || briefing.value !== null
-  return hasPrompt && hasSources
+  return formData.value.simulationRequirement.trim() !== ''
 })
 
 async function handleEnhancePrompt() {
@@ -805,89 +480,60 @@ async function runDeepResearch() {
   if (!isPaidUser.value) return
   const prompt = formData.value.simulationRequirement.trim()
   if (!prompt) return
-
-  const isRetry = !!error.value || researchDossier.value === null && activeSessionId.value
-
   researchLoading.value = true
   error.value = ''
   researchElapsed.value = 0
-  researchStatusMessage.value = 'Creating session...'
-  startResearchTimer()
+  researchStatusMessage.value = 'Starting deep research...'
+
+  researchElapsedTimer = setInterval(() => { researchElapsed.value++ }, 1000)
 
   try {
-    const sessionId = await ensureSession()
-
-    if (fullAnalysisMode.value && bundlePlan.value.length > 0 && activeBundleId.value) {
-      researchStatusMessage.value = 'Saving scenario context...'
-      await updateSession(sessionId, {
-        bundle_config: {
-          bundle_id: activeBundleId.value,
-          scenarios: bundlePlan.value,
-          full_analysis: true,
-        },
-      })
-    }
-
-    researchStatusMessage.value = 'Starting deep research...'
-
-    const startRes = await startSessionResearch(sessionId, researchAngleOverrides.value)
-
-    if (!startRes?.data) {
-      if (startRes?.error === 'no_research_credits') {
-        researchLoading.value = false
-        stopResearchTimer()
-        researchCredits.value = startRes.research_credits ?? 0
-        showBuyResearchModal.value = true
-        return
-      }
-      error.value = startRes?.error || 'Failed to start deep research'
-      researchLoading.value = false
-      stopResearchTimer()
+    const startRes = await startDeepResearch(prompt)
+    if (!startRes.success) {
+      error.value = startRes.error || 'Failed to start deep research'
       return
     }
+    const taskId = startRes.data.task_id
 
-    if (!isRetry && researchCredits.value !== null) researchCredits.value = Math.max(0, researchCredits.value - 1)
-    await pollSessionResearch(sessionId)
+    // Poll until complete
+    let complete = false
+    while (!complete) {
+      await new Promise(r => setTimeout(r, 4000))
+      const statusRes = await getDeepResearchStatus(taskId)
+      if (!statusRes.success) { error.value = 'Lost connection to research task'; return }
+
+      const task = statusRes.data
+      researchStatusMessage.value = task.message || 'Research in progress...'
+
+      if (task.status === 'completed') {
+        complete = true
+      } else if (task.status === 'failed') {
+        error.value = task.error || 'Deep research failed'
+        return
+      }
+    }
+
+    const resultRes = await getDeepResearchResult(taskId)
+    if (!resultRes.success) { error.value = 'Failed to retrieve research result'; return }
+
+    const dossier = resultRes.data
+    researchDossier.value = dossier
+
+    // Create briefing display + file (same pattern as auto-research)
+    briefing.value = {
+      title: 'Deep Research Dossier',
+      content_md: dossier.summary_md || '',
+      filename: 'deep_research_dossier.md',
+    }
+    const blob = new Blob([dossier.summary_md || ''], { type: 'text/markdown' })
+    const briefingFile = new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' })
+    files.value.push(briefingFile)
+
   } catch (e) {
-    // 409 = research already completed — load the existing dossier silently
-    if (e?.response?.status === 409 && activeSessionId.value) {
-      try {
-        const statusRes = await getSessionResearchStatus(activeSessionId.value)
-        const dossier = statusRes?.data?.dossier || statusRes?.dossier
-        if (dossier?.summary_md) {
-          researchDossier.value = dossier
-          briefing.value = { title: 'Deep Research Dossier', content_md: dossier.summary_md, filename: 'deep_research_dossier.md' }
-          const existing = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
-          if (existing !== -1) files.value.splice(existing, 1)
-          const blob = new Blob([dossier.summary_md], { type: 'text/markdown' })
-          files.value.push(new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' }))
-          researchLoading.value = false
-          stopResearchTimer()
-          return
-        }
-      } catch (_) { /* fall through to generic error below */ }
-    }
-    error.value = e?.message || 'Deep research failed. Please refresh and try again.'
-    researchLoading.value = false
-    stopResearchTimer()
-  }
-}
-
-async function handleBuyResearch(product) {
-  buyingResearch.value = true
-  try {
-    const res = await buyResearchCredits(product, activeSessionId.value)
-    if (res?.success && res.data?.url) {
-      window.location.href = res.data.url
-    } else {
-      error.value = res?.error || 'Failed to start checkout'
-      showBuyResearchModal.value = false
-    }
-  } catch {
-    error.value = 'Network error — please try again'
-    showBuyResearchModal.value = false
+    error.value = 'Failed to connect to the server'
   } finally {
-    buyingResearch.value = false
+    researchLoading.value = false
+    if (researchElapsedTimer) { clearInterval(researchElapsedTimer); researchElapsedTimer = null }
   }
 }
 
@@ -896,37 +542,8 @@ function removeBriefing() {
     const idx = files.value.findIndex(f => f.name === briefing.value.filename)
     if (idx !== -1) files.value.splice(idx, 1)
     briefing.value = null
+    briefingExpanded.value = false
   }
-}
-
-function onDossierSave(newContent) {
-  if (!briefing.value) return
-  briefing.value = { ...briefing.value, content_md: newContent }
-  if (researchDossier.value) researchDossier.value = { ...researchDossier.value, summary_md: newContent }
-  const idx = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
-  const blob = new Blob([newContent], { type: 'text/markdown' })
-  const updated = new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' })
-  if (idx !== -1) files.value.splice(idx, 1, updated)
-  else files.value.push(updated)
-}
-
-// Used when the dossier came back empty (silent failure). We clear the stale
-// dossier from the UI and re-run deep research so the credit-refund / retry
-// path in runDeepResearch kicks in cleanly.
-function retryEmptyResearch() {
-  if (researchLoading.value) return
-  removeBriefing()
-  researchDossier.value = null
-  runDeepResearch()
-}
-
-function onDemoScenarioSelected({ scenarioId, prompt }) {
-  formData.value.simulationRequirement = prompt
-  demoScenarioId.value = scenarioId || ''
-  // Session id is minted later, at the moment startSimulation() fires, so that
-  // the virtual clock starts exactly when the run begins (not at picker-click).
-  // At 20× speedup even a 5 s pause between picker and run-start would burn
-  // 100 s of tape and skip straight to the completed state.
 }
 
 const triggerFileInput = () => { if (!loading.value) fileInput.value?.click() }
@@ -946,359 +563,26 @@ const addFiles = (newFiles) => {
   files.value.push(...validFiles)
 }
 const removeFile = (index) => { files.value.splice(index, 1) }
-function openFile(file) {
-  const url = URL.createObjectURL(file)
-  window.open(url, '_blank')
-}
 const scrollToBottom = () => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }) }
-
-// ── Session helpers ──
-
-async function loadActiveSessions() {
-  try {
-    const res = await getActiveSessions()
-    if (res?.data) activeSessions.value = res.data
-  } catch (err) {
-    console.warn('load active sessions', err)
-  }
-}
-
-async function restoreSession() {
-  const savedId = localStorage.getItem(SESSION_KEY)
-  if (!savedId) return
-
-  suppressAutoSave = true
-  try {
-    const res = await getSession(savedId)
-    if (!res?.data) {
-      localStorage.removeItem(SESSION_KEY)
-      return
-    }
-    const s = res.data
-    if (s.status === 'completed' || s.status === 'abandoned') {
-      localStorage.removeItem(SESSION_KEY)
-      return
-    }
-
-    activeSessionId.value = s.id
-    formData.value.simulationRequirement = s.prompt || ''
-
-    const dc = s.decision_context || {}
-    decisionForm.role = dc.role || ''
-    decisionForm.decision = dc.decision || ''
-    decisionForm.constraints = dc.constraints || ''
-    decisionForm.flip_conditions = dc.flip_conditions || ''
-
-    const bc = s.bundle_config
-    if (bc && typeof bc === 'object' && bc.full_analysis) {
-      fullAnalysisMode.value = true
-      wasFullAnalysisEnabled.value = true
-      activeBundleId.value = bc.bundle_id || null
-      bundlePlan.value = Array.isArray(bc.scenarios) ? bc.scenarios : []
-      if (bundlePlan.value.length) scenarioCount.value = bundlePlan.value.length
-    }
-
-    if (s.research_status === 'completed' && s.research_dossier) {
-      researchDossier.value = s.research_dossier
-      briefing.value = {
-        title: 'Deep Research Dossier',
-        content_md: s.research_dossier.summary_md || '',
-        filename: 'deep_research_dossier.md',
-      }
-      if (s.research_dossier.summary_md) {
-        const blob = new Blob([s.research_dossier.summary_md], { type: 'text/markdown' })
-        const existing = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
-        if (existing === -1) {
-          files.value.push(new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' }))
-        }
-      }
-    } else if (s.research_status === 'processing' || s.research_status === 'queued' || s.research_status === 'claiming') {
-      researchLoading.value = true
-      researchElapsed.value = _elapsedSince(s.research_started_at)
-      researchStatusMessage.value = 'Resuming research...'
-      startResearchTimer()
-      pollSessionResearch(s.id)
-    }
-
-    localStorage.removeItem(DRAFT_KEY)
-  } catch {
-    localStorage.removeItem(SESSION_KEY)
-  } finally {
-    setTimeout(() => { suppressAutoSave = false }, 100)
-  }
-}
-
-async function restoreFromSession(session) {
-  suppressAutoSave = true
-  activeSessionId.value = session.id
-  localStorage.setItem(SESSION_KEY, session.id)
-  formData.value.simulationRequirement = session.prompt || ''
-  const dc = session.decision_context || {}
-  decisionForm.role = dc.role || ''
-  decisionForm.decision = dc.decision || ''
-  decisionForm.constraints = dc.constraints || ''
-  decisionForm.flip_conditions = dc.flip_conditions || ''
-
-  const bc = session.bundle_config
-  if (bc && typeof bc === 'object' && bc.full_analysis) {
-    fullAnalysisMode.value = true
-    wasFullAnalysisEnabled.value = true
-    activeBundleId.value = bc.bundle_id || null
-    bundlePlan.value = bc.scenarios || []
-    scenarioCount.value = bundlePlan.value.length || 5
-  } else {
-    fullAnalysisMode.value = false
-    wasFullAnalysisEnabled.value = false
-    activeBundleId.value = null
-    bundlePlan.value = []
-  }
-
-  let fullSession = session
-  if (session.research_status === 'completed' && !session.research_dossier) {
-    try {
-      const res = await getSession(session.id)
-      if (res?.data) fullSession = res.data
-    } catch { /* use sidebar data as fallback */ }
-  }
-
-  if (fullSession.research_status === 'completed' && fullSession.research_dossier) {
-    researchDossier.value = fullSession.research_dossier
-    briefing.value = {
-      title: 'Deep Research Dossier',
-      content_md: fullSession.research_dossier.summary_md || '',
-      filename: 'deep_research_dossier.md',
-    }
-    if (fullSession.research_dossier.summary_md) {
-      const blob = new Blob([fullSession.research_dossier.summary_md], { type: 'text/markdown' })
-      const existing = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
-      if (existing === -1) {
-        files.value.push(new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' }))
-      }
-    }
-  } else if (fullSession.research_status === 'processing' || fullSession.research_status === 'queued' || fullSession.research_status === 'claiming') {
-    researchLoading.value = true
-    researchElapsed.value = _elapsedSince(fullSession.research_started_at)
-    researchStatusMessage.value = 'Resuming research...'
-    startResearchTimer()
-    pollSessionResearch(fullSession.id)
-    setTimeout(() => { suppressAutoSave = false }, 100)
-    return
-  }
-
-  const navStatus = ['simulating', 'completed', 'sim_failed']
-  const bundleId = bc?.bundle_id
-  if (navStatus.includes(fullSession.status) && bundleId) {
-    router.push({ name: 'BundleResults', params: { bundleId } })
-    return
-  }
-  if (navStatus.includes(fullSession.status) && fullSession.simulation_id) {
-    router.push({ name: 'SimulationRun', params: { simulationId: fullSession.simulation_id } })
-    return
-  }
-  if (fullSession.project_id) {
-    router.push({ name: 'Process', params: { projectId: fullSession.project_id }, query: { session_id: fullSession.id } })
-    return
-  }
-
-  setTimeout(() => { suppressAutoSave = false }, 100)
-}
-
-async function handleAbandonSession(sessionId) {
-  try {
-    await abandonSession(sessionId)
-    activeSessions.value = activeSessions.value.filter(s => s.id !== sessionId)
-    if (activeSessionId.value === sessionId) {
-      activeSessionId.value = null
-      localStorage.removeItem(SESSION_KEY)
-      wasFullAnalysisEnabled.value = false
-    }
-  } catch { /* ignore */ }
-}
-
-async function ensureSession() {
-  if (activeSessionId.value) return activeSessionId.value
-
-  const prompt = formData.value.simulationRequirement.trim()
-  const dc = { ...decisionForm }
-  const res = await createSession(prompt, dc)
-  if (!res?.data?.id) throw new Error(res?.error || 'Failed to create session')
-
-  activeSessionId.value = res.data.id
-  localStorage.setItem(SESSION_KEY, res.data.id)
-  localStorage.removeItem(DRAFT_KEY)
-
-  if (files.value.length > 0) {
-    const fd = new FormData()
-    files.value.forEach((f, i) => fd.append(`file_${i}`, f))
-    try {
-      await uploadSessionFiles(res.data.id, fd)
-    } catch (err) {
-      console.warn('file upload to session', err)
-    }
-  }
-
-  loadActiveSessions()
-  return res.data.id
-}
-
-async function pollSessionResearch(sessionId) {
-  researchPollActive.value = true
-  try {
-    let pollFailures = 0
-    const BASE_POLL_MS = 4000
-    while (true) {
-      if (!researchPollActive.value) {
-        researchLoading.value = false
-        stopResearchTimer()
-        return
-      }
-      const delay = pollFailures > 0 ? Math.min(BASE_POLL_MS * Math.pow(2, pollFailures), 30000) : BASE_POLL_MS
-      await new Promise(r => setTimeout(r, delay))
-      if (!researchPollActive.value) {
-        researchLoading.value = false
-        stopResearchTimer()
-        return
-      }
-      let statusRes
-      try {
-        statusRes = await getSessionResearchStatus(sessionId)
-      } catch (err) {
-        const is401 = err?.response?.status === 401 || err?.message?.includes('JWT')
-        if (is401 && pollFailures === 0) {
-          try { await refreshAccessToken() } catch { /* best effort */ }
-        }
-        pollFailures++
-        if (pollFailures >= 8) {
-          error.value = 'Lost connection to research task. Please refresh and try again.'
-          researchLoading.value = false
-          stopResearchTimer()
-          return
-        }
-        researchStatusMessage.value = `Reconnecting... (attempt ${pollFailures}/8)`
-        continue
-      }
-      if (pollFailures > 0) researchStatusMessage.value = 'Reconnected — research in progress...'
-      pollFailures = 0
-
-      const data = statusRes.data
-      researchStatusMessage.value = data.message || 'Research in progress...'
-
-      if (data.status === 'completed') {
-        const dossier = data.dossier
-        researchDossier.value = dossier
-        briefing.value = {
-          title: 'Deep Research Dossier',
-          content_md: dossier?.summary_md || '',
-          filename: 'deep_research_dossier.md',
-        }
-        if (dossier?.summary_md) {
-          const existing = files.value.findIndex(f => f.name === 'deep_research_dossier.md')
-          if (existing !== -1) files.value.splice(existing, 1)
-          const blob = new Blob([dossier.summary_md], { type: 'text/markdown' })
-          files.value.push(new File([blob], 'deep_research_dossier.md', { type: 'text/markdown' }))
-        }
-        researchLoading.value = false
-        stopResearchTimer()
-        return
-      }
-
-      if (data.status === 'failed') {
-        error.value = data.message || 'Deep research failed'
-        researchLoading.value = false
-        stopResearchTimer()
-        apiGet('/billing/status').then(res => {
-          if (res?.success) researchCredits.value = res.data?.research_credits ?? researchCredits.value
-        }).catch(() => {})
-        return
-      }
-    }
-  } finally {
-    researchPollActive.value = false
-  }
-}
-
-// Auto-save draft to localStorage (pre-session)
-function saveDraft() {
-  if (suppressAutoSave || activeSessionId.value) return
-  const draft = {
-    prompt: formData.value.simulationRequirement,
-    decision_context: { ...decisionForm },
-    full_analysis_mode: fullAnalysisMode.value,
-    bundle_plan: bundlePlan.value,
-    active_bundle_id: activeBundleId.value,
-    scenario_count: scenarioCount.value,
-  }
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch { /* quota */ }
-}
-
-// Auto-save to session API (post-session)
-function scheduleSessionSave() {
-  // Demo mode has no real session API — skipping prevents PATCH /api/session/<demo id>
-  // from firing (which is not in the tape and would trigger the watchdog overlay).
-  // Matches the existing demo guard on restoreSession() at line ~719.
-  if (isDemoMode) return
-  if (suppressAutoSave || !activeSessionId.value) return
-  if (autoSaveTimer) clearTimeout(autoSaveTimer)
-  autoSaveTimer = setTimeout(async () => {
-    try {
-      const fields = {
-        prompt: formData.value.simulationRequirement,
-        decision_context: { ...decisionForm },
-        // Always send bundle_config so toggling off persists; null clears it server-side.
-        bundle_config: fullAnalysisMode.value
-          ? {
-              bundle_id: activeBundleId.value,
-              scenarios: bundlePlan.value,
-              full_analysis: true,
-            }
-          : null,
-      }
-      await updateSession(activeSessionId.value, fields)
-    } catch (err) {
-      console.warn('autosave session', err)
-    }
-  }, 2000)
-}
 
 watch(() => formData.value.simulationRequirement, () => {
   if (fullAnalysisMode.value) {
     fullAnalysisMode.value = false
+    bundlePlan.value = []
   }
-  saveDraft()
-  scheduleSessionSave()
 })
 
 watch(decisionForm, () => {
   if (prefillRestored.value) prefillRestored.value = false
-  saveDraft()
-  scheduleSessionSave()
 }, { deep: true })
 
-watch(fullAnalysisMode, (enabled) => {
-  if (enabled) {
-    wasFullAnalysisEnabled.value = true
-  } else {
-    bundlePlan.value = []
-    activeBundleId.value = null
-  }
-  saveDraft()
-  scheduleSessionSave()
-})
-
-watch(bundlePlan, () => {
-  scheduleSessionSave()
-}, { deep: true })
-
-async function generateScenarios() {
+watch(fullAnalysisMode, async (enabled) => {
+  if (!enabled) { bundlePlan.value = []; return }
   const prompt = formData.value.simulationRequirement.trim()
-  if (!prompt) return
+  if (!prompt) { fullAnalysisMode.value = false; return }
   bundleLoading.value = true
   try {
-    const res = await createBundle({
-      title: prompt.slice(0, 100),
-      decision_context: prompt,
-      scenario_count: scenarioCount.value,
-    })
+    const res = await createBundle({ title: prompt.slice(0, 100), decision_context: prompt })
     if (!fullAnalysisMode.value) return
     if (res.data) {
       activeBundleId.value = res.data.id
@@ -1307,43 +591,22 @@ async function generateScenarios() {
     }
   } catch (e) {
     console.error('Bundle creation failed:', e)
-    error.value = 'Failed to generate scenarios. Please try again.'
+    fullAnalysisMode.value = false
   } finally {
     bundleLoading.value = false
   }
-}
+})
 
-function addScenario() {
-  if (bundlePlan.value.length >= 7) return
-  bundlePlan.value.push({
-    title: `Scenario ${bundlePlan.value.length + 1}`,
-    scenario: '',
-    change_summary: 'Custom scenario',
-  })
-}
-
-function removeScenario(index) {
-  if (bundlePlan.value.length <= 2) return
-  bundlePlan.value.splice(index, 1)
-}
-
-const startSimulation = async () => {
+const startSimulation = () => {
   if (!canSubmit.value || loading.value) return
 
-  // Demo mode: skip Steps 1–2 (graph build / env setup). The tape replays a
-  // pre-recorded simulation so we navigate straight to the run view.
-  // The session id is minted HERE — not at picker-click — so that the virtual
-  // clock encoded in the id starts at the exact moment the run begins.
-  // At 20× speedup, minting at picker-click and navigating 5 s later would
-  // burn 100 s of tape and skip straight past all round-by-round progression.
+  // In demo mode, navigate directly to the pre-recorded simulation replay.
   if (isDemoMode) {
-    let sessionId
-    try {
-      sessionId = encodeDemoId(Date.now(), demoScenarioId.value)
-    } catch (e) {
-      error.value = `Cannot start demo: ${e.message}`
+    if (!demoScenarioId.value) {
+      error.value = 'Select a demo scenario first.'
       return
     }
+    const sessionId = encodeDemoId(Date.now(), demoScenarioId.value)
     // Store before navigation so adapter.js can rehydrate on a page reload.
     localStorage.setItem(SESSION_KEY, sessionId)
     setActiveScenario(demoScenarioId.value, sessionId)
@@ -1356,90 +619,654 @@ const startSimulation = async () => {
     showUpgradeModal.value = true
     return
   }
-  if (fullAnalysisMode.value && (!activeBundleId.value || bundlePlan.value.length === 0)) {
-    error.value = 'Generate scenarios first before starting full analysis.'
-    return
-  }
-  // Guard: user previously enabled Full Decision Analysis but it's currently off.
-  // This catches the case where a refresh / accidental toggle would silently
-  // start a single-scenario run when they intended a multi-scenario one.
-  if (!fullAnalysisMode.value && wasFullAnalysisEnabled.value) {
-    const ok = window.confirm(
-      'Full Decision Analysis is currently OFF, but you had it enabled earlier. ' +
-      'Start a single-scenario analysis instead? Click Cancel to re-enable it.'
-    )
-    if (!ok) return
-  }
+  const hasDecision = decisionForm.role || decisionForm.decision
+  const intake = hasDecision ? { ...decisionForm } : null
 
-  loading.value = true
-  error.value = ''
+  const scenarioText = fullAnalysisMode.value && bundlePlan.value.length > 0
+    ? bundlePlan.value[0].scenario
+    : formData.value.simulationRequirement
 
-  try {
-    const sessionId = await ensureSession()
-
-    const hasDecision = decisionForm.role || decisionForm.decision
-    const intake = hasDecision ? { ...decisionForm } : null
-
-    if (fullAnalysisMode.value && activeBundleId.value && bundlePlan.value.length > 0) {
-      await updateSession(sessionId, {
-        bundle_config: {
-          bundle_id: activeBundleId.value,
-          scenarios: bundlePlan.value,
-          full_analysis: true,
-        },
-      })
-      await updateBundle(activeBundleId.value, { suggested_scenarios: bundlePlan.value })
-
-      setPendingUpload(files.value, formData.value.simulationRequirement, intake, researchDossier.value, {
-        bundleId: activeBundleId.value,
-        scenarios: bundlePlan.value,
-      })
-    } else {
-      setPendingUpload(files.value, formData.value.simulationRequirement, intake, researchDossier.value)
-    }
-
-    localStorage.removeItem(DRAFT_KEY)
-
-    router.push({ name: 'Process', params: { projectId: 'new' }, query: { session_id: sessionId } })
-  } catch (e) {
-    error.value = e?.message || 'Failed to start session'
-  } finally {
-    loading.value = false
-  }
+  setPendingUpload(files.value, scenarioText, intake, researchDossier.value)
+  router.push({ name: 'Process', params: { projectId: 'new' } })
 }
 
-function sessionStatusLabel(s) {
-  if (s.research_status === 'failed') return 'Research Failed'
-  if (s.research_status === 'queued') return 'Research Queued'
-  if (s.research_status === 'claiming') return 'Research Starting'
-  if (s.research_status === 'processing') return 'Researching'
-  if (s.status === 'research_complete') return 'Research Done'
+// In demo mode, tracks the scenario chosen in the picker so startSimulation
+// can navigate directly to the pre-recorded simulation replay.
+const demoScenarioId = ref('')
 
-  const bc = s.bundle_config
-  if (bc && typeof bc === 'object' && bc.full_analysis) {
-    if (s.status === 'simulating') {
-      return 'Running Analysis'
-    }
-    if (s.status === 'completed') return 'Analysis Complete'
-    if (s.status === 'sim_failed') return 'Analysis Failed'
-  }
-
-  if (s.status === 'simulating') return 'Simulating'
-  if (s.status === 'sim_failed') return 'Simulation Failed'
-  if (s.status === 'completed') return 'Completed'
-  return 'Active'
-}
-
-function timeAgo(isoStr) {
-  if (!isoStr) return ''
-  const diff = Date.now() - new Date(isoStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
+function onDemoScenarioSelected({ scenarioId, prompt }) {
+  formData.value.simulationRequirement = prompt
+  demoScenarioId.value = scenarioId || ''
+  // Session id is minted later, at the moment startSimulation() fires, so that
+  // the virtual clock starts exactly when the run begins (not at picker-click).
+  // At 20x speedup even a 5 s pause between picker and run-start would burn
+  // 100 s of tape and skip straight to the completed state.
 }
 </script>
 
-<style scoped src="./Home.scoped.css"></style>
+<style scoped>
+.home-container {
+  --bg: #0a0a0a;
+  --bg-elevated: #111;
+  --text-primary: #e0e0e0;
+  --text-secondary: #888;
+  --accent: #00c853;
+  --accent-hover: #00e676;
+  --border: #1e1e1e;
+  --border-light: #2a2a2a;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  background: var(--bg);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+}
+
+/* ── Animations ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.2); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 200, 83, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(0, 200, 83, 0); }
+}
+
+.anim-fade {
+  opacity: 0;
+  animation: fadeInUp 0.6s ease forwards;
+  animation-delay: var(--delay, 0s);
+}
+
+/* ── Layout ── */
+.main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 50px 40px;
+}
+
+/* ── Hero ── */
+.hero-section {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 60px;
+  position: relative;
+}
+.hero-left { flex: 1; padding-right: 60px; }
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 25px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.accent-tag {
+  background: var(--accent);
+  color: #000;
+  padding: 4px 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 0.75rem;
+}
+.version-text { color: #999; font-weight: 500; letter-spacing: 0.5px; }
+
+.main-title {
+  font-size: 4.5rem;
+  line-height: 1.1;
+  font-weight: 700;
+  margin: 0 0 36px 0;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+.gradient-text {
+  background: linear-gradient(90deg, #fff 0%, #666 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline;
+}
+.tw-cursor {
+  -webkit-text-fill-color: var(--accent);
+  animation: blink 0.7s step-end infinite;
+  font-weight: 400;
+}
+
+.hero-desc {
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  max-width: 640px;
+  margin-bottom: 40px;
+  font-weight: 400;
+}
+.hero-desc p { margin-bottom: 1.2rem; }
+.highlight-bold { color: #fff; font-weight: 700; }
+.highlight-accent { color: var(--accent); font-weight: 700; }
+.highlight-code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: #fff;
+  font-weight: 600;
+}
+.slogan-text {
+  font-size: 1.1rem;
+  font-weight: 520;
+  color: #fff;
+  letter-spacing: 0.5px;
+  border-left: 3px solid var(--accent);
+  padding-left: 15px;
+  margin-top: 16px;
+}
+.blinking-cursor {
+  color: var(--accent);
+  animation: blink 1s step-end infinite;
+  font-weight: 700;
+}
+.decoration-square { width: 14px; height: 14px; background: var(--accent); }
+
+.hero-right {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.logo-container {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 40px;
+}
+.hero-logo { max-height: 400px; width: auto; object-fit: contain; }
+.scroll-down-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--accent);
+  transition: all 0.2s;
+}
+.scroll-down-btn:hover { border-color: var(--accent); }
+
+/* ── Dashboard ── */
+.dashboard-section {
+  display: flex;
+  gap: 50px;
+  border-top: 1px solid var(--border);
+  padding-top: 50px;
+  align-items: flex-start;
+}
+.dashboard-section .left-panel,
+.dashboard-section .right-panel {
+  display: flex;
+  flex-direction: column;
+}
+.left-panel { flex: 0.8; }
+
+.panel-header {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.section-title { font-size: 2rem; font-weight: 520; margin: 0 0 12px 0; color: #fff; }
+.section-desc { color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+
+/* ── Metric Cards ── */
+.metrics-row { display: flex; gap: 16px; margin-bottom: 20px; }
+.metric-card {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 20px 24px;
+  flex: 1;
+}
+.metric-icon {
+  color: var(--accent);
+  margin-bottom: 10px;
+  opacity: 0.8;
+}
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #fff;
+}
+.metric-label { font-size: 0.82rem; color: var(--text-secondary); }
+
+/* ── Workflow ── */
+.steps-container {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 24px;
+}
+.steps-header {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #999;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.workflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-left: 1px solid var(--border-light);
+  margin-left: 8px;
+  padding-left: 0;
+}
+.workflow-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0 10px 20px;
+  position: relative;
+}
+.workflow-item::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 14px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-light);
+  border: 1px solid var(--bg-elevated);
+}
+.step-icon-wrap {
+  color: var(--accent);
+  opacity: 0.6;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.step-info { flex: 1; }
+.step-title { font-weight: 520; font-size: 0.95rem; margin-bottom: 3px; color: #e0e0e0; }
+.step-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; }
+
+/* ── Console ── */
+.right-panel { flex: 1.2; }
+.console-box {
+  border: 1px solid var(--border-light);
+  padding: 8px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+}
+.console-section { padding: 20px; }
+.console-section.btn-section { padding-top: 0; }
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+.console-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.console-meta { font-family: var(--font-mono); }
+.enhance-btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.2s;
+}
+.enhance-btn:hover:not(:disabled) { background: rgba(0, 200, 83, 0.08); }
+.enhance-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.input-wrapper {
+  position: relative;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.code-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  min-height: 140px;
+  color: #e0e0e0;
+}
+.model-badge {
+  position: absolute;
+  bottom: 10px;
+  right: 15px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* ── Buttons ── */
+.start-engine-btn {
+  width: 100%;
+  background: var(--accent);
+  color: #000;
+  border: 1px solid var(--accent);
+  padding: 18px 20px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+.start-engine-btn:not(:disabled) { animation: pulse-border 2s infinite; }
+.start-engine-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-2px);
+}
+.start-engine-btn:active:not(:disabled) { transform: translateY(0); }
+.start-engine-btn:disabled {
+  background: #1a1a1a;
+  color: #555;
+  cursor: not-allowed;
+  border-color: #1a1a1a;
+}
+
+/* ── Starter Scenario Cards ── */
+.starter-scenarios {
+  margin: 12px 8px 8px;
+}
+.starter-header {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-muted, #666); margin-bottom: 10px; padding-left: 2px;
+}
+.starter-cards {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.starter-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  color: var(--text-secondary, #aaa);
+  font-size: 13px; text-align: left; cursor: pointer;
+  transition: all 0.2s;
+}
+.starter-card:hover {
+  border-color: var(--accent, #00c853);
+  background: rgba(0, 200, 83, 0.06);
+  color: var(--text-primary, #fff);
+}
+.starter-icon { font-size: 16px; flex-shrink: 0; }
+.starter-text { line-height: 1.4; }
+
+@media (max-width: 600px) {
+  .starter-cards { grid-template-columns: 1fr; }
+}
+
+/* ── Example Preview ── */
+
+.auto-research-btn {
+  width: 100%;
+  padding: 12px 20px;
+  background: transparent;
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 16px;
+}
+.auto-research-btn:hover:not(:disabled):not(.disabled) { background: rgba(0, 200, 83, 0.05); }
+.auto-research-btn.disabled { border-color: #333; color: #555; cursor: default; }
+.auto-research-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.briefing-preview {
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+  background: var(--bg-elevated);
+}
+.briefing-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.briefing-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.briefing-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.2s;
+}
+.briefing-toggle:hover { border-color: var(--accent); background: rgba(0, 200, 83, 0.05); }
+.briefing-content {
+  padding: 12px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-height: 120px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  transition: max-height 0.3s ease;
+}
+.briefing-content.expanded {
+  max-height: none;
+  overflow-y: auto;
+}
+
+/* ── Upload / files ── */
+.upload-zone {
+  border: 1px dashed var(--border-light);
+  height: 160px;
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: var(--bg-elevated);
+}
+.upload-zone.has-files { align-items: flex-start; }
+.upload-zone:hover { background: #1a1a1a; border-color: #444; }
+.upload-placeholder { text-align: center; }
+.upload-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  color: var(--text-secondary);
+}
+.upload-title { font-weight: 500; font-size: 0.9rem; margin-bottom: 4px; color: #ccc; }
+.upload-hint { font-size: 0.75rem; color: var(--text-secondary); }
+.file-list { width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: #ccc;
+}
+.file-name { flex: 1; }
+.remove-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #666; }
+.remove-btn:hover { color: #c62828; }
+
+.console-divider {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+}
+.console-divider::before,
+.console-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.console-divider span {
+  padding: 0 15px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+}
+.inner-divider { margin: 0 0 12px 0; }
+
+/* Upgrade Modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.upgrade-modal {
+  background: var(--bg-elevated, #1a1a1a); border: 1px solid var(--border, #333);
+  border-radius: 16px; padding: 40px; max-width: 420px; width: 90%;
+  text-align: center; position: relative;
+}
+.modal-close {
+  position: absolute; top: 12px; right: 16px;
+  background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer;
+}
+.modal-close:hover { color: #fff; }
+.modal-icon { margin-bottom: 16px; color: var(--accent, #00b894); }
+.modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 10px; color: #fff; }
+.modal-desc { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+.modal-actions { display: flex; flex-direction: column; gap: 10px; }
+.modal-btn {
+  padding: 14px 20px; border-radius: 8px; font-weight: 600; font-size: 0.95rem;
+  cursor: pointer; border: none; transition: all 0.2s;
+}
+.modal-btn.primary { background: var(--accent, #00b894); color: #000; }
+.modal-btn.primary:hover { filter: brightness(1.1); }
+.modal-btn.secondary { background: transparent; border: 1px solid var(--border, #333); color: var(--text-secondary); }
+.modal-btn.secondary:hover { border-color: var(--accent); color: #fff; }
+
+/* Decision Context Form */
+.decision-context-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.decision-field { display: flex; flex-direction: column; gap: 2px; }
+.decision-label { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.5px; }
+.decision-input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text-primary); font-size: 13px; font-family: var(--font-sans); transition: border-color 0.2s; }
+.prefill-restored-hint { font-size: 11px; color: var(--accent, #00e0ff); font-family: var(--font-mono); opacity: 0.75; margin-top: 4px; }
+.decision-input:focus { outline: none; border-color: var(--accent); }
+.decision-input::placeholder { color: #555; }
+
+/* Research loading */
+.research-loading-content { display: inline-flex; align-items: center; gap: 8px; }
+.pulse-indicator { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; animation: pulse-glow 1.5s ease-in-out infinite; }
+@keyframes pulse-glow { 0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--accent); } 50% { opacity: 0.4; box-shadow: 0 0 12px var(--accent); } }
+
+/* Error display */
+.research-error { margin-top: 8px; padding: 8px 12px; background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.3); border-radius: 6px; color: #f87171; font-size: 13px; }
+
+/* Bundle Toggle & Preview */
+.bundle-toggle-section { padding: 12px 16px !important; }
+.bundle-toggle {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; cursor: pointer;
+}
+.bundle-toggle input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--accent);
+}
+.bundle-toggle-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.bundle-toggle-hint { font-size: 11px; color: var(--text-secondary); width: 100%; margin-left: 24px; }
+
+.bundle-preview { padding: 12px 16px !important; }
+.bundle-preview-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.bundle-preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); font-weight: 600; }
+.bundle-preview-count { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
+.bundle-preview-list { display: flex; flex-direction: column; gap: 6px; }
+.bundle-preview-item {
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px;
+  border-radius: 5px; background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+}
+.bundle-preview-idx {
+  font-family: var(--font-mono); font-size: 11px; color: #555;
+  min-width: 18px; text-align: center; padding-top: 1px;
+}
+.bundle-preview-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.bundle-preview-change { font-size: 11px; color: var(--text-secondary); }
+.bundle-preview-info { display: flex; flex-direction: column; gap: 2px; }
+.bundle-loading {
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px !important;
+  font-size: 12px; color: var(--text-secondary);
+}
+.bundle-spinner {
+  width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-section { flex-direction: column; }
+  .hero-section { flex-direction: column; }
+  .hero-left { padding-right: 0; margin-bottom: 40px; }
+  .hero-logo { max-height: 160px; margin-bottom: 20px; }
+  .main-title { font-size: 2.8rem; }
+  .example-row { flex-direction: column; }
+}
+</style>

@@ -2,12 +2,13 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
-  // The demo spec requires a static demo build (VITE_DEMO_MODE=1 plus staged
+  // The demo specs require a static demo build (VITE_DEMO_MODE=1 plus staged
   // tape fixtures) and cannot pass against the backend-backed stack this config
-  // targets. It runs from playwright.demo.config.js in the demo-e2e workflow.
-  // testIgnore also wins over an explicit path on the command line, which is
-  // why the demo job needs its own config rather than just naming the file.
-  testIgnore: '**/demo.spec.js',
+  // targets. They run from playwright.demo.config.js / playwright.real.config.js
+  // in the demo-e2e workflows. testIgnore also wins over an explicit path on the
+  // command line, which is why the demo jobs need their own config rather than
+  // just naming the file.
+  testIgnore: '**/demo*.spec.js',
   timeout: 30000,
   retries: 1,
   use: {

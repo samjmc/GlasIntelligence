@@ -769,6 +769,7 @@
             <div
               v-for="(step, sidx) in workflowSteps"
               :key="step.key"
+              :data-test="step.key === 'planning' ? undefined : 'agent-log-entry'"
               class="wf-step"
               :class="`wf-step--${step.status}`"
             >
@@ -801,10 +802,9 @@
 
         <div class="workflow-timeline">
           <TransitionGroup name="timeline-item">
-            <div
-              v-for="(log, idx) in displayLogs"
+            <div 
+              v-for="(log, idx) in displayLogs" 
               :key="log.timestamp + '-' + idx"
-              data-test="agent-log-entry"
               class="timeline-item"
               :class="getTimelineItemClass(log, idx, displayLogs.length)"
             >

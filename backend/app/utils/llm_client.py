@@ -1,25 +1,26 @@
 """
-LLM client wrapper — supports OpenAI-compatible APIs and Anthropic natively.
-
-Auto-detects Anthropic keys (sk-ant-*) and routes through the Anthropic SDK;
-everything else uses the OpenAI SDK with a configurable base_url.
+LLM client wrapper
+Unified OpenAI-format API calls
 """
 
 import json
 import re
 from typing import Any
 
+from openai import OpenAI
+
 from ..config import Config
 
 
-def _is_anthropic_key(api_key: str) -> bool:
-    return api_key.startswith("sk-ant-")
-
-
 class LLMClient:
-    """Unified LLM client — OpenAI-compatible providers and Anthropic."""
+    """LLM client"""
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, model: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None
+    ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
@@ -27,43 +28,40 @@ class LLMClient:
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
 
-        self._anthropic = _is_anthropic_key(self.api_key)
-
-        if self._anthropic:
-            from anthropic import Anthropic
-
-            self._client = Anthropic(api_key=self.api_key)
-        else:
-            from openai import OpenAI
-
-            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
 
     def chat(
         self,
         messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        response_format: dict | None = None,
+        response_format: dict | None = None
     ) -> str:
-        if self._anthropic:
-            return self._chat_anthropic(messages, temperature, max_tokens, response_format)
-        return self._chat_openai(messages, temperature, max_tokens, response_format)
+        """
+        Send a chat request
 
-    def _chat_openai(
-        self,
-        messages: list[dict[str, str]],
-        temperature: float,
-        max_tokens: int,
-        response_format: dict | None,
-    ) -> str:
+        Args:
+            messages: List of messages
+            temperature: Temperature parameter
+            max_tokens: Maximum number of tokens
+            response_format: Response format (e.g. JSON mode)
+
+        Returns:
+            Model response text
+        """
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+
         if response_format:
             kwargs["response_format"] = response_format
+
         # deepseek-v4 models reason by default, and hidden reasoning consumes
         # the max_tokens budget — small caps (100-512) return EMPTY content
         # with finish_reason=length (verified 2026-08-14). The app's structured
@@ -72,87 +70,48 @@ class LLMClient:
         if "deepseek" in (self.base_url or "").lower():
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             try:
-                response = self._client.chat.completions.create(**kwargs)
+                response = self.client.chat.completions.create(**kwargs)
             except Exception:
                 kwargs.pop("extra_body", None)
-                response = self._client.chat.completions.create(**kwargs)
+                response = self.client.chat.completions.create(**kwargs)
         else:
-            response = self._client.chat.completions.create(**kwargs)
+            response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
-        # Strip <think> reasoning blocks (e.g. MiniMax M2.5)
-        content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+        # Some models (e.g. MiniMax M2.5) include <think> reasoning content that needs to be removed
+        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
         return content
 
-    def _chat_anthropic(
+    def chat_json(
         self,
         messages: list[dict[str, str]],
-        temperature: float,
-        max_tokens: int,
-        response_format: dict | None,
-    ) -> str:
-        # Anthropic keeps system prompt separate from the messages array
-        system_parts = [m["content"] for m in messages if m["role"] == "system"]
-        user_messages = [m for m in messages if m["role"] != "system"]
-        system = "\n\n".join(system_parts) if system_parts else None
-
-        # Anthropic JSON mode: prepend instruction to system prompt
-        if response_format and response_format.get("type") == "json_object":
-            json_instruction = "Respond with valid JSON only. Do not include markdown code fences."
-            system = f"{system}\n\n{json_instruction}" if system else json_instruction
-
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": user_messages,
-        }
-        if system:
-            kwargs["system"] = system
-
-        # claude-sonnet-5/opus-5 (verified 2026-08-14) run extended thinking by
-        # default. Thinking tokens count against max_tokens, so small budgets
-        # (512-4096) get starved: responses truncate mid-sentence or return a
-        # thinking-only block with no text. Disable thinking explicitly.
-        kwargs["thinking"] = {"type": "disabled"}
-
-        try:
-            response = self._client.messages.create(**kwargs)
-        except Exception as exc:
-            # Newer Claude models (claude-sonnet-5 / opus-5, verified 2026-08-14)
-            # reject the temperature parameter outright (HTTP 400: "temperature
-            # is deprecated for this model"). Retry without it rather than
-            # breaking every LLM call on an Anthropic key.
-            if getattr(exc, "status_code", None) == 400:
-                message = str(exc)
-                if "temperature" in message:
-                    kwargs.pop("temperature", None)
-                elif "thinking" in message:
-                    kwargs.pop("thinking", None)
-                else:
-                    raise
-                response = self._client.messages.create(**kwargs)
-            else:
-                raise
-        # Newer Claude models (claude-sonnet-5) may return a ThinkingBlock
-        # before the TextBlock; find the first text block instead of
-        # assuming content[0] is text.
-        for block in response.content:
-            if getattr(block, "type", None) == "text":
-                return block.text
-        raise ValueError(f"No text block in Anthropic response: {response.content}")
-
-    def chat_json(
-        self, messages: list[dict[str, str]], temperature: float = 0.3, max_tokens: int = 4096
+        temperature: float = 0.3,
+        max_tokens: int = 4096
     ) -> dict[str, Any]:
+        """
+        Send a chat request and return JSON
+
+        Args:
+            messages: List of messages
+            temperature: Temperature parameter
+            max_tokens: Maximum number of tokens
+
+        Returns:
+            Parsed JSON object
+        """
         response = self.chat(
-            messages=messages, temperature=temperature, max_tokens=max_tokens, response_format={"type": "json_object"}
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"}
         )
-        cleaned = response.strip()
-        cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\n?```\s*$", "", cleaned)
-        cleaned = cleaned.strip()
+        # Clean markdown code block markers
+        cleaned_response = response.strip()
+        cleaned_response = re.sub(r'^```(?:json)?\s*\n?', '', cleaned_response, flags=re.IGNORECASE)
+        cleaned_response = re.sub(r'\n?```\s*$', '', cleaned_response)
+        cleaned_response = cleaned_response.strip()
 
         try:
-            return json.loads(cleaned)
+            return json.loads(cleaned_response)
         except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format returned by LLM: {cleaned}")
+            raise ValueError(f"Invalid JSON format returned by LLM: {cleaned_response}") from None
+

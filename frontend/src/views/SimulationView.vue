@@ -45,7 +45,6 @@
           :graphData="graphData"
           :loading="graphLoading"
           :currentPhase="2"
-          :graph-load-error="graphLoadError"
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
@@ -94,7 +93,6 @@ const viewMode = ref('split')
 const currentSimulationId = ref(route.params.simulationId)
 const projectData = ref(null)
 const graphData = ref(null)
-const graphLoadError = ref('')
 const graphLoading = ref(false)
 const systemLogs = ref([])
 const currentStatus = ref('processing') // processing | completed | error
@@ -154,33 +152,14 @@ const handleGoBack = () => {
   }
 }
 
-// Keep in sync with SimulationRunView.vue (scoped by simulation id below).
-const START_TIME_CFG_KEY = 'glas_sim_start_time_config'
-
 const handleNextStep = (params = {}) => {
   addLog('Entering Step 3: Run Simulation')
-
+  
   // Record simulation rounds configuration
   if (params.maxRounds) {
     addLog(`Custom simulation rounds: ${params.maxRounds}`)
   } else {
     addLog('Using auto-configured simulation rounds')
-  }
-
-  if (currentSimulationId.value) {
-    const timeCfgKey = `${START_TIME_CFG_KEY}_${currentSimulationId.value}`
-    if (params.timeConfig && typeof params.timeConfig === 'object' && Object.keys(params.timeConfig).length) {
-      try {
-        sessionStorage.setItem(timeCfgKey, JSON.stringify(params.timeConfig))
-        addLog('Saved confirmed timeline for this run')
-      } catch (e) {
-        addLog(`Could not store timeline override: ${e.message || e}`)
-      }
-    } else {
-      try {
-        sessionStorage.removeItem(timeCfgKey)
-      } catch { /* ignore */ }
-    }
   }
   
   // Build route parameters
@@ -231,23 +210,16 @@ const loadSimulationData = async () => {
   }
 }
 
-const loadGraph = async (graphId, options = {}) => {
+const loadGraph = async (graphId) => {
   graphLoading.value = true
-  graphLoadError.value = ''
   try {
-    const res = await getGraphData(graphId, { refresh: !!options.refresh })
+    const res = await getGraphData(graphId)
     if (res.success) {
       graphData.value = res.data
       addLog('Graph data loaded')
-    } else {
-      const msg = res.error || 'Unknown error'
-      graphLoadError.value = msg
-      addLog(`Failed to load graph: ${msg}`)
     }
   } catch (err) {
-    const detail = err.response?.data?.detail || err.response?.data?.error || err.message
-    graphLoadError.value = String(detail)
-    addLog(`Failed to load graph: ${detail}`)
+    addLog(`Failed to load graph: ${err.message}`)
   } finally {
     graphLoading.value = false
   }
@@ -255,7 +227,7 @@ const loadGraph = async (graphId, options = {}) => {
 
 const refreshGraph = () => {
   if (projectData.value?.graph_id) {
-    loadGraph(projectData.value.graph_id, { refresh: true })
+    loadGraph(projectData.value.graph_id)
   }
 }
 

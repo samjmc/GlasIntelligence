@@ -22,7 +22,7 @@
               <span class="stat-value mono">{{ runStatus.twitter_current_round || 0 }}<span class="stat-total">/{{ runStatus.total_rounds || maxRounds || '-' }}</span></span>
             </span>
             <span class="stat">
-              <span class="stat-label">{{ elapsedTimeStatLabel }}</span>
+              <span class="stat-label">Elapsed Time</span>
               <span class="stat-value mono">{{ twitterElapsedTime }}</span>
             </span>
             <span class="stat">
@@ -39,7 +39,6 @@
               <span class="tooltip-action">QUOTE</span>
               <span class="tooltip-action">FOLLOW</span>
               <span class="tooltip-action">IDLE</span>
-              <span class="tooltip-action tool-action">TOOLS</span>
             </div>
           </div>
         </div>
@@ -63,7 +62,7 @@
               <span class="stat-value mono">{{ runStatus.reddit_current_round || 0 }}<span class="stat-total">/{{ runStatus.total_rounds || maxRounds || '-' }}</span></span>
             </span>
             <span class="stat">
-              <span class="stat-label">{{ elapsedTimeStatLabel }}</span>
+              <span class="stat-label">Elapsed Time</span>
               <span class="stat-value mono">{{ redditElapsedTime }}</span>
             </span>
             <span class="stat">
@@ -84,29 +83,20 @@
               <span class="tooltip-action">MUTE</span>
               <span class="tooltip-action">REFRESH</span>
               <span class="tooltip-action">IDLE</span>
-              <span class="tooltip-action tool-action">TOOLS</span>
             </div>
           </div>
         </div>
       </div>
 
       <div class="action-controls">
-        <label v-if="phase === 0" class="graph-memory-opt">
-          <input
-            v-model="enableGraphMemoryUpdate"
-            type="checkbox"
-            :disabled="isStarting"
-          />
-          <span class="graph-memory-text">Live graph memory (Zep — higher usage)</span>
-        </label>
-        <button
-          data-test="simulation-complete"
+        <button 
           class="action-btn primary"
+          data-test="simulation-complete"
           :disabled="phase !== 2 || isGeneratingReport"
           @click="handleNextStep"
         >
           <span v-if="isGeneratingReport" class="loading-spinner-small"></span>
-          {{ isGeneratingReport ? 'Starting...' : 'Generate Report' }}
+          {{ isGeneratingReport ? 'Starting...' : 'Generate Report' }} 
           <span v-if="!isGeneratingReport" class="arrow-icon">→</span>
         </button>
       </div>
@@ -257,55 +247,14 @@
                   </div>
                 </template>
 
-                <!-- TOOL USE (action_type starts with TOOL_) -->
-                <template v-if="action.action_type?.startsWith('TOOL_')">
-                  <div class="tool-action-card">
-                    <div class="tool-header">
-                      <svg class="icon-small" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-                      <span class="tool-name">{{ action.action_args?.tool_name || 'Tool' }}</span>
-                    </div>
-                    <div v-if="getToolInput(action)" class="tool-input">
-                      <span class="tool-input-label">Input:</span>
-                      <span class="tool-input-value">{{ getToolInput(action) }}</span>
-                    </div>
-                    <div v-if="action.action_args?.tool_result" class="tool-result">
-                      <span class="tool-result-label">Result:</span>
-                      <span class="tool-result-value">{{ truncateContent(action.action_args.tool_result, 200) }}</span>
-                    </div>
-                  </div>
-                </template>
-
-                <!-- STATE CHANGE (action_type starts with STATE_) -->
-                <template v-if="action.action_type?.startsWith('STATE_')">
-                  <div class="state-change-card">
-                    <div class="state-header">
-                      <svg class="icon-small" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                      <span class="state-label">{{ getStateChangeLabel(action) }}</span>
-                    </div>
-                    <div class="state-detail">
-                      <span class="state-target">
-                        <svg class="icon-tiny" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        {{ action.action_args?.target_name || 'Unknown' }}
-                      </span>
-                      <span v-if="action.action_args?.caused_by_tool" class="state-cause">via {{ action.action_args.caused_by_tool }}</span>
-                    </div>
-                    <div v-if="getStateChangeDelta(action)" class="state-delta">
-                      {{ getStateChangeDelta(action) }}
-                    </div>
-                  </div>
-                </template>
-
                 <!-- Fallback for unknown action types -->
-                <div v-if="!isKnownActionType(action.action_type) && action.action_args?.content" class="content-text">
+                <div v-if="!['CREATE_POST', 'QUOTE_POST', 'REPOST', 'LIKE_POST', 'CREATE_COMMENT', 'SEARCH_POSTS', 'FOLLOW', 'UPVOTE_POST', 'DOWNVOTE_POST', 'DO_NOTHING'].includes(action.action_type) && action.action_args?.content" class="content-text">
                   {{ action.action_args.content }}
                 </div>
               </div>
 
               <div class="card-footer">
-                <span class="time-tag">
-                  <template v-if="action.time_label">{{ action.time_label }}</template>
-                  <template v-else>R{{ action.round_num }} • {{ formatActionTime(action.timestamp) }}</template>
-                </span>
+                <span class="time-tag">R{{ action.round_num }} • {{ formatActionTime(action.timestamp) }}</span>
                 <!-- Platform tag removed as it is in header now -->
               </div>
             </div>
@@ -313,16 +262,8 @@
         </TransitionGroup>
 
         <div v-if="allActions.length === 0" class="waiting-state">
-          <template v-if="phase === 2">
-            <div class="pulse-ring muted"></div>
-            <span class="waiting-hint">
-              No saved actions found for this simulation. The run may have been reset, or action logs were cleared.
-            </span>
-          </template>
-          <template v-else>
-            <div class="pulse-ring"></div>
-            <span>Waiting for agent actions...</span>
-          </template>
+          <div class="pulse-ring"></div>
+          <span>Waiting for agent actions...</span>
         </div>
       </div>
     </div>
@@ -366,31 +307,11 @@ import { useRouter } from 'vue-router'
 import { 
   startSimulation, 
   stopSimulation,
-  getSimulation,
-  getSimulationConfig,
   getRunStatus, 
   getRunStatusDetail
 } from '../api/simulation'
 import { generateReport } from '../api/report'
 import { trackEvent } from '../lib/analytics'
-import {
-  step3StatusPollMs,
-  step3DetailPollMs,
-  graphSkipPollWhenDocumentHidden,
-} from '../config/zepFootprint'
-
-const GRAPH_MEMORY_SESSION_KEY = 'glas_pref_graph_memory'
-
-function readGraphMemoryPref() {
-  try {
-    const v = sessionStorage.getItem(GRAPH_MEMORY_SESSION_KEY)
-    if (v === 'true') return true
-    if (v === 'false') return false
-  } catch (_) {
-    /* ignore */
-  }
-  return false
-}
 
 const props = defineProps({
   simulationId: String,
@@ -399,19 +320,9 @@ const props = defineProps({
     type: Number,
     default: 30
   },
-  /** Merged into simulation_config time_config on POST /start (from Step 2 confirm modal) */
-  startTimeConfig: {
-    type: Object,
-    default: null,
-  },
   projectData: Object,
   graphData: Object,
-  systemLogs: Array,
-  /** When true (e.g. bundle "Details"), load saved run from disk — do not POST /start */
-  reviewMode: {
-    type: Boolean,
-    default: false,
-  },
+  systemLogs: Array
 })
 
 const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
@@ -420,7 +331,6 @@ const router = useRouter()
 
 // State
 const isGeneratingReport = ref(false)
-const enableGraphMemoryUpdate = ref(readGraphMemoryPref())
 const phase = ref(0)
 const isStarting = ref(false)
 const isStopping = ref(false)
@@ -430,8 +340,6 @@ const runStatus = ref({})
 const allActions = ref([])
 const actionIds = ref(new Set())
 const scrollContainer = ref(null)
-/** time_scale from simulation_config when run_state has not populated it yet */
-const scheduleFromConfig = ref(null)
 
 // Computed
 const chronologicalActions = computed(() => {
@@ -446,81 +354,12 @@ const redditActionsCount = computed(() => {
   return allActions.value.filter(a => a.platform === 'reddit').length
 })
 
-function normalizeTimeScale(raw) {
-  if (!raw || typeof raw !== 'object' || raw.unit == null || raw.unit === '') return null
-  const unit = String(raw.unit).toLowerCase()
-  return {
-    unit,
-    per_round: Math.max(1, Number(raw.per_round) || 1),
-    total_duration: raw.total_duration,
-    start_date: raw.start_date || '',
-  }
-}
-
-const timeScale = computed(() => {
-  const fromRun = normalizeTimeScale(runStatus.value?.time_scale)
-  if (fromRun) return fromRun
-  const fromStart = normalizeTimeScale(props.startTimeConfig?.time_scale)
-  if (fromStart) return fromStart
-  if (scheduleFromConfig.value) return scheduleFromConfig.value
-  return { unit: 'hour', per_round: 1, total_duration: undefined, start_date: '' }
-})
-
-const isHourlyScale = computed(() => (timeScale.value.unit || 'hour') === 'hour')
-
-async function hydrateScheduleFromConfig() {
-  scheduleFromConfig.value = null
-  if (!props.simulationId) return
-  try {
-    const res = await getSimulationConfig(props.simulationId)
-    if (res.success && res.data?.time_config?.time_scale) {
-      const n = normalizeTimeScale(res.data.time_config.time_scale)
-      if (n) scheduleFromConfig.value = n
-    }
-  } catch {
-    /* e.g. 404 before prepare */
-  }
-}
-
-watch(
-  () => props.simulationId,
-  (id) => {
-    if (id) void hydrateScheduleFromConfig()
-  }
-)
-
-/** Calendar-style simulated span: "0 months" … "6 months" (uses scenario time_scale). */
-function formatCalendarElapsedUnits(totalUnits, unitRaw) {
-  const u = String(unitRaw || 'month').toLowerCase()
-  const n = Math.max(0, Math.floor(Number(totalUnits) || 0))
-  const singular = { month: 'month', week: 'week', day: 'day', year: 'year' }[u] || u
-  const plural = { month: 'months', week: 'weeks', day: 'days', year: 'years' }[u] || `${u}s`
-  return `${n} ${n === 1 ? singular : plural}`
-}
-
-const elapsedTimeStatLabel = computed(() => {
-  if (isHourlyScale.value) return 'Elapsed time'
-  const u = String(timeScale.value.unit || 'timeline').toLowerCase()
-  return `Simulated (${u}s)`
-})
-
 const formatElapsedTime = (currentRound) => {
-  const r = Math.max(0, Number(currentRound) || 0)
-  const ts = timeScale.value || {}
-  const unit = String(ts.unit || 'hour').toLowerCase()
-  const perRound = Math.max(1, Number(ts.per_round) || 1)
-
-  if (unit === 'hour') {
-    if (r <= 0) return '0h 0m'
-    const mpr = Math.max(1, Number(props.minutesPerRound) || 60)
-    const totalMinutes = r * mpr
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = Math.round(totalMinutes % 60)
-    return `${hours}h ${minutes}m`
-  }
-
-  const elapsedUnits = r * perRound
-  return formatCalendarElapsedUnits(elapsedUnits, unit)
+  if (!currentRound || currentRound <= 0) return '0h 0m'
+  const totalMinutes = currentRound * props.minutesPerRound
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${hours}h ${minutes}m`
 }
 
 const twitterElapsedTime = computed(() => {
@@ -549,47 +388,6 @@ const resetAllState = () => {
   stopPolling()
 }
 
-/** Load completed run state + action timeline without starting a new subprocess */
-const loadCompletedRun = async () => {
-  if (!props.simulationId) return
-  addLog('Loading saved simulation results (no restart)...')
-  emit('update-status', 'processing')
-  try {
-    const res = await getRunStatus(props.simulationId)
-    if (res.success && res.data) {
-      runStatus.value = res.data
-    }
-    await fetchRunStatusDetail()
-    phase.value = 2
-    emit('update-status', 'completed')
-    const n = allActions.value.length
-    addLog(n > 0 ? `✓ Loaded ${n} actions from saved run` : '✓ Run loaded — no actions in storage (logs may be empty)')
-  } catch (err) {
-    addLog(`✗ Failed to load run: ${err.message || err}`)
-    emit('update-status', 'error')
-  }
-}
-
-/** Attach to an already-running worker process (no POST /start). */
-const attachToLiveRun = async () => {
-  if (!props.simulationId) return
-  addLog('Attaching to simulation already in progress...')
-  emit('update-status', 'processing')
-  try {
-    const res = await getRunStatus(props.simulationId)
-    if (res.success && res.data) {
-      runStatus.value = res.data
-    }
-    await fetchRunStatusDetail()
-    phase.value = 1
-    startStatusPolling()
-    startDetailPolling()
-  } catch (err) {
-    addLog(`✗ Failed to attach: ${err.message || err}`)
-    emit('update-status', 'error')
-  }
-}
-
 const doStartSimulation = async () => {
   if (!props.simulationId) {
     addLog('Error: missing simulationId')
@@ -608,50 +406,25 @@ const doStartSimulation = async () => {
       simulation_id: props.simulationId,
       platform: 'parallel',
       force: true,
-      enable_graph_memory_update: !!enableGraphMemoryUpdate.value
-    }
-
-    const sessionId = localStorage.getItem('glas_active_session')
-    if (sessionId) {
-      params.session_id = sessionId
-      localStorage.removeItem('glas_active_session')
+      enable_graph_memory_update: true
     }
     
     if (props.maxRounds) {
       params.max_rounds = props.maxRounds
       addLog(`Max simulation rounds: ${props.maxRounds}`)
     }
-
-    if (props.startTimeConfig && typeof props.startTimeConfig === 'object' && Object.keys(props.startTimeConfig).length) {
-      try {
-        params.time_config = JSON.parse(JSON.stringify(props.startTimeConfig))
-      } catch {
-        params.time_config = { ...props.startTimeConfig }
-      }
-      addLog('Applying confirmed timeline (time scale & rounds)')
-    }
+    
+    addLog('Dynamic graph update mode enabled')
     
     const res = await startSimulation(params)
     
     if (res.success && res.data) {
-      // Note: any falsy value (false or missing field) hits the "disabled" log. Use
-      // res.data.graph_memory_update_enabled === true (and a separate branch) if you need
-      // to distinguish explicitly disabled from omitted field.
-      if (res.data.graph_memory_update_enabled) {
-        addLog('Dynamic graph update mode enabled (Zep graph memory)')
-      } else {
-        addLog('Graph memory update disabled by server (no graph_id)')
-      }
       if (res.data.force_restarted) {
         addLog('✓ Cleared old simulation logs, restarting')
       }
       addLog('✓ Simulation engine started')
       addLog(`  ├─ PID: ${res.data.process_pid || '-'}`)
-      trackEvent('simulation_started', {
-        simulation_id: props.simulationId,
-        enable_graph_memory_update: !!enableGraphMemoryUpdate.value,
-        graph_memory: !!enableGraphMemoryUpdate.value,
-      })
+      trackEvent('simulation_started', { simulation_id: props.simulationId })
       
       phase.value = 1
       runStatus.value = res.data
@@ -665,14 +438,13 @@ const doStartSimulation = async () => {
     }
   } catch (err) {
     const respData = err.response?.data
-    const apiMsg = respData?.error || respData?.detail || err.message
     if (err.response?.status === 402 || respData?.error === 'insufficient_credits') {
       showCreditModal.value = true
       trackEvent('upgrade_prompt_shown', { trigger: 'insufficient_credits' })
       addLog('✗ Insufficient simulations remaining')
     } else {
-      startError.value = apiMsg
-      addLog(`✗ Start failed: ${apiMsg}`)
+      startError.value = err.message
+      addLog(`✗ Start exception: ${err.message}`)
     }
     emit('update-status', 'error')
   } finally {
@@ -708,11 +480,11 @@ let statusTimer = null
 let detailTimer = null
 
 const startStatusPolling = () => {
-  statusTimer = setInterval(fetchRunStatus, step3StatusPollMs)
+  statusTimer = setInterval(fetchRunStatus, 2000)
 }
 
 const startDetailPolling = () => {
-  detailTimer = setInterval(fetchRunStatusDetail, step3DetailPollMs)
+  detailTimer = setInterval(fetchRunStatusDetail, 3000)
 }
 
 const stopPolling = () => {
@@ -731,8 +503,7 @@ const prevRedditRound = ref(0)
 
 const fetchRunStatus = async () => {
   if (!props.simulationId) return
-  if (graphSkipPollWhenDocumentHidden && document.hidden) return
-
+  
   try {
     const res = await getRunStatus(props.simulationId)
     
@@ -742,19 +513,28 @@ const fetchRunStatus = async () => {
       runStatus.value = data
       
       if (data.twitter_current_round > prevTwitterRound.value) {
-        const timeStr = data.current_time_label || `${data.twitter_simulated_hours || 0}h`
-        addLog(`[Plaza] R${data.twitter_current_round}/${data.total_rounds} | T:${timeStr} | A:${data.twitter_actions_count}`)
+        addLog(`[Plaza] R${data.twitter_current_round}/${data.total_rounds} | T:${data.twitter_simulated_hours || 0}h | A:${data.twitter_actions_count}`)
         prevTwitterRound.value = data.twitter_current_round
       }
       
       if (data.reddit_current_round > prevRedditRound.value) {
-        const timeStr = data.current_time_label || `${data.reddit_simulated_hours || 0}h`
-        addLog(`[Community] R${data.reddit_current_round}/${data.total_rounds} | T:${timeStr} | A:${data.reddit_actions_count}`)
+        addLog(`[Community] R${data.reddit_current_round}/${data.total_rounds} | T:${data.reddit_simulated_hours || 0}h | A:${data.reddit_actions_count}`)
         prevRedditRound.value = data.reddit_current_round
       }
       
       const isCompleted = data.runner_status === 'completed' || data.runner_status === 'stopped'
       const platformsCompleted = checkPlatformsCompleted(data)
+      
+      // A run the backend explicitly failed (e.g. zero actions across all
+      // platforms — model/API key config failure) must surface as an error,
+      // not hang in an eternal polling spinner.
+      if (data.runner_status === 'failed') {
+        addLog(`✗ Simulation failed: ${data.error || 'Unknown error'}`)
+        startError.value = data.error || 'Simulation failed'
+        stopPolling()
+        emit('update-status', 'failed')
+        return
+      }
       
       if (isCompleted || platformsCompleted) {
         if (platformsCompleted && !isCompleted) {
@@ -790,8 +570,7 @@ const checkPlatformsCompleted = (data) => {
 
 const fetchRunStatusDetail = async () => {
   if (!props.simulationId) return
-  if (graphSkipPollWhenDocumentHidden && document.hidden) return
-
+  
   try {
     const res = await getRunStatusDetail(props.simulationId)
     
@@ -820,24 +599,6 @@ const fetchRunStatusDetail = async () => {
 
 // Helpers
 const getActionTypeLabel = (type) => {
-  if (type?.startsWith('TOOL_')) {
-    const toolLabels = {
-      'TOOL_WEB_SEARCH': 'SEARCH',
-      'TOOL_LOOKUP_NEWS': 'NEWS',
-      'TOOL_LOOKUP_FINANCIAL_DATA': 'FINANCE',
-    }
-    return toolLabels[type] || 'ACTION'
-  }
-  if (type?.startsWith('STATE_')) {
-    const stateLabels = {
-      'STATE_SUPPRESS_AGENT': 'SUPPRESS',
-      'STATE_BOOST_AGENT': 'BOOST',
-      'STATE_CREATE_LINK': 'ALLY',
-      'STATE_BREAK_LINK': 'SEVER',
-      'STATE_BROADCAST': 'BROADCAST',
-    }
-    return stateLabels[type] || 'EFFECT'
-  }
   const labels = {
     'CREATE_POST': 'POST',
     'REPOST': 'REPOST',
@@ -855,8 +616,6 @@ const getActionTypeLabel = (type) => {
 }
 
 const getActionTypeClass = (type) => {
-  if (type?.startsWith('TOOL_')) return 'badge-tool'
-  if (type?.startsWith('STATE_')) return 'badge-state'
   const classes = {
     'CREATE_POST': 'badge-post',
     'REPOST': 'badge-action',
@@ -871,52 +630,6 @@ const getActionTypeClass = (type) => {
     'DO_NOTHING': 'badge-idle'
   }
   return classes[type] || 'badge-default'
-}
-
-const KNOWN_ACTION_TYPES = new Set([
-  'CREATE_POST', 'QUOTE_POST', 'REPOST', 'LIKE_POST', 'CREATE_COMMENT',
-  'SEARCH_POSTS', 'FOLLOW', 'UPVOTE_POST', 'DOWNVOTE_POST', 'DO_NOTHING'
-])
-
-const isKnownActionType = (type) => {
-  return KNOWN_ACTION_TYPES.has(type) || type?.startsWith('TOOL_') || type?.startsWith('STATE_')
-}
-
-const getStateChangeLabel = (action) => {
-  const effectType = action.action_args?.effect_type || ''
-  const labels = {
-    'suppress_agent': 'Activity Suppressed',
-    'boost_agent': 'Activity Boosted',
-    'create_link': 'Connection Formed',
-    'break_link': 'Connection Severed',
-    'broadcast': 'Broadcast',
-  }
-  return labels[effectType] || 'State Changed'
-}
-
-const getStateChangeDelta = (action) => {
-  const before = action.action_args?.before
-  const after = action.action_args?.after
-  if (!before || !after) return ''
-  if (before.activity_level != null && after.activity_level != null) {
-    const pctBefore = Math.round(before.activity_level * 100)
-    const pctAfter = Math.round(after.activity_level * 100)
-    return `Activity: ${pctBefore}% → ${pctAfter}%`
-  }
-  if (after.follow_exists === true) return `New follow: ${after.direction || ''}`
-  if (after.follow_exists === false) return `Unfollowed: ${before.direction || ''}`
-  if (after.message) return after.message
-  return ''
-}
-
-const getToolInput = (action) => {
-  const args = action.action_args?.tool_args
-  if (!args) return ''
-  if (args.query) return args.query
-  if (args.topic) return args.topic
-  if (args.action_description) return args.action_description
-  const fallback = JSON.stringify(args)
-  return fallback.length > 120 ? fallback.slice(0, 120) + '…' : fallback
 }
 
 const truncateContent = (content, maxLength = 100) => {
@@ -979,109 +692,610 @@ watch(() => props.systemLogs?.length, () => {
   })
 })
 
-watch(enableGraphMemoryUpdate, (v) => {
-  try {
-    sessionStorage.setItem(GRAPH_MEMORY_SESSION_KEY, v ? 'true' : 'false')
-  } catch (_) {
-    /* ignore */
-  }
-})
-
-const onStep3Visibility = () => {
-  if (document.hidden) return
-  if (phase.value !== 1) return
-  void fetchRunStatus()
-  void fetchRunStatusDetail()
-}
-
-let preparingCancelled = false
-
-onMounted(async () => {
-  document.addEventListener('visibilitychange', onStep3Visibility)
+onMounted(() => {
   addLog('Step3 simulation runtime initializing')
-  if (!props.simulationId) return
-
-  await hydrateScheduleFromConfig()
-
-  if (props.reviewMode) {
-    await loadCompletedRun()
-    return
+  if (props.simulationId) {
+    doStartSimulation()
   }
-
-  let simData = null
-  try {
-    const simRes = await getSimulation(props.simulationId)
-    if (simRes.success && simRes.data) {
-      simData = simRes.data
-    }
-  } catch (e) {
-    addLog(`Could not load simulation record: ${e.message || e}`)
-  }
-
-  if (simData?.status === 'preparing') {
-    addLog('Preparing agents & config… will attach when ready (no restart)')
-    emit('update-status', 'processing')
-    for (let i = 0; i < 900; i++) {
-      if (preparingCancelled) return
-      await new Promise((r) => setTimeout(r, 2000))
-      if (preparingCancelled) return
-      try {
-        const simRes = await getSimulation(props.simulationId)
-        if (simRes.success && simRes.data) {
-          simData = simRes.data
-        }
-      } catch {
-        continue
-      }
-      if (!simData || simData.status !== 'preparing') {
-        break
-      }
-    }
-    if (simData?.status === 'preparing') {
-      addLog('Still preparing — use bundle analysis page for full progress, or try again shortly')
-      emit('update-status', 'error')
-      return
-    }
-  }
-
-  await hydrateScheduleFromConfig()
-
-  let runData = null
-  try {
-    const runRes = await getRunStatus(props.simulationId)
-    if (runRes.success && runRes.data) {
-      runData = runRes.data
-    }
-  } catch (_) {
-    /* fall through to start */
-  }
-
-  if (simData?.status === 'completed') {
-    addLog('Simulation is completed — opening saved results (not restarting)')
-    await loadCompletedRun()
-    return
-  }
-
-  const rs = runData?.runner_status
-  if (rs === 'completed' || rs === 'stopped' || rs === 'failed') {
-    addLog(`Saved run on disk (${rs}) — loading timeline`)
-    await loadCompletedRun()
-    return
-  }
-
-  if (simData?.status === 'running' && rs === 'running') {
-    await attachToLiveRun()
-    return
-  }
-
-  doStartSimulation()
 })
 
 onUnmounted(() => {
-  preparingCancelled = true
-  document.removeEventListener('visibilitychange', onStep3Visibility)
   stopPolling()
 })
 </script>
 
-<style scoped src="./Step3Simulation.scoped.css"></style>
+<style scoped>
+.simulation-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #FFFFFF;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
+
+/* --- Control Bar --- */
+.control-bar {
+  background: #FFF;
+  padding: 12px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #EAEAEA;
+  z-index: 10;
+  height: 64px;
+}
+
+.status-group {
+  display: flex;
+  gap: 12px;
+}
+
+/* Platform Status Cards */
+.platform-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: #FAFAFA;
+  border: 1px solid #EAEAEA;
+  opacity: 0.7;
+  transition: all 0.3s;
+  min-width: 140px;
+  position: relative;
+  cursor: pointer;
+}
+
+.platform-status.active {
+  opacity: 1;
+  border-color: #333;
+  background: #FFF;
+}
+
+.platform-status.completed {
+  opacity: 1;
+  border-color: #1A936F;
+  background: #F2FAF6;
+}
+
+/* Actions Tooltip */
+.actions-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: #000;
+  color: #FFF;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  z-index: 100;
+  min-width: 180px;
+  pointer-events: none;
+}
+
+.actions-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid #000;
+}
+
+.platform-status:hover .actions-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tooltip-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.tooltip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tooltip-action {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  color: #FFF;
+  letter-spacing: 0.03em;
+}
+
+.platform-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.platform-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.platform-status.twitter .platform-icon { color: #000; }
+.platform-status.reddit .platform-icon { color: #000; }
+
+.platform-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.stat-label {
+  font-size: 8px;
+  color: #999;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-total, .stat-unit {
+  font-size: 9px;
+  color: #999;
+  font-weight: 400;
+}
+
+.status-badge {
+  margin-left: auto;
+  color: #1A936F;
+  display: flex;
+  align-items: center;
+}
+
+/* Action Button */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.action-btn.primary {
+  background: #000;
+  color: #FFF;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  background: #333;
+}
+
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* --- Main Content Area --- */
+.main-content-area {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  background: #FFF;
+}
+
+/* Timeline Header */
+.timeline-header {
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 12px 24px;
+  border-bottom: 1px solid #EAEAEA;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+}
+
+.timeline-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+  color: #666;
+  background: #F5F5F5;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.total-count {
+  font-weight: 600;
+  color: #333;
+}
+
+.platform-breakdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breakdown-divider { color: #DDD; }
+.breakdown-item.twitter { color: #000; }
+.breakdown-item.reddit { color: #000; }
+
+/* --- Timeline Feed --- */
+.timeline-feed {
+  padding: 24px 0;
+  position: relative;
+  min-height: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.timeline-axis {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #EAEAEA; /* Cleaner line */
+  transform: translateX(-50%);
+}
+
+.timeline-item {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32px;
+  position: relative;
+  width: 100%;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: 50%;
+  top: 24px;
+  width: 10px;
+  height: 10px;
+  background: #FFF;
+  border: 1px solid #CCC;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marker-dot {
+  width: 4px;
+  height: 4px;
+  background: #CCC;
+  border-radius: 50%;
+}
+
+.timeline-item.twitter .marker-dot { background: #000; }
+.timeline-item.reddit .marker-dot { background: #000; }
+.timeline-item.twitter .timeline-marker { border-color: #000; }
+.timeline-item.reddit .timeline-marker { border-color: #000; }
+
+/* Card Layout */
+.timeline-card {
+  width: calc(100% - 48px);
+  background: #FFF;
+  border-radius: 2px;
+  padding: 16px 20px;
+  border: 1px solid #EAEAEA;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+  position: relative;
+  transition: all 0.2s;
+}
+
+.timeline-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  border-color: #DDD;
+}
+
+/* Left side (Twitter) */
+.timeline-item.twitter {
+  justify-content: flex-start;
+  padding-right: 50%;
+}
+.timeline-item.twitter .timeline-card {
+  margin-left: auto;
+  margin-right: 32px; /* Gap from axis */
+}
+
+/* Right side (Reddit) */
+.timeline-item.reddit {
+  justify-content: flex-end;
+  padding-left: 50%;
+}
+.timeline-item.reddit .timeline-card {
+  margin-right: auto;
+  margin-left: 32px; /* Gap from axis */
+}
+
+/* Card Content Styles */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F5F5F5;
+}
+
+.agent-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-placeholder {
+  width: 24px;
+  height: 24px;
+  background: #000;
+  color: #FFF;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.agent-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #000;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-indicator {
+  color: #999;
+  display: flex;
+  align-items: center;
+}
+
+.action-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
+}
+
+/* Monochromatic Badges */
+.badge-post { background: #F0F0F0; color: #333; border-color: #E0E0E0; }
+.badge-comment { background: #F0F0F0; color: #666; border-color: #E0E0E0; }
+.badge-action { background: #FFF; color: #666; border: 1px solid #E0E0E0; }
+.badge-meta { background: #FAFAFA; color: #999; border: 1px dashed #DDD; }
+.badge-idle { opacity: 0.5; }
+
+.content-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.content-text.main-text {
+  font-size: 14px;
+  color: #000;
+}
+
+/* Info Blocks (Quote, Repost, etc) */
+.quoted-block, .repost-content {
+  background: #F9F9F9;
+  border: 1px solid #EEE;
+  padding: 10px 12px;
+  border-radius: 2px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #555;
+}
+
+.quote-header, .repost-info, .like-info, .search-info, .follow-info, .vote-info, .idle-info, .comment-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #666;
+}
+
+.icon-small {
+  color: #999;
+}
+.icon-small.filled {
+  color: #999; /* Keep icons neutral unless highlighted */
+}
+
+.search-query {
+  font-family: 'JetBrains Mono', monospace;
+  background: #F0F0F0;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+.card-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  font-size: 10px;
+  color: #BBB;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Waiting State */
+.waiting-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #CCC;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.pulse-ring {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #EAEAEA;
+  animation: ripple 2s infinite;
+}
+
+@keyframes ripple {
+  0% { transform: scale(0.8); opacity: 1; border-color: #CCC; }
+  100% { transform: scale(2.5); opacity: 0; border-color: #EAEAEA; }
+}
+
+/* Animation */
+.timeline-item-enter-active,
+.timeline-item-leave-active {
+  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.timeline-item-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.timeline-item-leave-to {
+  opacity: 0;
+}
+
+/* Logs */
+.system-logs {
+  background: #000;
+  color: #DDD;
+  padding: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  border-top: 1px solid #222;
+  flex-shrink: 0;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #333;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  font-size: 10px;
+  color: #666;
+}
+
+.log-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.log-content::-webkit-scrollbar { width: 4px; }
+.log-content::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+.log-line {
+  font-size: 11px;
+  display: flex;
+  gap: 12px;
+  line-height: 1.5;
+}
+
+.log-time { color: #555; min-width: 75px; }
+.log-msg { color: #BBB; word-break: break-all; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Loading spinner for button */
+.loading-spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 6px;
+}
+
+.credit-modal-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.credit-modal {
+  background: #111; border: 1px solid #2a2a2a; border-radius: 12px;
+  padding: 36px; max-width: 420px; width: 90%; text-align: center; position: relative;
+}
+.credit-modal-close {
+  position: absolute; top: 12px; right: 16px; background: none; border: none;
+  color: #666; font-size: 22px; cursor: pointer;
+}
+.credit-modal-icon {
+  font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 700;
+  color: #ef5350; margin-bottom: 12px;
+}
+.credit-modal-title { font-size: 18px; font-weight: 600; color: #fff; margin: 0 0 10px; }
+.credit-modal-desc { font-size: 14px; color: #999; line-height: 1.6; margin: 0 0 24px; }
+.credit-modal-actions { display: flex; gap: 10px; justify-content: center; }
+.credit-modal-btn {
+  padding: 10px 24px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none; border: 1px solid #2a2a2a;
+}
+.credit-modal-btn.primary { background: #00c853; color: #000; border-color: #00c853; }
+.credit-modal-btn.primary:hover { background: #00e676; }
+.credit-modal-btn.secondary { background: transparent; color: #999; }
+.credit-modal-btn.secondary:hover { color: #fff; border-color: #444; }
+</style>
