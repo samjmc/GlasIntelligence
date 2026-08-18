@@ -807,12 +807,31 @@ const handleResize = () => {
   nextTick(renderGraph)
 }
 
+let graphResizeObserver = null
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  // The graph can render while its container has no layout (collapsed panel,
+  // view-mode switch), leaving the SVG at width 0. A ResizeObserver re-renders
+  // the moment the container actually gets dimensions — window resize alone
+  // never fires in that case.
+  if (graphContainer.value && typeof ResizeObserver !== 'undefined') {
+    graphResizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry && entry.contentRect.width > 0) {
+        nextTick(renderGraph)
+      }
+    })
+    graphResizeObserver.observe(graphContainer.value)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  if (graphResizeObserver) {
+    graphResizeObserver.disconnect()
+    graphResizeObserver = null
+  }
   if (currentSimulation) {
     currentSimulation.stop()
   }

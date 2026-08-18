@@ -322,8 +322,8 @@ const loadGraph = async (graphId, options = {}) => {
 }
 
 const refreshGraph = async () => {
-  if (!projectData.value?.graph_id) return
   if (graphRefreshing.value) return
+  if (!(await ensureProjectGraphId())) return
   graphRefreshing.value = true
   try {
     addLog('Manual graph refresh (bypasses server cache)')
@@ -333,9 +333,25 @@ const refreshGraph = async () => {
   }
 }
 
-const pollGraphFromCache = () => {
+// graph_id arrives asynchronously (the graph build completes after the
+// simulation view mounts). The project endpoint serves progressive
+// snapshots, so when graph_id is still null we re-fetch the project
+// instead of silently giving up — without this the graph panel stays on
+// a false empty state and refresh/poll are dead buttons.
+const ensureProjectGraphId = async () => {
+  if (projectData.value?.graph_id) return true
+  if (!projectData.value?.project_id) return false
+  const projRes = await getProject(projectData.value.project_id)
+  if (projRes.success && projRes.data?.graph_id) {
+    projectData.value = projRes.data
+    return true
+  }
+  return false
+}
+
+const pollGraphFromCache = async () => {
   if (graphSkipPollWhenDocumentHidden && document.hidden) return
-  if (projectData.value?.graph_id) {
+  if (await ensureProjectGraphId()) {
     loadGraph(projectData.value.graph_id, { refresh: false })
   }
 }
