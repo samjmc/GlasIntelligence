@@ -18,7 +18,12 @@ from .logger import get_logger
 
 logger = get_logger("glas.zep_paging")
 
-_DEFAULT_PAGE_SIZE = 100
+_DEFAULT_PAGE_SIZE = 50
+# Zep caps list responses at 50 items per page regardless of the requested
+# limit (observed 2026-08-19: limit=100 returns 50 with no next-cursor header).
+# Requesting more than 50 would make a full page look like the last page
+# (len(batch) < page_size) and silently truncate the graph.
+_MAX_PAGE_SIZE = 50
 _MAX_NODES = 2000
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_RETRY_DELAY = 2.0  # seconds, doubles each retry
@@ -66,6 +71,8 @@ def fetch_all_nodes(
     retry_delay: float = _DEFAULT_RETRY_DELAY,
 ) -> list[Any]:
     """Paginate graph nodes, returning up to max_items (default 2000). Each page request has built-in retry."""
+    if page_size > _MAX_PAGE_SIZE:
+        page_size = _MAX_PAGE_SIZE
     all_nodes: list[Any] = []
     cursor: str | None = None
     page_num = 0
@@ -111,6 +118,8 @@ def fetch_all_edges(
     retry_delay: float = _DEFAULT_RETRY_DELAY,
 ) -> list[Any]:
     """Paginate all graph edges, returning the full list. Each page request has built-in retry."""
+    if page_size > _MAX_PAGE_SIZE:
+        page_size = _MAX_PAGE_SIZE
     all_edges: list[Any] = []
     cursor: str | None = None
     page_num = 0
