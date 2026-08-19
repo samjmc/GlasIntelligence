@@ -314,6 +314,12 @@ class Config:
         20,
         env_key="ENTITY_EXPANSION_TARGET",
     )
+    # Directly materialize verified inventory entities as graph nodes via Zep's
+    # add_nodes API (instead of relying solely on NER extraction from episodes,
+    # which misses organisation names — see services/graph_enrichment_service.py).
+    GRAPH_MATERIALIZE_INVENTORY_ENABLED = os.environ.get(
+        "GRAPH_MATERIALIZE_INVENTORY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     SEARCH_RESEARCH_ENABLED = bool(TAVILY_API_KEY)
     # Model for the search-research chain (query gen, synthesis, critique,
     # verification). Defaults to the general LLM model; for Claude runs set it

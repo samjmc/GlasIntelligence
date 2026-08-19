@@ -3,6 +3,10 @@ Graph enrichment service.
 
 After the initial graph build, compares the entity inventory against actual graph nodes
 and feeds enrichment episodes to Zep to close the gap toward target_entities.
+
+Verified inventory entities are also materialized directly via Zep's add_nodes API
+(no NER dependence), because episode extraction misses organisation names — observed
+2026-08-18: only 2 of 12 verified expansion stakeholders became nodes via NER.
 """
 
 import time
@@ -10,15 +14,33 @@ from typing import Any
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from zep_cloud import EpisodeData
+from zep_cloud import AddNodeItem, EpisodeData
 from zep_cloud.client import Zep
 
+from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.zep_paging import fetch_all_nodes
 from ..utils.logger import get_logger
 from .graph_snapshot_cache import bump_mutation_generation
 
 logger = get_logger("glas.graph_enrichment")
+
+# Inventory category -> Zep ontology entity type (label). add_nodes validates
+# attributes against ontology types that declare properties, so every category
+# maps to a type whose property keys we can populate from the inventory entry.
+_CATEGORY_LABEL = {
+    "government": "Organization",
+    "industry_body": "Organization",
+    "individual": "Person",
+    "company": "Organization",
+    "professional_association": "Organization",
+    "regulator": "Organization",
+    "community": "Organization",
+    "ngo": "Organization",
+    "media": "MediaOrJournalist",
+    "research": "Organization",
+    "association": "Organization",
+}
 
 
 @dataclass
@@ -119,6 +141,32 @@ class GraphEnrichmentService:
             f"target {target_entities}, inventory has {len(entity_inventory)} entities"
         )
 
+        # Directly materialize verified inventory entities that NER would miss.
+        # Episodes depend on Zep extracting organisation names; add_nodes is
+        # deterministic. Fail-soft: a materialization error never blocks the build.
+        if Config.GRAPH_MATERIALIZE_INVENTORY_ENABLED:
+            if progress_callback:
+                progress_callback("Materializing verified inventory entities...", 0.6)
+            try:
+                materialized = self._materialize_inventory_nodes(
+                    graph_id=graph_id,
+                    entity_inventory=entity_inventory,
+                    existing_node_names=current_nodes,
+                )
+                if materialized:
+                    logger.info(f"Materialized {materialized} verified inventory nodes directly")
+                    current_nodes, typed_count = self._get_node_stats(graph_id)
+            except Exception as e:
+                logger.warning(f"Inventory materialization failed (non-fatal): {e}")
+
+        if typed_count >= target_entities:
+            result.final_nodes = len(current_nodes)
+            result.stopped_reason = "target_reached"
+            logger.info(
+                f"Enrichment target reached after materialization: {typed_count} typed (target: {target_entities})"
+            )
+            return result
+
         for round_num in range(1, max_rounds + 1):
             if progress_callback:
                 progress_callback(
@@ -214,6 +262,94 @@ class GraphEnrichmentService:
         self._wait_for_episodes(episode_uuids)
 
         return round_result
+
+    # ───────────────────────────────────────────────────────────
+    # Direct inventory materialization (add_nodes)
+    # ───────────────────────────────────────────────────────────
+
+    def _materialize_inventory_nodes(
+        self,
+        graph_id: str,
+        entity_inventory: list[dict[str, Any]],
+        existing_node_names: set,
+    ) -> int:
+        """Create Zep nodes directly for verified inventory entities.
+
+        Zep's add_nodes API materializes nodes deterministically, bypassing the
+        episode/NER path that reliably misses organisation names. Entries already
+        present (by name) are skipped; up to 100 nodes per request. Returns the
+        number of nodes added. Never raises (callers treat it as fail-soft).
+        """
+        missing = self._find_missing_entities(entity_inventory, existing_node_names)
+        if not missing:
+            return 0
+
+        items = []
+        for entity in missing:
+            name = (entity.get("name") or "").strip()
+            if not name:
+                continue
+            label = _CATEGORY_LABEL.get((entity.get("category") or "").lower(), "Organization")
+            attrs = self._node_attributes_for(entity, label)
+            items.append(
+                AddNodeItem(
+                    name=name[:50],
+                    summary=(entity.get("context") or "")[:500] or None,
+                    label=label,
+                    attributes=attrs or None,
+                )
+            )
+
+        added = 0
+        for i in range(0, len(items), 100):
+            batch = items[i : i + 100]
+            try:
+                resp = self.client.graph.add_nodes(graph_id=graph_id, nodes=batch)
+                batch_added = len(resp.nodes or []) if resp else 0
+                added += batch_added
+                task_id = getattr(resp, "task_id", None)
+                if resp and task_id:
+                    self._wait_for_add_nodes_task(task_id)
+                logger.info(f"add_nodes: {batch_added} nodes accepted")
+            except Exception as e:
+                logger.warning(f"add_nodes batch failed (non-fatal): {e}")
+                break
+        return added
+
+    @staticmethod
+    def _node_attributes_for(entity: dict[str, Any], label: str) -> dict[str, Any]:
+        """Attributes matching the ontology type's declared properties."""
+        name = (entity.get("name") or "").strip()[:50]
+        if label == "Person":
+            return {"full_name": name, "role": entity.get("category") or ""}
+        if label == "MediaOrJournalist":
+            return {"org_name": name, "focus": entity.get("category") or ""}
+        if label == "HealthWorkforce":
+            return {"group_name": name, "profession": entity.get("category") or ""}
+        if label == "PharmacyChain":
+            return {"company_name": name, "parent_company": ""}
+        if label == "PharmacyAssociation":
+            return {"org_name": name, "membership": ""}
+        if label == "PatientGroup":
+            return {"org_name": name, "constituency": entity.get("category") or ""}
+        return {"org_name": name, "sector": entity.get("category") or ""}
+
+    def _wait_for_add_nodes_task(self, task_id: str, timeout: float = 300.0) -> None:
+        """Poll an add_nodes task until it succeeds or times out (fail-soft)."""
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                task = self.client.task.get(task_id=task_id)
+                status = getattr(task, "status", None)
+                if status == "succeeded":
+                    return
+                if status == "failed":
+                    logger.warning(f"add_nodes task {task_id} failed: {getattr(task, 'error', None)}")
+                    return
+            except Exception as e:
+                logger.debug(f"add_nodes task poll error (retrying): {e}")
+            time.sleep(self.EPISODE_POLL_INTERVAL)
+        logger.warning(f"add_nodes task {task_id} still pending after {timeout}s")
 
     # ───────────────────────────────────────────────────────────
     # Gap analysis
