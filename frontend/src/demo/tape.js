@@ -160,10 +160,10 @@ export async function loadTape(scenario) {
     // alternative is a dead demo. A second failure is real and must surface.
     let res
     try {
-      res = await fetch(`/demo/${scenario}/tape.json`)
+      res = await fetch(`${import.meta.env.BASE_URL}demo/${scenario}/tape.json`)
       if (!res.ok) throw new Error(String(res.status))
     } catch {
-      res = await fetch(`/demo/${scenario}/tape.json`)
+      res = await fetch(`${import.meta.env.BASE_URL}demo/${scenario}/tape.json`)
     }
     if (!res.ok) throw new Error(`Demo tape for "${scenario}" failed to load (${res.status})`)
 

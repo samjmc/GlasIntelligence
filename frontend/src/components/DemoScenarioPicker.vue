@@ -36,10 +36,10 @@ async function fetchManifest() {
   // asset is usually transient. A second failure is real and must surface.
   let res
   try {
-    res = await fetch('/demo/manifest.json')
+    res = await fetch(`${import.meta.env.BASE_URL}demo/manifest.json`)
     if (!res.ok) throw new Error(`manifest ${res.status}`)
   } catch {
-    res = await fetch('/demo/manifest.json')
+    res = await fetch(`${import.meta.env.BASE_URL}demo/manifest.json`)
     if (!res.ok) throw new Error(`manifest ${res.status}`)
   }
   const manifest = await res.json()

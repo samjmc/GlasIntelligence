@@ -3,7 +3,7 @@
     <!-- Hero -->
     <section class="hero">
       <div class="hero-inner">
-        <img src="/glas-logo.png" alt="Glas Intelligence" class="hero-logo" />
+        <img :src="logoUrl" alt="Glas Intelligence" class="hero-logo" />
         <p class="brand-name">GLAS INTELLIGENCE</p>
         <h1 class="hero-headline">Scenario Intelligence for Strategic Decision-Making</h1>
         <p class="hero-sub">
@@ -106,16 +106,18 @@ const router = useRouter()
 const demoScenarios = ref([])
 const demoError = ref('')
 
+const logoUrl = import.meta.env.BASE_URL + 'glas-logo.png'
+
 async function fetchManifest() {
   // One retry: same policy as DemoScenarioPicker and tape.js loadTape() — a CDN
   // hiccup on a static asset is usually transient. A second failure is real and
   // must surface.
   let res
   try {
-    res = await fetch('/demo/manifest.json')
+    res = await fetch(`${import.meta.env.BASE_URL}demo/manifest.json`)
     if (!res.ok) throw new Error(`manifest ${res.status}`)
   } catch {
-    res = await fetch('/demo/manifest.json')
+    res = await fetch(`${import.meta.env.BASE_URL}demo/manifest.json`)
     if (!res.ok) throw new Error(`manifest ${res.status}`)
   }
   const manifest = await res.json()
