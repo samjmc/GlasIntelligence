@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { isDemoMode } from '../demo/config'
 import { authState } from '../store/auth'
 import Home from '../views/Home.vue'
 import Process from '../views/MainView.vue'
@@ -142,6 +143,12 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  // The demo build is keyless: no accounts, no billing, no feed. Product-only
+  // routes would render forms/pages that cannot work — send them home.
+  if (isDemoMode && ['/login', '/signup', '/feed', '/pricing'].includes(to.path)) {
+    return { path: '/' }
+  }
+
   if (to.meta.public) return true
 
   if (!authState.user) {

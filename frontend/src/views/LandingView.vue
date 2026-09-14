@@ -3,7 +3,7 @@
     <!-- Hero -->
     <section class="hero">
       <div class="hero-inner">
-        <img :src="logoUrl" alt="Glas Intelligence" class="hero-logo" />
+        <img src="/glas-logo.png" alt="Glas Intelligence" class="hero-logo" />
         <p class="brand-name">GLAS INTELLIGENCE</p>
         <h1 class="hero-headline">Scenario Intelligence for Strategic Decision-Making</h1>
         <p class="hero-sub">
@@ -11,8 +11,9 @@
           Describe a scenario, and our engine analyses the 50 most relevant stakeholders across 25 critical decision points.
         </p>
         <div class="hero-ctas">
-          <router-link to="/signup" class="btn btn-primary">Get Started Free</router-link>
-          <router-link to="/feed" class="btn btn-outline">Browse Simulations</router-link>
+          <button v-if="isDemoMode" class="btn btn-primary" @click="scrollToDemos">Try a Worked Example</button>
+          <router-link v-else to="/signup" class="btn btn-primary">Get Started Free</router-link>
+          <router-link v-if="!isDemoMode" to="/feed" class="btn btn-outline">Browse Simulations</router-link>
         </div>
       </div>
     </section>
@@ -32,37 +33,19 @@
     <!-- Industry Feed Preview -->
     <section class="feed-preview">
       <h2 class="section-heading">Latest Industry Intelligence</h2>
-      <p v-if="demoError" data-test="demo-box-error" class="demo-error">{{ demoError }}</p>
       <div class="feed-grid">
-        <template v-if="isDemoMode">
-          <button
-            v-for="s in demoScenarios"
-            :key="s.id"
-            class="feed-card demo-card"
-            data-test="demo-box"
-            :data-scenario-id="s.id"
-            @click="launchDemo(s)"
-          >
-            <span class="feed-tag">Live demo</span>
-            <h3 class="feed-title">{{ s.title }}</h3>
-            <p class="feed-excerpt">{{ s.blurb }}</p>
-            <span class="feed-date">Launch walkthrough →</span>
-          </button>
-        </template>
-        <template v-else>
-          <div class="feed-card" v-for="item in feedItems" :key="item.id">
-            <span class="feed-tag">{{ item.tag }}</span>
-            <h3 class="feed-title">{{ item.title }}</h3>
-            <p class="feed-excerpt">{{ item.excerpt }}</p>
-            <span class="feed-date">{{ item.date }}</span>
-          </div>
-        </template>
+        <div class="feed-card" v-for="item in feedItems" :key="item.id">
+          <span class="feed-tag">{{ item.tag }}</span>
+          <h3 class="feed-title">{{ item.title }}</h3>
+          <p class="feed-excerpt">{{ item.excerpt }}</p>
+          <span class="feed-date">{{ item.date }}</span>
+        </div>
       </div>
-      <router-link to="/feed" class="section-link">View All Reports →</router-link>
+      <router-link v-if="!isDemoMode" to="/feed" class="section-link">View All Reports →</router-link>
     </section>
 
-    <!-- Pricing Preview -->
-    <section class="pricing-preview">
+    <!-- Pricing Preview (hidden in demo mode — the demo has no billing) -->
+    <section v-if="!isDemoMode" class="pricing-preview">
       <h2 class="section-heading">Pricing</h2>
       <div class="pricing-grid">
         <div class="pricing-card" v-for="plan in plans" :key="plan.name" :class="{ featured: plan.featured }">
@@ -71,7 +54,17 @@
           <p class="plan-desc">{{ plan.desc }}</p>
         </div>
       </div>
-      <router-link to="/pricing" class="section-link">View Full Pricing →</router-link>
+      <router-link v-if="!isDemoMode" to="/pricing" class="section-link">View Full Pricing →</router-link>
+    </section>
+
+    <!-- Worked Examples (demo mode) -->
+    <section v-if="isDemoMode" id="worked-examples" class="demo-section">
+      <h2 class="section-heading">Worked Examples</h2>
+      <p class="demo-section-blurb">
+        Run a complete recorded run end to end — research, knowledge graph, agent
+        simulation, and report — replaying in about 90 seconds.
+      </p>
+      <DemoScenarioPicker @select="onDemoScenarioSelected" />
     </section>
 
     <!-- Footer -->
@@ -79,10 +72,10 @@
       <div class="footer-inner">
         <p class="footer-brand">GLAS INTELLIGENCE</p>
         <nav class="footer-links">
-          <router-link to="/pricing">Pricing</router-link>
-          <router-link to="/feed">Feed</router-link>
-          <router-link to="/login">Login</router-link>
-          <router-link to="/signup">Sign Up</router-link>
+          <router-link v-if="!isDemoMode" to="/pricing">Pricing</router-link>
+          <router-link v-if="!isDemoMode" to="/feed">Feed</router-link>
+          <router-link v-if="!isDemoMode" to="/login">Login</router-link>
+          <router-link v-if="!isDemoMode" to="/signup">Sign Up</router-link>
         </nav>
         <p class="footer-disclaimer">
           Glas Intelligence provides structured scenario analysis.
@@ -95,69 +88,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { isDemoMode, SESSION_KEY } from '../demo/config'
-import { encodeDemoId } from '../demo/sessionId'
-import { setActiveScenario } from '../demo/adapter'
-import { SCHEMA_VERSION } from '../demo/tape'
+import { isDemoMode } from '../demo/config'
+import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 
 const router = useRouter()
-const demoScenarios = ref([])
-const demoError = ref('')
 
-const logoUrl = import.meta.env.BASE_URL + 'glas-logo.png'
-
-async function fetchManifest() {
-  // One retry: same policy as DemoScenarioPicker and tape.js loadTape() — a CDN
-  // hiccup on a static asset is usually transient. A second failure is real and
-  // must surface.
-  let res
-  try {
-    res = await fetch(`${import.meta.env.BASE_URL}demo/manifest.json`)
-    if (!res.ok) throw new Error(`manifest ${res.status}`)
-  } catch {
-    res = await fetch(`${import.meta.env.BASE_URL}demo/manifest.json`)
-    if (!res.ok) throw new Error(`manifest ${res.status}`)
-  }
-  const manifest = await res.json()
-  if (manifest.schema_version !== SCHEMA_VERSION) {
-    throw new Error(
-      `Demo manifest schema ${manifest.schema_version} does not match expected ${SCHEMA_VERSION}`,
-    )
-  }
-  return manifest
+function scrollToDemos() {
+  document.getElementById('worked-examples')?.scrollIntoView({ behavior: 'smooth' })
 }
 
-onMounted(async () => {
-  if (!isDemoMode) return
-  try {
-    const manifest = await fetchManifest()
-    demoScenarios.value = manifest.scenarios
-  } catch (e) {
-    demoError.value = e?.message || 'Demo failed to load. Please reload the page.'
-  }
-})
-
-function launchDemo(s) {
-  // The session id is minted at the moment the run starts (here, on click), so
-  // that the virtual clock starts exactly when the run begins — not at page
-  // load. At 20x speedup even a 5 s gap between render and click would burn
-  // 100 s of tape and skip straight to the completed state.
-  let sessionId
-  try {
-    sessionId = encodeDemoId(Date.now(), s.id)
-    // Store before navigation so adapter.js can rehydrate on a page reload.
-    localStorage.setItem(SESSION_KEY, sessionId)
-  } catch (e) {
-    // e.g. a scenario id containing '_' (encodeDemoId throws) or storage
-    // unavailable (Safari private mode). Surface it rather than silently
-    // swallowing the click.
-    demoError.value = e?.message || 'Could not start this demo. Please reload the page.'
-    return
-  }
-  setActiveScenario(s.id, sessionId)
-  router.push({ name: 'SimulationRun', params: { simulationId: `demo-${s.id}-sim` } })
+function onDemoScenarioSelected({ prompt, scenarioId }) {
+  // Home prefills from these query params; the session id is minted there at
+  // run-start so the virtual clock begins when the run begins, not at click.
+  router.push({ path: '/home', query: { demoPrompt: prompt, demoScenario: scenarioId || '' } })
 }
 
 const steps = [
@@ -413,30 +357,6 @@ const plans = [
 
 .feed-card:hover {
   border-color: #333;
-}
-
-.demo-card {
-  border: 1px solid #1a1a1a;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-  width: 100%;
-}
-
-.demo-card:hover {
-  border-color: #00c853;
-}
-
-.demo-error {
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.08);
-  border: 1px solid #ff6b6b;
-  border-radius: 6px;
-  padding: 12px 16px;
-  text-align: center;
-  font-size: 14px;
-  max-width: 600px;
-  margin: 0 auto 32px;
 }
 
 .feed-tag {

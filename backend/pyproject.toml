@@ -18,7 +18,7 @@ dependencies = [
     "openai>=1.0.0",
     
     # Zep Cloud
-    "zep-cloud==3.13.0",
+    "zep-cloud==3.28.0",
     
     # OASIS social simulation
     "camel-oasis==0.2.5",

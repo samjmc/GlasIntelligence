@@ -1,9 +1,12 @@
 <template>
-  <div class="report-panel">
+  <div
+    class="report-panel"
+    :class="{ 'report-fullscreen-overlay': fullscreenOverlay }"
+  >
     <!-- Main Split Layout -->
     <div class="main-split-layout">
       <!-- LEFT PANEL: Report Style -->
-      <div class="left-panel report-style" ref="leftPanel">
+      <div class="left-panel report-style report-print-area" ref="leftPanel">
         <div v-if="reportOutline" class="report-content-wrapper">
           <!-- Report Header -->
           <div class="report-header-block">
@@ -1047,11 +1050,42 @@
         </div>
       </div>
     </div>
+
+    <!-- Floating Report Actions -->
+    <div class="report-actions-cluster">
+      <button
+        v-if="fullscreenOverlay"
+        class="tool-btn report-close-btn"
+        data-test="report-fullscreen-close"
+        @click="closeFullscreenOverlay"
+        title="Close Fullscreen"
+      >
+        <span class="btn-text">✕ Close</span>
+      </button>
+      <button
+        class="tool-btn report-action-btn"
+        data-test="report-fullscreen"
+        @click="toggleFullscreen"
+        :title="isFullscreen || fullscreenOverlay ? 'Exit Fullscreen' : 'Enter Fullscreen'"
+      >
+        <span class="icon-maximize">⛶</span>
+        <span class="btn-text">{{ isFullscreen || fullscreenOverlay ? 'Exit Fullscreen' : 'Fullscreen' }}</span>
+      </button>
+      <button
+        class="tool-btn report-action-btn"
+        data-test="report-pdf"
+        @click="saveAsPdf"
+        title="Save as PDF"
+      >
+        <span class="icon-pdf">⭳</span>
+        <span class="btn-text">Save as PDF</span>
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted, nextTick, reactive } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
@@ -1692,9 +1726,64 @@ const stopPolling = () => {
   }
 }
 
+// Fullscreen + Save-as-PDF report actions
+const isFullscreen = ref(false)
+const fullscreenOverlay = ref(false)
+
+const onFullscreenChange = () => {
+  isFullscreen.value = !!document.fullscreenElement
+  if (!document.fullscreenElement) {
+    fullscreenOverlay.value = false
+  }
+}
+
+const closeFullscreenOverlay = () => {
+  fullscreenOverlay.value = false
+}
+
+const toggleFullscreen = () => {
+  if (fullscreenOverlay.value) {
+    fullscreenOverlay.value = false
+    return
+  }
+  if (document.fullscreenElement) {
+    document.exitFullscreen()
+    return
+  }
+  if (!leftPanel.value || !document.fullscreenEnabled) {
+    fullscreenOverlay.value = true
+    return
+  }
+  try {
+    leftPanel.value.requestFullscreen().catch(() => {
+      fullscreenOverlay.value = true
+    })
+  } catch (e) {
+    fullscreenOverlay.value = true
+  }
+}
+
+const removePrintMode = () => {
+  document.body.classList.remove('report-print-mode')
+}
+
+const saveAsPdf = () => {
+  document.body.classList.add('report-print-mode')
+  window.print()
+  setTimeout(removePrintMode, 1000)
+}
+
 // Lifecycle
+onMounted(() => {
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  window.addEventListener('afterprint', removePrintMode)
+})
+
 onUnmounted(() => {
   stopPolling()
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  window.removeEventListener('afterprint', removePrintMode)
+  removePrintMode()
 })
 
 watch(() => props.reportId, (newId) => {
