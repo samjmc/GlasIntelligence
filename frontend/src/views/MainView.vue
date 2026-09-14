@@ -90,6 +90,7 @@ const router = useRouter()
 const viewMode = ref('split') // graph | split | workbench
 
 // Step State
+const MAX_IMPLEMENTED_STEP = 2 // steps 3-5 are dedicated routes, not mounted here
 const currentStep = ref(1) // 1: Knowledge Graph, 2: Environment Setup, 3: Run Simulation, 4: Report Generation, 5: Deep Interaction
 const stepNames = ['Knowledge Graph', 'Environment Setup', 'Run Simulation', 'Report Generation', 'Deep Interaction']
 
@@ -156,15 +157,12 @@ const toggleMaximize = (target) => {
   }
 }
 
-const handleNextStep = (params = {}) => {
-  if (currentStep.value < 5) {
+const handleNextStep = (_params = {}) => {
+  // Steps 3-5 are reached by routing to their dedicated views, not by
+  // advancing this local counter — so never advance past the implemented max.
+  if (currentStep.value < MAX_IMPLEMENTED_STEP) {
     currentStep.value++
     addLog(`Enter Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
-    
-    // If entering Step 3 from Step 2, log the simulation rounds config
-    if (currentStep.value === 3 && params.maxRounds) {
-      addLog(`Custom simulation rounds: ${params.maxRounds} rounds`)
-    }
   }
 }
 
