@@ -11,8 +11,9 @@
           Describe a scenario, and our engine analyses the 50 most relevant stakeholders across 25 critical decision points.
         </p>
         <div class="hero-ctas">
-          <router-link to="/signup" class="btn btn-primary">Get Started Free</router-link>
-          <router-link to="/feed" class="btn btn-outline">Browse Simulations</router-link>
+          <button v-if="isDemoMode" class="btn btn-primary" @click="scrollToDemos">Try a Worked Example</button>
+          <router-link v-else to="/signup" class="btn btn-primary">Get Started Free</router-link>
+          <router-link v-if="!isDemoMode" to="/feed" class="btn btn-outline">Browse Simulations</router-link>
         </div>
       </div>
     </section>
@@ -40,11 +41,11 @@
           <span class="feed-date">{{ item.date }}</span>
         </div>
       </div>
-      <router-link to="/feed" class="section-link">View All Reports →</router-link>
+      <router-link v-if="!isDemoMode" to="/feed" class="section-link">View All Reports →</router-link>
     </section>
 
-    <!-- Pricing Preview -->
-    <section class="pricing-preview">
+    <!-- Pricing Preview (hidden in demo mode — the demo has no billing) -->
+    <section v-if="!isDemoMode" class="pricing-preview">
       <h2 class="section-heading">Pricing</h2>
       <div class="pricing-grid">
         <div class="pricing-card" v-for="plan in plans" :key="plan.name" :class="{ featured: plan.featured }">
@@ -53,11 +54,11 @@
           <p class="plan-desc">{{ plan.desc }}</p>
         </div>
       </div>
-      <router-link to="/pricing" class="section-link">View Full Pricing →</router-link>
+      <router-link v-if="!isDemoMode" to="/pricing" class="section-link">View Full Pricing →</router-link>
     </section>
 
     <!-- Worked Examples (demo mode) -->
-    <section v-if="isDemoMode" class="demo-section">
+    <section v-if="isDemoMode" id="worked-examples" class="demo-section">
       <h2 class="section-heading">Worked Examples</h2>
       <p class="demo-section-blurb">
         Run a complete recorded run end to end — research, knowledge graph, agent
@@ -71,10 +72,10 @@
       <div class="footer-inner">
         <p class="footer-brand">GLAS INTELLIGENCE</p>
         <nav class="footer-links">
-          <router-link to="/pricing">Pricing</router-link>
-          <router-link to="/feed">Feed</router-link>
-          <router-link to="/login">Login</router-link>
-          <router-link to="/signup">Sign Up</router-link>
+          <router-link v-if="!isDemoMode" to="/pricing">Pricing</router-link>
+          <router-link v-if="!isDemoMode" to="/feed">Feed</router-link>
+          <router-link v-if="!isDemoMode" to="/login">Login</router-link>
+          <router-link v-if="!isDemoMode" to="/signup">Sign Up</router-link>
         </nav>
         <p class="footer-disclaimer">
           Glas Intelligence provides structured scenario analysis.
@@ -92,6 +93,10 @@ import { isDemoMode } from '../demo/config'
 import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
 
 const router = useRouter()
+
+function scrollToDemos() {
+  document.getElementById('worked-examples')?.scrollIntoView({ behavior: 'smooth' })
+}
 
 function onDemoScenarioSelected({ prompt, scenarioId }) {
   // Home prefills from these query params; the session id is minted there at

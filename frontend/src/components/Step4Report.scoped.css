@@ -4082,3 +4082,69 @@
 }
 .dot-twitter { background: #1d9bf0; }
 .dot-reddit { background: #ff4500; }
+
+/* Floating Report Actions */
+.report-actions-cluster {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 50;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.report-action-btn {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid #E0E0E0;
+  background: #FFF;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #666;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.report-action-btn:hover {
+  background: #F5F5F5;
+  color: #000;
+  border-color: #CCC;
+}
+
+.report-close-btn {
+  background: #1F2937;
+  color: #FFF;
+  border-color: #1F2937;
+}
+
+.report-close-btn:hover {
+  background: #374151;
+  color: #FFF;
+  border-color: #374151;
+}
+
+/* Fullscreen overlay fallback (iframes / fullscreen API unavailable) */
+.report-panel.report-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #F8F9FA;
+}
+
+.report-panel.report-fullscreen-overlay .left-panel.report-style {
+  width: 100%;
+  min-width: 0;
+  border-right: none;
+}
+
+.report-panel.report-fullscreen-overlay .right-panel,
+.report-panel.report-fullscreen-overlay .console-logs {
+  display: none;
+}
