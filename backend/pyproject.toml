@@ -16,7 +16,8 @@ dependencies = [
     
     # LLM
     "openai>=1.0.0",
-    
+    "duckduckgo-search>=8.1.1",
+
     # Zep Cloud
     "zep-cloud==3.28.0",
     
@@ -54,7 +55,7 @@ dev = [
     "mypy>=1.15.0",
     "pip-audit>=2.7.0",
     "sentry-sdk[flask]>=2.0.0",
-    "prometheus-flask-instrumentator>=7.0.0",
+    "prometheus-flask-exporter>=0.23.2",
 ]
 
 [build-system]
