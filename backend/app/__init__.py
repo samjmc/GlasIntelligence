@@ -40,9 +40,9 @@ def _init_prometheus(app):
     if os.environ.get("ENABLE_PROMETHEUS", "").lower() not in ("1", "true", "yes"):
         return
     try:
-        from prometheus_flask_instrumentator import Instrumentator
+        from prometheus_flask_exporter import PrometheusMetrics
 
-        Instrumentator().instrument(app).expose(app, endpoint="/api/metrics")
+        PrometheusMetrics(app, path="/api/metrics")
     except ImportError:
         pass
 
