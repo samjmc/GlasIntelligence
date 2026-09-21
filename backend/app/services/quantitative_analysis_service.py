@@ -16,6 +16,7 @@ from enum import Enum
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.jev_client import JevAnswer, JevClient
 from ..utils.llm_client import LLMClient
 from .calibration_guardrails import apply_estimate_guardrails
 
@@ -137,6 +138,53 @@ class SimulationMetrics:
                 )
 
         return "\n".join(lines)
+
+
+# Typed rubrics for the Jev fast path. The option names and 1-5 scales are the
+# same ones the LLM prompts below ask for, so both paths produce identical shapes.
+_STANCE_POSITIONS = {
+    "supportive": "Supports the policy, proposal or change at issue",
+    "opposing": "Opposes it",
+    "neutral": "Holds no clear position, or is not materially affected",
+    "ambivalent": "Holds mixed or conflicting views",
+}
+_INTENSITY_LEVELS = [
+    "1 - weak: barely engaged with the issue",
+    "2 - mild",
+    "3 - moderate",
+    "4 - strong",
+    "5 - extreme: a defining issue for this actor",
+]
+_LIKELIHOOD_LEVELS = [
+    "1 - very unlikely",
+    "2 - unlikely",
+    "3 - possible",
+    "4 - likely",
+    "5 - very likely",
+]
+_IMPACT_LEVELS = [
+    "1 - negligible",
+    "2 - minor",
+    "3 - moderate",
+    "4 - major",
+    "5 - catastrophic",
+]
+
+
+def _severity_for(score: int) -> str:
+    """Risk severity band for ``likelihood * impact`` (each 1-5)."""
+    if score >= 16:
+        return RiskSeverity.CRITICAL.value
+    if score >= 10:
+        return RiskSeverity.HIGH.value
+    if score >= 5:
+        return RiskSeverity.MODERATE.value
+    return RiskSeverity.LOW.value
+
+
+def _rubric_level(answer: JevAnswer) -> int:
+    """Map a 5-level Jev score answer (0-based interpolated) onto 1-5."""
+    return min(5, max(1, answer.level + 1))
 
 
 @dataclass
@@ -849,6 +897,81 @@ class QuantitativeAnalysisService:
                 }
             )
 
+        result = StanceAnalysis(topic=topic, agents_analyzed=len(profiles))
+
+        classified, remaining = self._stance_jev(topic, facts_text, agent_summaries)
+        if remaining:
+            llm_classified = self._stance_llm(topic, facts_text, agent_summaries, remaining)
+            if llm_classified is None:
+                if not classified:
+                    return StanceAnalysis(topic=topic, agents_analyzed=0)
+                logger.warning(
+                    "Stance LLM fallback failed; keeping %d Jev-classified agents of %d",
+                    len(classified),
+                    len(agent_summaries),
+                )
+            else:
+                classified.update(llm_classified)
+
+        for idx in sorted(classified):
+            result.stances.append(classified[idx])
+
+        self._compute_stance_aggregates(result)
+        return result
+
+    def _stance_jev(
+        self,
+        topic: str,
+        facts_text: str,
+        agent_summaries: list[dict[str, Any]],
+    ) -> tuple[dict[int, AgentStance], list[dict[str, Any]]]:
+        """Classify each agent with Jev. Returns (confident stances by index, agents still needing the LLM)."""
+        jev = JevClient.from_config()
+        if jev is None:
+            return {}, list(agent_summaries)
+
+        questions = {
+            "position": JevClient.choice_q(f"What is this agent's stance on: {topic}?", _STANCE_POSITIONS),
+            "intensity": JevClient.score_q("How intensely does this agent hold that stance?", _INTENSITY_LEVELS),
+        }
+        facts = facts_text[:2000] if facts_text else "No facts available."
+        items = [({"topic": topic, "simulation_facts": facts, "agent": agent}, questions) for agent in agent_summaries]
+        answers = jev.evaluate_many(items)
+
+        classified: dict[int, AgentStance] = {}
+        remaining: list[dict[str, Any]] = []
+        for agent, ans in zip(agent_summaries, answers, strict=True):
+            position = ans.get("position") if ans else None
+            intensity = ans.get("intensity") if ans else None
+            if (
+                position is None
+                or intensity is None
+                or position.value not in _STANCE_POSITIONS
+                or position.confidence < Config.JEV_MIN_CONFIDENCE
+            ):
+                remaining.append(agent)
+                continue
+            classified[agent["index"]] = AgentStance(
+                agent_name=agent["name"],
+                agent_type=agent["entity_type"],
+                country=agent["country"],
+                position=str(position.value),
+                intensity=_rubric_level(intensity),
+                key_concern="",  # Jev returns typed values only; unused downstream
+                confidence="high" if position.confidence >= 0.8 else "moderate",
+            )
+
+        logger.info(f"Jev classified {len(classified)} stances; {len(remaining)} fall back to the LLM")
+        return classified, remaining
+
+    def _stance_llm(
+        self,
+        topic: str,
+        facts_text: str,
+        agent_summaries: list[dict[str, Any]],
+        subset: list[dict[str, Any]],
+    ) -> dict[int, AgentStance] | None:
+        """Original LLM batch classification over ``subset``. ``None`` when the call fails."""
         system_prompt = (
             "You are a quantitative analyst classifying stakeholder positions in a geopolitical simulation.\n\n"
             "For each agent, determine their stance on the given topic based on their persona and any "
@@ -875,7 +998,7 @@ class QuantitativeAnalysisService:
         user_prompt = (
             f"Topic: {topic}\n\n"
             f"Simulation facts:\n{facts_text[:2000] if facts_text else 'No facts available.'}\n\n"
-            f"Agents to classify:\n{json.dumps(agent_summaries, ensure_ascii=False, indent=1)}"
+            f"Agents to classify:\n{json.dumps(subset, ensure_ascii=False, indent=1)}"
         )
 
         try:
@@ -889,15 +1012,14 @@ class QuantitativeAnalysisService:
             )
         except Exception as e:
             logger.error(f"LLM stance classification failed: {e}")
-            return StanceAnalysis(topic=topic, agents_analyzed=0)
+            return None
 
-        result = StanceAnalysis(topic=topic, agents_analyzed=len(profiles))
-
+        classified: dict[int, AgentStance] = {}
         for item in response.get("stances", []):
             idx = item.get("agent_index", -1)
             if 0 <= idx < len(agent_summaries):
                 agent = agent_summaries[idx]
-                stance = AgentStance(
+                classified[idx] = AgentStance(
                     agent_name=agent["name"],
                     agent_type=agent["entity_type"],
                     country=agent["country"],
@@ -906,10 +1028,41 @@ class QuantitativeAnalysisService:
                     key_concern=item.get("key_concern", ""),
                     confidence=item.get("confidence", "moderate"),
                 )
-                result.stances.append(stance)
+        return classified
 
-        self._compute_stance_aggregates(result)
-        return result
+    def _rescore_risks_jev(self, context_parts: list[str], result: RiskMatrix) -> None:
+        """Replace the LLM's likelihood/impact guesses with Jev rubric scores where it is confident.
+
+        The LLM still names the risks and their mitigation indicators (prose);
+        Jev only re-scores the two 1-5 numbers that drive severity and ranking.
+        """
+        jev = JevClient.from_config()
+        if jev is None or not result.risks:
+            return
+
+        questions = {
+            "likelihood": JevClient.score_q("How likely is this risk to materialise?", _LIKELIHOOD_LEVELS),
+            "impact": JevClient.score_q("How severe would the impact be if it did?", _IMPACT_LEVELS),
+        }
+        evidence = "\n".join(context_parts)
+        items = [({"scenario_evidence": evidence, "risk": r.risk}, questions) for r in result.risks]
+        answers = jev.evaluate_many(items)
+
+        rescored = 0
+        for risk, ans in zip(result.risks, answers, strict=True):
+            if not ans:
+                continue
+            changed = False
+            for key in ("likelihood", "impact"):
+                answer = ans.get(key)
+                if answer is not None and answer.confidence >= Config.JEV_MIN_CONFIDENCE:
+                    setattr(risk, key, _rubric_level(answer))
+                    changed = True
+            if changed:
+                risk.severity = _severity_for(risk.likelihood * risk.impact)
+                rescored += 1
+
+        logger.info(f"Jev re-scored {rescored} of {len(result.risks)} risks")
 
     # ───────────────────────────────────────────────────────────
     # 3. Consensus Metrics (pure computation from StanceAnalysis)
@@ -1227,15 +1380,7 @@ class QuantitativeAnalysisService:
         for item in response.get("risks", []):
             likelihood = min(5, max(1, int(item.get("likelihood", 3))))
             impact = min(5, max(1, int(item.get("impact", 3))))
-            score = likelihood * impact
-            if score >= 16:
-                severity = RiskSeverity.CRITICAL.value
-            elif score >= 10:
-                severity = RiskSeverity.HIGH.value
-            elif score >= 5:
-                severity = RiskSeverity.MODERATE.value
-            else:
-                severity = RiskSeverity.LOW.value
+            severity = _severity_for(likelihood * impact)
 
             risk_item = RiskItem(
                 risk=item.get("risk", ""),
@@ -1245,6 +1390,8 @@ class QuantitativeAnalysisService:
                 mitigation_indicators=item.get("mitigation_indicators", []),
             )
             result.risks.append(risk_item)
+
+        self._rescore_risks_jev(context_parts, result)
 
         result.risks.sort(key=lambda r: r.likelihood * r.impact, reverse=True)
         result.top_risks = result.risks[:3]

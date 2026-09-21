@@ -21,6 +21,7 @@ from typing import Any
 from openai import OpenAI
 
 from ..config import Config
+from ..utils.jev_client import JevClient
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.simulation_tools")
@@ -479,7 +480,86 @@ Example: {{"0": "leader", "1": "analyst", "2": "observer"}}
 Return ONLY the JSON object, no other text."""
 
 
+_TOOL_ROLE_OPTIONS = {
+    "leader": "Government officials, heads of state, corporate executives",
+    "diplomat": "Diplomats, negotiators, mediators",
+    "analyst": "Researchers, journalists, think tank members",
+    "operative": "Military, intelligence, field operatives",
+    "observer": "Citizens, activists, commentators",
+    "none": "Purely social media participants that should have no tools",
+}
+
+
 def assign_tool_roles(
+    agent_configs: list[dict[str, Any]],
+    simulation_requirement: str,
+) -> dict[int, str]:
+    """Assign one tool role per agent from its entity type, name and stance.
+
+    Jev (when configured) classifies each agent as a typed choice with a
+    confidence. Agents it is unsure about — and every agent when Jev is
+    off — go through the original LLM batch prompt.
+    """
+    if not agent_configs:
+        return {}
+    result, remaining = _assign_tool_roles_jev(agent_configs, simulation_requirement)
+    if remaining:
+        result.update(_assign_tool_roles_llm(remaining, simulation_requirement))
+    return result
+
+
+def _assign_tool_roles_jev(
+    agent_configs: list[dict[str, Any]],
+    simulation_requirement: str,
+) -> tuple[dict[int, str], list[dict[str, Any]]]:
+    """Returns (confident assignments, agents still needing the LLM)."""
+    jev = JevClient.from_config()
+    if jev is None:
+        return {}, list(agent_configs)
+
+    question = {
+        "role": JevClient.choice_q(
+            f"Which tool role fits this agent in the simulation scenario: {simulation_requirement}",
+            _TOOL_ROLE_OPTIONS,
+        )
+    }
+    items = [
+        (
+            {
+                "name": ac.get("entity_name", "unknown"),
+                "entity_type": ac.get("entity_type", "unknown"),
+                "stance": ac.get("stance", "neutral"),
+            },
+            question,
+        )
+        for ac in agent_configs
+    ]
+    answers = jev.evaluate_many(items)
+
+    assigned: dict[int, str] = {}
+    remaining: list[dict[str, Any]] = []
+    for ac, ans in zip(agent_configs, answers, strict=True):
+        answer = ans.get("role") if ans else None
+        raw_id = ac.get("agent_id")
+        try:
+            aid: int | None = int(raw_id) if raw_id is not None else None
+        except (TypeError, ValueError):
+            aid = None
+        if (
+            aid is None
+            or answer is None
+            or answer.value not in _TOOL_ROLE_OPTIONS
+            or answer.confidence < Config.JEV_MIN_CONFIDENCE
+        ):
+            remaining.append(ac)
+            continue
+        assigned[aid] = str(answer.value)
+
+    logger.info(f"Jev assigned {len(assigned)} tool roles; {len(remaining)} fall back to the LLM")
+    return assigned, remaining
+
+
+def _assign_tool_roles_llm(
     agent_configs: list[dict[str, Any]],
     simulation_requirement: str,
 ) -> dict[int, str]:
