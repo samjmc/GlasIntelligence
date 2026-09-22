@@ -346,6 +346,15 @@ class Config:
         "yes",
     )
 
+    # Correlation discount heuristic: average pairwise correlation assumed when
+    # combining likelihood ratios without a correlation matrix (default 0.5,
+    # no formal derivation; preserved for behavioral compatibility).
+    CORRELATION_DEFAULT_AVG_CORRELATION = _safe_float(
+        os.environ.get("CORRELATION_DEFAULT_AVG_CORRELATION", "0.5"),
+        0.5,
+        env_key="CORRELATION_DEFAULT_AVG_CORRELATION",
+    )
+
     # Jev (TypeSafe System One): typed classification / scoring with calibrated
     # confidence, used as a fast path in front of the LLM for bounded decisions
     # (agent tool roles, stance classification, risk likelihood/impact). Off by
