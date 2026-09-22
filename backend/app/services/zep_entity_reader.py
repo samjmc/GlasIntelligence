@@ -4,8 +4,9 @@ Reads nodes from a Zep graph and filters those matching predefined entity types
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set, TypeVar
+from typing import Any, TypeVar
 
 from zep_cloud.client import Zep
 
@@ -15,26 +16,27 @@ from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
 from .graph_snapshot_cache import try_get_lists_for_entity_reader
 from .jev_simulation_gates import graph_actor_filter
 
-logger = get_logger('glas.zep_entity_reader')
+logger = get_logger("glas.zep_entity_reader")
 
 # For generic return types
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class EntityNode:
     """Entity node data structure"""
+
     uuid: str
     name: str
-    labels: List[str]
+    labels: list[str]
     summary: str
-    attributes: Dict[str, Any]
+    attributes: dict[str, Any]
     # Related edge information
-    related_edges: List[Dict[str, Any]] = field(default_factory=list)
+    related_edges: list[dict[str, Any]] = field(default_factory=list)
     # Related node information
-    related_nodes: List[Dict[str, Any]] = field(default_factory=list)
-    
-    def to_dict(self) -> Dict[str, Any]:
+    related_nodes: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "uuid": self.uuid,
             "name": self.name,
@@ -44,8 +46,8 @@ class EntityNode:
             "related_edges": self.related_edges,
             "related_nodes": self.related_nodes,
         }
-    
-    def get_entity_type(self) -> Optional[str]:
+
+    def get_entity_type(self) -> str | None:
         """Get entity type (excluding the default Entity label)"""
         for label in self.labels:
             if label not in ["Entity", "Node"]:
@@ -56,14 +58,15 @@ class EntityNode:
 @dataclass
 class FilteredEntities:
     """Filtered entity collection"""
-    entities: List[EntityNode]
-    entity_types: Set[str]
+
+    entities: list[EntityNode]
+    entity_types: set[str]
     total_count: int
     filtered_count: int
     # Nodes the Jev "graph_actor_filter" gate dropped as non-actor concepts or numeric noise (0 when off)
     jev_dropped: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "entities": [e.to_dict() for e in self.entities],
             "entity_types": list(self.entity_types),
@@ -76,42 +79,38 @@ class FilteredEntities:
 class ZepEntityReader:
     """
     Zep entity reading and filtering service
-    
+
     Main features:
     1. Read all nodes from a Zep graph
     2. Filter nodes matching predefined entity types (nodes with labels beyond just Entity)
     3. Retrieve related edges and associated node information for each entity
     """
-    
-    def __init__(self, api_key: Optional[str] = None):
+
+    def __init__(self, api_key: str | None = None):
         self.api_key = api_key or Config.ZEP_API_KEY
         if not self.api_key:
             raise ValueError("ZEP_API_KEY not configured")
-        
+
         self.client = Zep(api_key=self.api_key)
-    
+
     def _call_with_retry(
-        self, 
-        func: Callable[[], T], 
-        operation_name: str,
-        max_retries: int = 3,
-        initial_delay: float = 2.0
+        self, func: Callable[[], T], operation_name: str, max_retries: int = 3, initial_delay: float = 2.0
     ) -> T:
         """
         Zep API call with retry mechanism
-        
+
         Args:
             func: Function to execute (parameterless lambda or callable)
             operation_name: Operation name for logging
             max_retries: Maximum number of retries (default 3)
             initial_delay: Initial delay in seconds
-            
+
         Returns:
             API call result
         """
         last_exception = None
         delay = initial_delay
-        
+
         for attempt in range(max_retries):
             try:
                 return func()
@@ -126,10 +125,10 @@ class ZepEntityReader:
                     delay *= 2  # exponential backoff
                 else:
                     logger.error(f"Zep {operation_name} still failed after {max_retries} attempts: {str(e)}")
-        
+
         raise last_exception
-    
-    def get_all_nodes(self, graph_id: str) -> List[Dict[str, Any]]:
+
+    def get_all_nodes(self, graph_id: str) -> list[dict[str, Any]]:
         """
         Get all nodes from the graph (paginated)
 
@@ -154,18 +153,20 @@ class ZepEntityReader:
 
         nodes_data = []
         for node in nodes:
-            nodes_data.append({
-                "uuid": getattr(node, 'uuid_', None) or getattr(node, 'uuid', ''),
-                "name": node.name or "",
-                "labels": node.labels or [],
-                "summary": node.summary or "",
-                "attributes": node.attributes or {},
-            })
+            nodes_data.append(
+                {
+                    "uuid": getattr(node, "uuid_", None) or getattr(node, "uuid", ""),
+                    "name": node.name or "",
+                    "labels": node.labels or [],
+                    "summary": node.summary or "",
+                    "attributes": node.attributes or {},
+                }
+            )
 
         logger.info(f"Fetched {len(nodes_data)} nodes")
         return nodes_data
 
-    def get_all_edges(self, graph_id: str) -> List[Dict[str, Any]]:
+    def get_all_edges(self, graph_id: str) -> list[dict[str, Any]]:
         """
         Get all edges from the graph (paginated)
 
@@ -190,91 +191,92 @@ class ZepEntityReader:
 
         edges_data = []
         for edge in edges:
-            edges_data.append({
-                "uuid": getattr(edge, 'uuid_', None) or getattr(edge, 'uuid', ''),
-                "name": edge.name or "",
-                "fact": edge.fact or "",
-                "source_node_uuid": edge.source_node_uuid,
-                "target_node_uuid": edge.target_node_uuid,
-                "attributes": edge.attributes or {},
-            })
+            edges_data.append(
+                {
+                    "uuid": getattr(edge, "uuid_", None) or getattr(edge, "uuid", ""),
+                    "name": edge.name or "",
+                    "fact": edge.fact or "",
+                    "source_node_uuid": edge.source_node_uuid,
+                    "target_node_uuid": edge.target_node_uuid,
+                    "attributes": edge.attributes or {},
+                }
+            )
 
         logger.info(f"Fetched {len(edges_data)} edges")
         return edges_data
-    
-    def get_node_edges(self, node_uuid: str) -> List[Dict[str, Any]]:
+
+    def get_node_edges(self, node_uuid: str) -> list[dict[str, Any]]:
         """
         Get all related edges for a given node (with retry mechanism)
-        
+
         Args:
             node_uuid: Node UUID
-            
+
         Returns:
             List of edges
         """
         try:
             edges = self._call_with_retry(
                 func=lambda: self.client.graph.node.get_entity_edges(node_uuid=node_uuid),
-                operation_name=f"get_node_edges(node={node_uuid[:8]}...)"
+                operation_name=f"get_node_edges(node={node_uuid[:8]}...)",
             )
-            
+
             edges_data = []
             for edge in edges:
-                edges_data.append({
-                    "uuid": getattr(edge, 'uuid_', None) or getattr(edge, 'uuid', ''),
-                    "name": edge.name or "",
-                    "fact": edge.fact or "",
-                    "source_node_uuid": edge.source_node_uuid,
-                    "target_node_uuid": edge.target_node_uuid,
-                    "attributes": edge.attributes or {},
-                })
-            
+                edges_data.append(
+                    {
+                        "uuid": getattr(edge, "uuid_", None) or getattr(edge, "uuid", ""),
+                        "name": edge.name or "",
+                        "fact": edge.fact or "",
+                        "source_node_uuid": edge.source_node_uuid,
+                        "target_node_uuid": edge.target_node_uuid,
+                        "attributes": edge.attributes or {},
+                    }
+                )
+
             return edges_data
         except Exception as e:
             logger.warning(f"Failed to get edges for node {node_uuid}: {str(e)}")
             return []
-    
+
     def filter_defined_entities(
-        self, 
-        graph_id: str,
-        defined_entity_types: Optional[List[str]] = None,
-        enrich_with_edges: bool = True
+        self, graph_id: str, defined_entity_types: list[str] | None = None, enrich_with_edges: bool = True
     ) -> FilteredEntities:
         """
         Filter nodes matching predefined entity types
-        
+
         Filtering logic:
         - If a node's labels only contain "Entity", it doesn't match our predefined types; skip it
         - If a node's labels include labels beyond "Entity" and "Node", it matches a predefined type; keep it
-        
+
         Args:
             graph_id: Graph ID
             defined_entity_types: List of predefined entity types (optional; if provided, only these types are kept)
             enrich_with_edges: Whether to fetch related edge information for each entity
-            
+
         Returns:
             FilteredEntities: Filtered entity collection
         """
         logger.info(f"Starting entity filtering for graph {graph_id}...")
-        
+
         all_nodes = self.get_all_nodes(graph_id)
         total_count = len(all_nodes)
-        
+
         all_edges = self.get_all_edges(graph_id) if enrich_with_edges else []
-        
+
         node_map = {n["uuid"]: n for n in all_nodes}
-        
+
         filtered_entities = []
         entity_types_found = set()
-        
+
         for node in all_nodes:
             labels = node.get("labels", [])
-            
+
             custom_labels = [l for l in labels if l not in ["Entity", "Node"]]
-            
+
             if not custom_labels:
                 continue
-            
+
             if defined_entity_types:
                 matching_labels = [l for l in custom_labels if l in defined_entity_types]
                 if not matching_labels:
@@ -282,9 +284,9 @@ class ZepEntityReader:
                 entity_type = matching_labels[0]
             else:
                 entity_type = custom_labels[0]
-            
+
             entity_types_found.add(entity_type)
-            
+
             entity = EntityNode(
                 uuid=node["uuid"],
                 name=node["name"],
@@ -292,51 +294,57 @@ class ZepEntityReader:
                 summary=node["summary"],
                 attributes=node["attributes"],
             )
-            
-            
+
             if enrich_with_edges:
                 related_edges = []
                 related_node_uuids = set()
-                
+
                 for edge in all_edges:
                     if edge["source_node_uuid"] == node["uuid"]:
-                        related_edges.append({
-                            "direction": "outgoing",
-                            "edge_name": edge["name"],
-                            "fact": edge["fact"],
-                            "target_node_uuid": edge["target_node_uuid"],
-                        })
+                        related_edges.append(
+                            {
+                                "direction": "outgoing",
+                                "edge_name": edge["name"],
+                                "fact": edge["fact"],
+                                "target_node_uuid": edge["target_node_uuid"],
+                            }
+                        )
                         related_node_uuids.add(edge["target_node_uuid"])
                     elif edge["target_node_uuid"] == node["uuid"]:
-                        related_edges.append({
-                            "direction": "incoming",
-                            "edge_name": edge["name"],
-                            "fact": edge["fact"],
-                            "source_node_uuid": edge["source_node_uuid"],
-                        })
+                        related_edges.append(
+                            {
+                                "direction": "incoming",
+                                "edge_name": edge["name"],
+                                "fact": edge["fact"],
+                                "source_node_uuid": edge["source_node_uuid"],
+                            }
+                        )
                         related_node_uuids.add(edge["source_node_uuid"])
-                
+
                 entity.related_edges = related_edges
-                
-                
+
                 related_nodes = []
                 for related_uuid in related_node_uuids:
                     if related_uuid in node_map:
                         related_node = node_map[related_uuid]
-                        related_nodes.append({
-                            "uuid": related_node["uuid"],
-                            "name": related_node["name"],
-                            "labels": related_node["labels"],
-                            "summary": related_node.get("summary", ""),
-                        })
-                
+                        related_nodes.append(
+                            {
+                                "uuid": related_node["uuid"],
+                                "name": related_node["name"],
+                                "labels": related_node["labels"],
+                                "summary": related_node.get("summary", ""),
+                            }
+                        )
+
                 entity.related_nodes = related_nodes
-            
+
             filtered_entities.append(entity)
-        
-        logger.info(f"Filtering complete: total nodes {total_count}, matching {len(filtered_entities)}, "
-                   f"entity types: {entity_types_found}")
-        
+
+        logger.info(
+            f"Filtering complete: total nodes {total_count}, matching {len(filtered_entities)}, "
+            f"entity types: {entity_types_found}"
+        )
+
         filtered_entities = self._deduplicate_entities(filtered_entities)
         filtered_entities, jev_dropped = self._jev_actor_filter(filtered_entities)
 
@@ -363,7 +371,7 @@ class ZepEntityReader:
             names = [e.name for e, drop in zip(entities, result.drop, strict=True) if drop]
             logger.info(f"Jev graph_actor_filter dropped {dropped} non-actor nodes: {names[:10]}")
         return kept, dropped
-    
+
     @staticmethod
     def _deduplicate_entities(entities: list) -> list:
         """
@@ -372,7 +380,7 @@ class ZepEntityReader:
         Keeps the entity with the longest summary (most context).
         """
         import re
-        
+
         def normalise(name: str) -> str:
             n = name.strip().lower()
             n = re.sub(r"[''`]s$", "", n)
@@ -380,7 +388,7 @@ class ZepEntityReader:
                 n = n[:-1]
             n = re.sub(r"[^a-z0-9]", "", n)
             return n
-        
+
         KNOWN_ALIASES = {
             "pharmacistsdefenceassociation": "pda",
             "pharmacistdefenceassociation": "pda",
@@ -389,88 +397,92 @@ class ZepEntityReader:
             "departmentofhealthandsocialcare": "dhsc",
             "nationalhealthservice": "nhs",
         }
-        
+
         seen = {}
         for entity in entities:
             key = normalise(entity.name)
             key = KNOWN_ALIASES.get(key, key)
-            
+
             if key in seen:
                 existing = seen[key]
                 if len(entity.summary or "") > len(existing.summary or ""):
                     seen[key] = entity
             else:
                 seen[key] = entity
-        
+
         deduped = list(seen.values())
         if len(deduped) < len(entities):
-            logger.info(f"Entity deduplication: {len(entities)} -> {len(deduped)} "
-                       f"(removed {len(entities) - len(deduped)} duplicates)")
+            logger.info(
+                f"Entity deduplication: {len(entities)} -> {len(deduped)} "
+                f"(removed {len(entities) - len(deduped)} duplicates)"
+            )
         return deduped
-    
-    def get_entity_with_context(
-        self, 
-        graph_id: str, 
-        entity_uuid: str
-    ) -> Optional[EntityNode]:
+
+    def get_entity_with_context(self, graph_id: str, entity_uuid: str) -> EntityNode | None:
         """
         Get a single entity with full context (edges and associated nodes, with retry mechanism)
-        
+
         Args:
             graph_id: Graph ID
             entity_uuid: Entity UUID
-            
+
         Returns:
             EntityNode or None
         """
         try:
             node = self._call_with_retry(
                 func=lambda: self.client.graph.node.get(uuid_=entity_uuid),
-                operation_name=f"get_node_detail(uuid={entity_uuid[:8]}...)"
+                operation_name=f"get_node_detail(uuid={entity_uuid[:8]}...)",
             )
-            
+
             if not node:
                 return None
-            
+
             edges = self.get_node_edges(entity_uuid)
-            
+
             all_nodes = self.get_all_nodes(graph_id)
             node_map = {n["uuid"]: n for n in all_nodes}
-            
+
             related_edges = []
             related_node_uuids = set()
-            
+
             for edge in edges:
                 if edge["source_node_uuid"] == entity_uuid:
-                    related_edges.append({
-                        "direction": "outgoing",
-                        "edge_name": edge["name"],
-                        "fact": edge["fact"],
-                        "target_node_uuid": edge["target_node_uuid"],
-                    })
+                    related_edges.append(
+                        {
+                            "direction": "outgoing",
+                            "edge_name": edge["name"],
+                            "fact": edge["fact"],
+                            "target_node_uuid": edge["target_node_uuid"],
+                        }
+                    )
                     related_node_uuids.add(edge["target_node_uuid"])
                 else:
-                    related_edges.append({
-                        "direction": "incoming",
-                        "edge_name": edge["name"],
-                        "fact": edge["fact"],
-                        "source_node_uuid": edge["source_node_uuid"],
-                    })
+                    related_edges.append(
+                        {
+                            "direction": "incoming",
+                            "edge_name": edge["name"],
+                            "fact": edge["fact"],
+                            "source_node_uuid": edge["source_node_uuid"],
+                        }
+                    )
                     related_node_uuids.add(edge["source_node_uuid"])
-            
+
             related_nodes = []
             for related_uuid in related_node_uuids:
                 if related_uuid in node_map:
                     related_node = node_map[related_uuid]
-                    related_nodes.append({
-                        "uuid": related_node["uuid"],
-                        "name": related_node["name"],
-                        "labels": related_node["labels"],
-                        "summary": related_node.get("summary", ""),
-                    })
-            
+                    related_nodes.append(
+                        {
+                            "uuid": related_node["uuid"],
+                            "name": related_node["name"],
+                            "labels": related_node["labels"],
+                            "summary": related_node.get("summary", ""),
+                        }
+                    )
+
             return EntityNode(
-                uuid=getattr(node, 'uuid_', None) or getattr(node, 'uuid', ''),
+                uuid=getattr(node, "uuid_", None) or getattr(node, "uuid", ""),
                 name=node.name or "",
                 labels=node.labels or [],
                 summary=node.summary or "",
@@ -478,33 +490,24 @@ class ZepEntityReader:
                 related_edges=related_edges,
                 related_nodes=related_nodes,
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get entity {entity_uuid}: {str(e)}")
             return None
-    
-    def get_entities_by_type(
-        self, 
-        graph_id: str, 
-        entity_type: str,
-        enrich_with_edges: bool = True
-    ) -> List[EntityNode]:
+
+    def get_entities_by_type(self, graph_id: str, entity_type: str, enrich_with_edges: bool = True) -> list[EntityNode]:
         """
         Get all entities of a given type
-        
+
         Args:
             graph_id: Graph ID
             entity_type: Entity type (e.g. "Student", "PublicFigure")
             enrich_with_edges: Whether to fetch related edge information
-            
+
         Returns:
             List of entities
         """
         result = self.filter_defined_entities(
-            graph_id=graph_id,
-            defined_entity_types=[entity_type],
-            enrich_with_edges=enrich_with_edges
+            graph_id=graph_id, defined_entity_types=[entity_type], enrich_with_edges=enrich_with_edges
         )
         return result.entities
-
-

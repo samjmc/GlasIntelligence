@@ -1,6 +1,7 @@
 """Email notification service using Resend."""
 
 import requests
+
 from ..config import Config
 from ..utils.logger import get_logger
 

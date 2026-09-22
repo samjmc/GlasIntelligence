@@ -1,8 +1,8 @@
 """Scenario session management — persistent sessions for research + simulation workflows."""
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
 
 from ..config import Config
 from ..middleware.auth import require_auth

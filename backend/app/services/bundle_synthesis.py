@@ -8,7 +8,7 @@ import json
 import logging
 import math
 import re
-from typing import Any, Optional
+from typing import Any
 
 from ..config import Config
 from ..utils.llm_client import LLMClient
@@ -55,7 +55,7 @@ def _payload_estimates(payload: dict[str, Any]) -> list[dict[str, Any]]:
         return []
 
 
-def _estimate_mid_percent(est: dict[str, Any]) -> Optional[float]:
+def _estimate_mid_percent(est: dict[str, Any]) -> float | None:
     try:
         pr = est.get("probability_range") or {}
         mid = pr.get("mid")
@@ -150,7 +150,7 @@ def _resolve_mapping_mid(
     scenario_index: int,
     estimate_index: int,
     payloads_by_index: dict[int, dict[str, Any]],
-) -> tuple[Optional[float], float]:
+) -> tuple[float | None, float]:
     payload = payloads_by_index.get(scenario_index) or {}
     estimates = _payload_estimates(payload)
     if estimate_index < 0 or estimate_index >= len(estimates):
@@ -308,8 +308,8 @@ def build_bundle_synthesis(
     bundle: dict[str, Any],
     payloads_by_index: dict[int, dict[str, Any]],
     scenario_meta: list[dict[str, Any]],
-    llm: Optional[LLMClient] = None,
-) -> Optional[dict[str, Any]]:
+    llm: LLMClient | None = None,
+) -> dict[str, Any] | None:
     """
     bundle: row dict with title, description, suggested_scenarios, completed_scenarios
     payloads_by_index: scenario_index -> full report payload v1

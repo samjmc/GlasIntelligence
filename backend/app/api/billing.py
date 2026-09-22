@@ -1,12 +1,14 @@
 """Stripe billing API routes."""
 
+from datetime import UTC
+
 import stripe
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
+
+from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
-from ..config import Config
 from ..utils.logger import get_logger
-from datetime import UTC
 
 billing_bp = Blueprint("billing", __name__)
 logger = get_logger("glas.api.billing")

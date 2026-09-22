@@ -5,8 +5,6 @@ import traceback
 
 from flask import g, jsonify, request
 
-from . import simulation_bp
-from .simulation_helpers import check_simulation_prepared
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..models.project import ProjectManager
@@ -14,6 +12,8 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
 from ..services.supabase_client import SupabaseDB
 from ..utils.logger import get_logger
+from . import simulation_bp
+from .simulation_helpers import check_simulation_prepared
 
 logger = get_logger("glas.api.simulation")
 

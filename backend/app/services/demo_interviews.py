@@ -124,9 +124,7 @@ def canned_response(agent_id: int, prompt: str, platform: str = "reddit") -> dic
             break
 
     agent = _match_agent(agent_id)
-    response = (
-        f"[{agent}] {response}" if not response.startswith(f"[{agent}]") else response
-    )
+    response = f"[{agent}] {response}" if not response.startswith(f"[{agent}]") else response
 
     return {
         "agent_id": int(agent_id),

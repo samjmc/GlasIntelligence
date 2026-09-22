@@ -4,12 +4,13 @@ import json
 import re
 import threading
 
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, g, jsonify, request
 from openai import OpenAI
-from ..middleware.auth import require_auth, optional_auth
-from ..services.supabase_client import SupabaseDB
+
 from ..config import Config
+from ..middleware.auth import optional_auth, require_auth
 from ..models.task import TaskManager, TaskStatus
+from ..services.supabase_client import SupabaseDB
 from ..utils.logger import get_logger
 
 source_agent_bp = Blueprint("source_agent", __name__)

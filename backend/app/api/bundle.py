@@ -3,13 +3,15 @@
 import json
 import re
 import uuid
-from flask import Blueprint, request, jsonify, g
+from datetime import UTC
+
+from flask import Blueprint, g, jsonify, request
+
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from datetime import UTC
 
 bundle_bp = Blueprint("bundle", __name__)
 logger = get_logger("glas.api.bundle")

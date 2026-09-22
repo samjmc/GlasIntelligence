@@ -1,8 +1,10 @@
 """Industry feed API routes."""
 
 import os
-from datetime import datetime, UTC
-from flask import Blueprint, request, jsonify, g
+from datetime import UTC, datetime
+
+from flask import Blueprint, g, jsonify, request
+
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
