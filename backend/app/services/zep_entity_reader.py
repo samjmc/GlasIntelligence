@@ -13,6 +13,7 @@ from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
 from .graph_snapshot_cache import try_get_lists_for_entity_reader
+from .jev_simulation_gates import graph_actor_filter
 
 logger = get_logger('glas.zep_entity_reader')
 
@@ -59,13 +60,16 @@ class FilteredEntities:
     entity_types: Set[str]
     total_count: int
     filtered_count: int
-    
+    # Nodes the Jev "graph_actor_filter" gate dropped as non-actor concepts or numeric noise (0 when off)
+    jev_dropped: int = 0
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "entities": [e.to_dict() for e in self.entities],
             "entity_types": list(self.entity_types),
             "total_count": self.total_count,
             "filtered_count": self.filtered_count,
+            "jev_dropped": self.jev_dropped,
         }
 
 
@@ -334,13 +338,31 @@ class ZepEntityReader:
                    f"entity types: {entity_types_found}")
         
         filtered_entities = self._deduplicate_entities(filtered_entities)
-        
+        filtered_entities, jev_dropped = self._jev_actor_filter(filtered_entities)
+
         return FilteredEntities(
             entities=filtered_entities,
             entity_types=entity_types_found,
             total_count=total_count,
             filtered_count=len(filtered_entities),
+            jev_dropped=jev_dropped,
         )
+
+    @staticmethod
+    def _jev_actor_filter(entities: list[EntityNode]) -> tuple[list[EntityNode], int]:
+        """Jev "graph_actor_filter" gate: drop nodes Jev confidently calls a non-actor concept
+        or quantitative noise. Off (or shadow, or any failure) keeps every entity."""
+        if not entities:
+            return entities, 0
+        result = graph_actor_filter([{"name": e.name, "labels": e.labels, "summary": e.summary} for e in entities])
+        if result is None or result.mode != "active":
+            return entities, 0
+        kept = [e for e, drop in zip(entities, result.drop, strict=True) if not drop]
+        dropped = len(entities) - len(kept)
+        if dropped:
+            names = [e.name for e, drop in zip(entities, result.drop, strict=True) if drop]
+            logger.info(f"Jev graph_actor_filter dropped {dropped} non-actor nodes: {names[:10]}")
+        return kept, dropped
     
     @staticmethod
     def _deduplicate_entities(entities: list) -> list:

@@ -18,7 +18,14 @@ from zep_cloud.client import Zep
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
+from ..utils.jev_metrics import LEDGER
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
+from .jev_report_gates import (
+    INTERVIEW_FORMAT_REMINDER,
+    SITE_INTERVIEW_SELECTION,
+    check_interview_answers,
+    select_interview_agents,
+)
 
 logger = get_logger('glas.zep_tools')
 
@@ -1379,7 +1386,12 @@ Return a JSON-formatted list of sub-questions in English."""
             # Step 5: Parse API response and build AgentInterview objects
             api_data = api_result.get("result", {})
             results_dict = api_data.get("results", {}) if isinstance(api_data, dict) else {}
-            
+
+            # Jev gate (interview_format): retry non-plain-text answers once with a reminder line
+            results_dict = self._retry_malformed_interview_answers(
+                simulation_id, selected_indices, selected_agents, results_dict, optimized_prompt
+            )
+
             for i, agent_idx in enumerate(selected_indices):
                 agent = selected_agents[i]
                 agent_name = agent.get("realname", agent.get("username", f"Agent_{agent_idx}"))
@@ -1462,6 +1474,69 @@ Return a JSON-formatted list of sub-questions in English."""
         logger.info(f"InterviewAgents complete: interviewed {result.interviewed_count} agents (dual-platform)")
         return result
     
+    def _retry_malformed_interview_answers(
+        self,
+        simulation_id: str,
+        selected_indices: List[int],
+        selected_agents: List[Dict[str, Any]],
+        results_dict: Dict[str, Any],
+        prompt: str,
+    ) -> Dict[str, Any]:
+        """Jev gate: ask once per answer whether it is plain text and in persona; re-interview the
+        confidently non-plain (agent, platform) pairs ONCE with a reminder line.
+
+        Returns ``results_dict`` unchanged when Jev is off, unsure, fails, or the retry fails.
+        """
+        try:
+            keys: List[tuple] = []
+            items: List[tuple] = []
+            for i, agent_idx in enumerate(selected_indices):
+                agent = selected_agents[i]
+                agent_name = agent.get("realname", agent.get("username", f"Agent_{agent_idx}"))
+                for platform in ("twitter", "reddit"):
+                    raw = (results_dict.get(f"{platform}_{agent_idx}") or {}).get("response", "")
+                    text = self._clean_tool_call_response(raw)
+                    if text:
+                        keys.append((platform, agent_idx))
+                        items.append((agent_name, text))
+            verdicts = check_interview_answers(items)
+            if len(verdicts) != len(keys):  # gate off, unsure batch, or Jev failed -> keep every answer
+                return results_dict
+            to_retry = [key for key, verdict in zip(keys, verdicts, strict=True) if verdict.retry]
+            if not to_retry:
+                return results_dict
+
+            from .simulation_runner import SimulationRunner
+
+            # ``prompt`` is the already-optimised interview prompt (plain-text rules + questions);
+            # the retry only adds the reminder line in front of it.
+            retry_prompt = f"{INTERVIEW_FORMAT_REMINDER}\n{prompt}"
+            logger.info(f"Jev interview_format: retrying {len(to_retry)} non-plain answers with a reminder")
+            retry_result = SimulationRunner.interview_agents_batch(
+                simulation_id=simulation_id,
+                interviews=[
+                    {"agent_id": agent_idx, "prompt": retry_prompt, "platform": platform}
+                    for platform, agent_idx in to_retry
+                ],
+                platform=None,
+                timeout=180.0,
+            )
+            if not retry_result.get("success", False):
+                logger.warning(f"Interview retry failed: {retry_result.get('error', 'Unknown error')}")
+                return results_dict
+            retry_data = retry_result.get("result", {})
+            retried = retry_data.get("results", {}) if isinstance(retry_data, dict) else {}
+            merged = dict(results_dict)
+            for platform, agent_idx in to_retry:
+                key = f"{platform}_{agent_idx}"
+                new = retried.get(key)
+                if isinstance(new, dict) and new.get("response"):
+                    merged[key] = new
+            return merged
+        except Exception as e:  # an interview must never fail because of Jev
+            logger.warning(f"Jev interview_format gate unavailable ({e}); keeping original answers")
+            return results_dict
+
     @staticmethod
     def _clean_tool_call_response(response: str) -> str:
         """Clean JSON tool-call wrappers from agent responses and extract actual content"""
@@ -1556,7 +1631,34 @@ Return a JSON-formatted list of sub-questions in English."""
                 "interested_topics": profile.get("interested_topics", [])
             }
             agent_summaries.append(summary)
-        
+
+        # Jev gate (interview_selection): score relevance per agent; the LLM picks only the unsure ones.
+        # Off mode runs the LLM selection below over every agent exactly as before.
+        llm_select = lambda subset: self._select_agents_for_interview_llm(  # noqa: E731
+            profiles, subset, interview_requirement, simulation_requirement, max_agents
+        )
+        try:
+            return select_interview_agents(
+                profiles=profiles,
+                agent_summaries=agent_summaries,
+                interview_requirement=interview_requirement,
+                max_agents=max_agents,
+                llm_select=llm_select,
+            )
+        except Exception as e:  # a report must never fail because of Jev
+            logger.warning(f"Jev interview_selection gate unavailable ({e}); using LLM selection")
+            return llm_select(agent_summaries)
+
+    def _select_agents_for_interview_llm(
+        self,
+        profiles: List[Dict[str, Any]],
+        agent_summaries: List[Dict[str, Any]],
+        interview_requirement: str,
+        simulation_requirement: str,
+        max_agents: int
+    ) -> tuple:
+        """Original LLM selection over ``agent_summaries`` (a subset of the profiles, each carrying its index)."""
+
         system_prompt = """You are a professional interview planning expert. Your task is to select the most suitable interview subjects from the simulation agent list based on interview requirements.
 
 Selection criteria:
@@ -1590,7 +1692,12 @@ Select up to {max_agents} agents most suitable for interview, and explain the se
                 ],
                 temperature=0.3
             )
-            
+            LEDGER.record_llm_call(
+                SITE_INTERVIEW_SELECTION,
+                prompt_chars=len(system_prompt) + len(user_prompt),
+                completion_chars=len(json.dumps(response, ensure_ascii=False)),
+            )
+
             selected_indices = response.get("selected_indices", [])[:max_agents]
             reasoning = response.get("reasoning", "Auto-selected based on relevance")
             

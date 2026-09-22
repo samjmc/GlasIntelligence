@@ -6,6 +6,10 @@ import pytest
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("FLASK_DEBUG", "false")
 os.environ.setdefault("ENABLE_REPORT_PAYLOAD_V1", "true")
+# Jev is a paid external model and a developer .env may switch it on. Force it off in the
+# environment too (not just on Config below), because some tests evict app.config from
+# sys.modules and a re-imported Config would otherwise read the developer's .env.
+os.environ["JEV_MODE"] = "off"
 
 from app import create_app
 from app import config as app_config
@@ -26,6 +30,9 @@ app_config.Config.SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") 
 app_config.Config.LLM_API_KEY = os.environ.get("LLM_API_KEY") or _PLACEHOLDER_LLM_KEY
 app_config.Config.ZEP_API_KEY = os.environ.get("ZEP_API_KEY") or _PLACEHOLDER_ZEP_KEY
 app_config.Config.SUPABASE_JWT_SECRET = ""
+# Jev is a paid external model; a developer .env may leave it active. The suite must never
+# make live Jev calls, so it is off here — tests that exercise a gate pin their own mode/fake.
+app_config.Config.JEV_MODE = "off"
 get_supabase_client.cache_clear()
 
 

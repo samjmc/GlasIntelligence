@@ -19,9 +19,17 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from ..config import Config
+from ..utils.jev_client import JevAnswer, JevClient
+from ..utils.jev_gate import gated
 from ..utils.logger import get_logger
+from .jev_simulation_gates import NONE_OF_THESE, SITE_EFFECT_TARGETS, target_options, target_question
 
 logger = get_logger("glas.simulation_effects")
+
+# ``gated`` treats an ``accept`` result of None as "unsure -> fallback", so a CONFIDENT
+# "no listed entity is the target" needs its own marker. Mapped back to None on return.
+_NO_TARGET = object()
 
 ACTIVITY_FLOOR = 0.1
 ACTIVITY_CEILING = 1.0
@@ -104,6 +112,24 @@ class EffectEngine:
 
         self._name_lookup = self._build_name_lookup()
 
+        # Jev "effect_targets" gate: roster is fixed per engine, so the choice question is built once.
+        self._jev = self._jev_client()
+        self._target_id_by_name = {
+            ac["entity_name"]: ac["agent_id"]
+            for ac in config.get("agent_configs", [])
+            if isinstance(ac.get("entity_name"), str) and ac.get("entity_name")
+        }
+        options = target_options(config.get("agent_configs", []))
+        self._target_question = target_question(options) if options else None
+
+    @staticmethod
+    def _jev_client() -> JevClient | None:
+        try:
+            return JevClient.from_config()
+        except Exception as e:
+            logger.warning(f"Jev unavailable for effect targets: {e}")
+            return None
+
     def set_env(self, env, agent_graph, platform: str):
         """Set OASIS env and agent graph for a specific platform."""
         self._envs[platform] = env
@@ -119,14 +145,45 @@ class EffectEngine:
         return lookup
 
     def resolve_target(self, action_description: str) -> int | None:
-        """Find which known entity name appears in the action_description.
+        """Find which known entity the action_description targets.
 
-        Scans the text for mentions of known entity names (longest-first
-        to prefer specific matches over partial ones). Returns agent_id
-        of the first match, or None if no entity is mentioned.
+        Through the Jev gate (site ``effect_targets``): with Jev active, one choice
+        over the roster plus ``none_of_these``; a confident pick returns that
+        agent_id, a confident ``none_of_these`` returns None, and an unsure answer
+        falls back to the substring heuristic. With Jev off this IS the heuristic.
+        A roster too large for one Jev choice (>255 options) also uses the heuristic.
         """
         if not action_description:
             return None
+        if self._target_question is None:
+            return self._resolve_target_heuristic(action_description)
+
+        question = self._target_question
+        result = gated(
+            site=SITE_EFFECT_TARGETS,
+            jev=self._jev,
+            items=[action_description],
+            key=lambda text: text,
+            jev_run=lambda client, batch: client.evaluate_many(
+                [({"action_description": text}, question) for text in batch], site=SITE_EFFECT_TARGETS
+            ),
+            accept=self._accept_target,
+            llm_run=lambda batch: {text: self._resolve_target_heuristic(text) for text in batch},
+            compare=lambda a, b: (None if a is _NO_TARGET else a) == (None if b is _NO_TARGET else b),
+        )
+        value = result.values.get(action_description)
+        return None if value is _NO_TARGET or value is None else int(value)
+
+    def _accept_target(self, _text: str, answers: dict[str, JevAnswer]) -> Any:
+        ans = answers.get("target")
+        if ans is None or ans.kind != "choice" or ans.confidence < Config.JEV_MIN_CONFIDENCE:
+            return None
+        if ans.value == NONE_OF_THESE:
+            return _NO_TARGET
+        return self._target_id_by_name.get(str(ans.value))  # unknown option name -> None -> heuristic
+
+    def _resolve_target_heuristic(self, action_description: str) -> int | None:
+        """Longest-name substring match over the roster (today's behaviour; the gate's fallback)."""
         text_lower = action_description.lower()
 
         sorted_names = sorted(self._name_lookup.keys(), key=len, reverse=True)

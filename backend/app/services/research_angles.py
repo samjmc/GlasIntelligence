@@ -10,10 +10,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+
 from ..config import Config
+from ..utils.jev_client import JevAnswer, JevClient
+from ..utils.jev_gate import gated
+from ..utils.jev_metrics import LEDGER
 from ..utils.logger import get_logger
+from .jev_research_gates import SITE_RESEARCH_ANGLES
 
 logger = get_logger("glas.research_angles")
+
+ANGLE_INCLUDE_AT_LEAST = 0.6  # P(angle materially helps) at or above -> include
+ANGLE_EXCLUDE_AT_MOST = 0.4  # at or below -> exclude; in between -> ask the LLM
 
 
 @dataclass
@@ -195,22 +203,82 @@ Example output: ["historical_precedents", "stock_market", "regulatory"]
 """
 
 
+def _angle_question(angle: ResearchAngle) -> dict[str, dict]:
+    return {
+        "relevant": JevClient.noul_q(
+            f"Would researching the angle '{angle.label}' materially improve a research dossier for this "
+            f"scenario? The angle covers: {angle.directive}"
+        )
+    }
+
+
+def _accept_angle(_angle: ResearchAngle, answers: dict[str, JevAnswer]) -> bool | None:
+    """True = include, False = exclude, None = unsure (goes to the LLM)."""
+    answer = answers.get("relevant")
+    if answer is None:
+        return None
+    p = float(answer.value)
+    if p >= ANGLE_INCLUDE_AT_LEAST:
+        return True
+    if p <= ANGLE_EXCLUDE_AT_MOST:
+        return False
+    return None
+
+
 def classify_scenario(scenario: str) -> list[str]:
-    """Use a cheap LLM call to decide which research angles apply to *scenario*."""
+    """Decide which research angles apply to *scenario*.
+
+    Through the Jev gate: with Jev active each angle is one yes/no question and
+    only the unsure angles go to the LLM classifier; with Jev off the LLM call
+    runs over every angle exactly as before, including its fall-back to all
+    angles when it fails.
+    """
+    llm_order: list[str] = []
+
+    def _llm_run(subset: list[ResearchAngle]) -> dict[str, bool]:
+        nonlocal llm_order
+        llm_order = _classify_scenario_llm(scenario, subset)
+        chosen = set(llm_order)
+        return {a.id: a.id in chosen for a in subset}
+
+    gate = gated(
+        site=SITE_RESEARCH_ANGLES,
+        jev=JevClient.from_config(),
+        items=RESEARCH_ANGLES,
+        key=lambda a: a.id,
+        jev_run=lambda client, batch: client.evaluate_many(
+            [({"scenario": scenario}, _angle_question(a)) for a in batch], site=SITE_RESEARCH_ANGLES
+        ),
+        accept=_accept_angle,
+        llm_run=_llm_run,
+    )
+    # Jev's picks in registry order, then the LLM's picks in the LLM's own order — so with
+    # Jev off this is exactly the list the classifier returned.
+    jev_ids = [a.id for a in RESEARCH_ANGLES if gate.source.get(a.id) == "jev" and gate.values.get(a.id)]
+    return jev_ids + [aid for aid in llm_order if gate.values.get(aid)]
+
+
+def _classify_scenario_llm(scenario: str, angles: list[ResearchAngle]) -> list[str]:
+    """The original cheap LLM call over ``angles``; every angle on failure."""
     from ..utils.llm_client import LLMClient
 
-    angle_descriptions = "\n".join(f"- {a.id}: {a.label}" for a in RESEARCH_ANGLES)
+    angle_descriptions = "\n".join(f"- {a.id}: {a.label}" for a in angles)
     system_prompt = _CLASSIFIER_SYSTEM.format(angle_list=angle_descriptions)
+    user_prompt = f"Scenario:\n{scenario}"
+    allowed = {a.id for a in angles}
 
     try:
         llm = LLMClient(model=Config.RESEARCH_CLASSIFICATION_MODEL)
         raw = llm.chat(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Scenario:\n{scenario}"},
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.1,
             max_tokens=200,
+        )
+        LEDGER.record_llm_call(
+            SITE_RESEARCH_ANGLES, prompt_chars=len(system_prompt) + len(user_prompt), completion_chars=len(raw)
         )
         cleaned = raw.strip()
         if cleaned.startswith("```"):
@@ -218,12 +286,12 @@ def classify_scenario(scenario: str) -> list[str]:
         ids = json.loads(cleaned)
         if not isinstance(ids, list):
             raise ValueError("Expected JSON array")
-        valid = [aid for aid in ids if aid in _ANGLE_MAP]
+        valid = [aid for aid in ids if aid in allowed]
         logger.info(f"Scenario classified — relevant angles: {valid}")
         return valid
     except Exception:
         logger.exception("Scenario classification failed — falling back to all angles")
-        return ALL_ANGLE_IDS
+        return [a.id for a in angles]
 
 
 # ---------------------------------------------------------------------------

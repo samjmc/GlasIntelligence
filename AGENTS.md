@@ -52,6 +52,7 @@ scripts/         Utilities (PDF, demo recording, etc.)
 - Match existing patterns in the surrounding module before introducing new abstractions.
 - Backend deps: `uv` + `backend/pyproject.toml`. Frontend: npm in `frontend/`.
 - Do not commit secrets (`.env`, credentials). Demo builds use `VITE_DEMO_MODE=1` and are intentionally keyless.
+- **Agents must never read, write, or grep `.env`** (only `.env*.example`). Agent harnesses echo the changed lines of any file the agent has touched back into the transcript, which leaked two rotated API tokens on 2026-09-21. Read `.env.example` for the variable names, and ask the human to set secrets themselves — preferably as user-level environment variables, which the app reads ahead of `.env`.
 
 ## Demo mode
 

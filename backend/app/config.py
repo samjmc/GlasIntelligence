@@ -346,6 +346,53 @@ class Config:
         "yes",
     )
 
+    # Jev (TypeSafe System One): typed classification / scoring with calibrated
+    # confidence, used as a fast path in front of the LLM for bounded decisions
+    # (agent tool roles, stance classification, risk likelihood/impact). Off by
+    # default; when off or unconfigured every caller keeps its LLM path
+    # unchanged. Reach it via TypeSafe direct, Cloudflare Workers AI or Vercel
+    # AI Gateway — see utils/jev_client.py.
+    JEV_ENABLED = os.environ.get("JEV_ENABLED", "false").lower() in ("1", "true", "yes")
+    JEV_PROVIDER = os.environ.get("JEV_PROVIDER", "typesafe").lower()  # typesafe | cloudflare | vercel
+    JEV_API_KEY = os.environ.get("JEV_API_KEY", "")
+    JEV_MODEL = os.environ.get("JEV_MODEL", "")  # empty -> provider default
+    JEV_BASE_URL = os.environ.get("JEV_BASE_URL", "")  # empty -> provider default
+    CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+    # A Jev answer below this confidence is handed to the LLM path for that item.
+    JEV_MIN_CONFIDENCE = _safe_float(
+        os.environ.get("JEV_MIN_CONFIDENCE", "0.6"),
+        0.6,
+        env_key="JEV_MIN_CONFIDENCE",
+    )
+    JEV_TIMEOUT_SECONDS = _safe_float(
+        os.environ.get("JEV_TIMEOUT_SECONDS", "10"),
+        10.0,
+        env_key="JEV_TIMEOUT_SECONDS",
+    )
+    JEV_MAX_WORKERS = _safe_int(
+        os.environ.get("JEV_MAX_WORKERS", "8"),
+        8,
+        env_key="JEV_MAX_WORKERS",
+    )
+    # off | shadow | active.  shadow = run Jev AND the LLM on every item, record
+    # agreement in the metrics ledger, but keep using the LLM's answer — the safe
+    # way to measure a new gate before trusting it.  JEV_ENABLED=true is an alias
+    # for active when JEV_MODE is not set.
+    JEV_MODE = (os.environ.get("JEV_MODE") or ("active" if JEV_ENABLED else "off")).lower()
+    # Comma-separated gate names (see utils/jev_gate.py call sites) to force back to
+    # the pure-LLM path while the rest stay on JEV_MODE.
+    JEV_DISABLED_SITES = frozenset(s.strip() for s in os.environ.get("JEV_DISABLED_SITES", "").split(",") if s.strip())
+    # Reference prices (USD per million tokens) used ONLY to estimate spend in the
+    # Jev metrics ledger.  LLM defaults are DeepSeek chat list prices; Jev is the
+    # published input price with free output.
+    JEV_LLM_PRICE_IN_PER_MTOK = _safe_float(
+        os.environ.get("JEV_LLM_PRICE_IN_PER_MTOK", "0.27"), 0.27, env_key="JEV_LLM_PRICE_IN_PER_MTOK"
+    )
+    JEV_LLM_PRICE_OUT_PER_MTOK = _safe_float(
+        os.environ.get("JEV_LLM_PRICE_OUT_PER_MTOK", "1.10"), 1.10, env_key="JEV_LLM_PRICE_OUT_PER_MTOK"
+    )
+    JEV_PRICE_IN_PER_MTOK = _safe_float(os.environ.get("JEV_PRICE_IN_PER_MTOK", "0.042"), 0.042, env_key="JEV_PRICE_IN_PER_MTOK")
+
     # Multi-scenario bundle executive synthesis (reports + LLM merge + branch weights)
     ENABLE_BUNDLE_SYNTHESIS = os.environ.get("ENABLE_BUNDLE_SYNTHESIS", "true").lower() in (
         "1",

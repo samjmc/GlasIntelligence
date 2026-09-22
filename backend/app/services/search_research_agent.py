@@ -12,11 +12,26 @@ import json
 from typing import Any
 
 from ..config import Config
-from ..utils.logger import get_logger
+from ..utils.jev_client import JevClient
+from ..utils.jev_gate import MODE_ACTIVE, MODE_OFF, gated, site_mode
+from ..utils.jev_metrics import LEDGER
 from ..utils.llm_client import LLMClient
+from ..utils.logger import get_logger
 from ..utils.tavily_client import TavilyClient
-from .research_angles import RESEARCH_ANGLES
+from .jev_research_gates import (
+    CLAIM_QUESTION,
+    MAX_CLAIMS,
+    SITE_RESEARCH_VERIFY,
+    VERDICT_LOW_CONFIDENCE,
+    accept_claim_verdict,
+    best_passage,
+    claim_state,
+    llm_verification_to_verdicts,
+    screen_search_results,
+    verdicts_to_verification,
+)
 from .llm_research_agent import LLMResearchAgent
+from .research_angles import RESEARCH_ANGLES
 
 logger = get_logger("glas.search_research")
 
@@ -143,6 +158,20 @@ Return ONLY valid JSON:
 }
 """
 
+_CLAIM_EXTRACTION_SYSTEM = """\
+You extract checkable factual claims from a research dossier so each can be verified against \
+its source separately.
+
+Rules:
+- Each claim is ONE atomic statement: a single figure, date, named fact or attributed position.
+- Keep the wording close to the dossier's own, including units and approximate dates.
+- Prefer quantitative claims and claims about named actors; skip the dossier's own inferences.
+- At most 25 claims.
+
+Return ONLY valid JSON:
+{"claims": ["short claim 1", "short claim 2"]}
+"""
+
 
 class SearchResearchAgent:
     """Research agent: Tavily search + iterative LLM synthesis and critique."""
@@ -178,9 +207,9 @@ class SearchResearchAgent:
             new_results: list[dict] = []
             for q in queries:
                 new_results.extend(tavily.search(q, max_results=5))
-            all_sources.extend(new_results)
+            all_sources.extend(screen_search_results(scenario, new_results))
 
-            search_context = self._format_results(all_sources)[:40_000]
+            search_context = self._format_results(self._rank_by_credibility(all_sources))[:40_000]
             summary_md = self._synthesize(llm, system_prompt, scenario, context, search_context)
 
             critique = self._critique(llm, scenario, summary_md)
@@ -202,7 +231,7 @@ class SearchResearchAgent:
 
         verification: dict = {}
         if all_sources:
-            verification = self._verify(llm, scenario, summary_md, search_context)
+            verification = self._verify_gated(llm, scenario, summary_md, search_context, all_sources)
             summary_md = self._append_verification_notes(summary_md, verification)
 
         key_facts = LLMResearchAgent._extract_key_facts(summary_md)
@@ -255,6 +284,15 @@ class SearchResearchAgent:
         return "\n\n".join(parts)
 
     @staticmethod
+    def _rank_by_credibility(results: list[dict]) -> list[dict]:
+        """Most-credible first across rounds, so the 40k cap drops the weakest sources.
+
+        Only active-mode screening attaches ``jev_credibility``; without it every
+        key is equal and this stable sort leaves the search order untouched.
+        """
+        return sorted(results, key=lambda r: -float(r.get("jev_credibility", 0.0)))
+
+    @staticmethod
     def _synthesize(
         llm: LLMClient,
         system_prompt: str,
@@ -300,25 +338,106 @@ class SearchResearchAgent:
         Never raises — a verification failure must not fail the whole run. Returns
         an empty dict, which the caller treats as "no notes to append".
         """
+        user_text = (
+            f"Scenario: {scenario}\n\n[Dossier]\n{summary_md[:32000]}\n\n[Search results]\n{search_context[:32000]}"
+        )
         try:
             data = llm.chat_json(
                 messages=[
                     {"role": "system", "content": _VERIFICATION_SYSTEM},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Scenario: {scenario}\n\n[Dossier]\n{summary_md[:32000]}"
-                            f"\n\n[Search results]\n{search_context[:32000]}"
-                        ),
-                    },
+                    {"role": "user", "content": user_text},
                 ],
                 temperature=0.1,
                 max_tokens=4096,
+            )
+            LEDGER.record_llm_call(
+                SITE_RESEARCH_VERIFY,
+                prompt_chars=len(_VERIFICATION_SYSTEM) + len(user_text),
+                completion_chars=len(json.dumps(data, ensure_ascii=False)),
             )
             return data if isinstance(data, dict) else {}
         except Exception as exc:
             logger.warning("Verification pass failed: %s", exc)
             return {}
+
+    def _verify_gated(
+        self,
+        llm: LLMClient,
+        scenario: str,
+        summary_md: str,
+        search_context: str,
+        sources: list[dict],
+    ) -> dict:
+        """Per-claim verification through the Jev gate; the old ``_verify`` when the gate is off.
+
+        The LLM only extracts atomic claims. Each claim is paired with its best
+        passage by lexical overlap and Jev answers one choice question per pair.
+        Active: confident verdicts are used, the rest are "unverified (low
+        confidence)" with no LLM fallback call. Shadow: the old ``_verify`` still
+        decides, and its verdicts are compared with Jev's claim by claim.
+        """
+        jev = JevClient.from_config()
+        mode = site_mode(SITE_RESEARCH_VERIFY, jev)
+        if mode == MODE_OFF:
+            return self._verify(llm, scenario, summary_md, search_context)
+
+        claims = self._extract_claims(llm, scenario, summary_md)
+        if not claims:
+            logger.warning("[%s] no claims extracted; running the LLM verification pass", SITE_RESEARCH_VERIFY)
+            return self._verify(llm, scenario, summary_md, search_context)
+        items: list[tuple[int, str, dict | None]] = [(i, c, best_passage(c, sources)) for i, c in enumerate(claims)]
+
+        llm_verification: dict = {}
+
+        def _llm_run(subset: list[tuple[int, str, dict | None]]) -> dict[int, tuple[str, str]]:
+            nonlocal llm_verification
+            if mode == MODE_ACTIVE:
+                # Jev was unsure or failed; Jev cannot write, so there is nothing cheaper to ask.
+                return {idx: (VERDICT_LOW_CONFIDENCE, "") for idx, _c, _p in subset}
+            llm_verification = self._verify(llm, scenario, summary_md, search_context)
+            return llm_verification_to_verdicts(llm_verification, subset)
+
+        gate = gated(
+            site=SITE_RESEARCH_VERIFY,
+            jev=jev,
+            items=items,
+            key=lambda item: item[0],
+            jev_run=lambda client, batch: client.evaluate_many(
+                [(claim_state(c, p or {}), CLAIM_QUESTION) for _i, c, p in batch], site=SITE_RESEARCH_VERIFY
+            ),
+            accept=accept_claim_verdict,
+            llm_run=_llm_run,
+            compare=lambda a, b: a[0] == b[0],
+        )
+        if gate.mode != MODE_ACTIVE:
+            return llm_verification  # shadow: users still see the LLM's verification
+        return verdicts_to_verification(items, gate.values)
+
+    @staticmethod
+    def _extract_claims(llm: LLMClient, scenario: str, summary_md: str) -> list[str]:
+        """Small structured LLM call: the dossier's atomic factual claims. Never raises."""
+        user_text = f"Scenario: {scenario}\n\n[Dossier]\n{summary_md[:32000]}"
+        try:
+            data = llm.chat_json(
+                messages=[
+                    {"role": "system", "content": _CLAIM_EXTRACTION_SYSTEM},
+                    {"role": "user", "content": user_text},
+                ],
+                temperature=0.1,
+                max_tokens=2048,
+            )
+        except Exception as exc:
+            logger.warning("Claim extraction failed: %s", exc)
+            return []
+        LEDGER.record_llm_call(
+            SITE_RESEARCH_VERIFY,
+            prompt_chars=len(_CLAIM_EXTRACTION_SYSTEM) + len(user_text),
+            completion_chars=len(json.dumps(data, ensure_ascii=False)),
+        )
+        raw = data.get("claims") if isinstance(data, dict) else None
+        if not isinstance(raw, list):
+            return []
+        return [str(c).strip() for c in raw if str(c).strip()][:MAX_CLAIMS]
 
     @staticmethod
     def _append_verification_notes(summary_md: str, verification: dict) -> str:
@@ -333,7 +452,10 @@ class SearchResearchAgent:
         if corrections:
             lines.append("### Corrected claims")
             for c in corrections:
-                lines.append(f"- ~~{c.get('original', '')}~~ → {c.get('corrected', '')} ({c.get('reason', '')})")
+                # A Jev contradiction carries no rewritten text; render the strike-through and reason only.
+                corrected = c.get("corrected", "")
+                arrow = f" → {corrected}" if corrected else ""
+                lines.append(f"- ~~{c.get('original', '')}~~{arrow} ({c.get('reason', '')})")
         if unverified:
             lines.append("### Unverified claims (training-knowledge only)")
             for u in unverified:

@@ -1,7 +1,17 @@
 """Time-label and agent-scheduling helpers for the parallel simulation runner."""
 
+import contextlib
 import random
 from typing import Any, Dict, List  # noqa: UP035
+
+# Jev activation gate (app.services.jev_simulation_gates). scripts/lib runs inside the
+# OASIS subprocess with backend/ on sys.path (db_utils puts it there); if the import
+# fails for any reason the round loop keeps today's Bernoulli scheduling.
+try:
+    from app.services.jev_simulation_gates import activation_gate as _jev_activation_gate
+except Exception:  # pragma: no cover - only when app/ is not importable
+    _jev_activation_gate = None  # type: ignore[assignment]
+
 
 def compute_time_label(round_num: int, time_scale: Dict[str, Any]) -> Dict[str, str]:
     """Build a human-readable time label for the current round.
@@ -56,17 +66,33 @@ def get_phase_multiplier(round_num: int, phases: List[Dict[str, Any]]) -> float:
     return 1.0
 
 
+def _activation_decision(gate: Any, agent_id: int, activity_level: float, rng: Any) -> bool:
+    """One rng draw per agent, whichever path decides (keeps the rng stream identical to today)."""
+    if gate is None:
+        return bool(rng.random() < activity_level)
+    return bool(gate.decide(agent_id, activity_level, rng))
+
+
 def get_active_agents_for_round(
     env,
     config: Dict[str, Any],
     current_hour: int,
-    round_num: int
+    round_num: int,
+    recent_feed: "list[dict[str, Any]] | None" = None,
+    rng: Any = random,
 ) -> List:
     """Decide which agents are active this round based on time and config
 
     Supports two modes:
     - Hour-based (unit == "hour"): uses active_hours, peak/off-peak multipliers
     - Phase-based (unit != "hour"): skips active_hours, uses ScenarioPhase multipliers
+
+    ``recent_feed`` (the runner's rolling window of recent posts) enables the Jev
+    "activation" gate: with Jev active each agent's Bernoulli weight becomes a weight
+    derived from two Jev signals (addressed in the feed / interests at stake) times its
+    activity_level, clamped 0.05-0.95; with Jev in shadow mode p is only measured
+    against today's decision; with Jev off, or no feed yet (round 0), this is exactly
+    today's logic. ``rng`` lets tests pin the stream.
     """
     time_config = config.get("time_config", {})
     agent_configs = config.get("agent_configs", [])
@@ -77,6 +103,19 @@ def get_active_agents_for_round(
     time_scale = time_config.get("time_scale", {})
     unit = time_scale.get("unit", "hour")
 
+    gate = None
+    if _jev_activation_gate is not None and recent_feed:
+        if unit != "hour":
+            eligible = agent_configs
+        else:
+            eligible = [
+                cfg for cfg in agent_configs if current_hour in cfg.get("active_hours", list(range(8, 23)))
+            ]
+        try:
+            gate = _jev_activation_gate(eligible, recent_feed)
+        except Exception:
+            gate = None
+
     if unit != "hour":
         # Phase-based scheduling: no hour-of-day filtering
         phases = time_config.get("phases", [])
@@ -84,10 +123,11 @@ def get_active_agents_for_round(
 
         candidates = []
         for cfg in agent_configs:
-            if random.random() < cfg.get("activity_level", 0.5):
-                candidates.append(cfg.get("agent_id", 0))
+            agent_id = cfg.get("agent_id", 0)
+            if _activation_decision(gate, agent_id, cfg.get("activity_level", 0.5), rng):
+                candidates.append(agent_id)
 
-        target_count = int(random.uniform(base_min, base_max) * multiplier)
+        target_count = int(rng.uniform(base_min, base_max) * multiplier)
     else:
         # Hour-based scheduling (existing logic)
         peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
@@ -100,7 +140,7 @@ def get_active_agents_for_round(
         else:
             multiplier = 1.0
 
-        target_count = int(random.uniform(base_min, base_max) * multiplier)
+        target_count = int(rng.uniform(base_min, base_max) * multiplier)
 
         candidates = []
         for cfg in agent_configs:
@@ -111,10 +151,14 @@ def get_active_agents_for_round(
             if current_hour not in active_hours:
                 continue
 
-            if random.random() < activity_level:
+            if _activation_decision(gate, agent_id, activity_level, rng):
                 candidates.append(agent_id)
 
-    selected_ids = random.sample(
+    if gate is not None:
+        with contextlib.suppress(Exception):
+            gate.finish(round_num)
+
+    selected_ids = rng.sample(
         candidates,
         min(target_count, len(candidates))
     ) if candidates else []

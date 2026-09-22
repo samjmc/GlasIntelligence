@@ -15,6 +15,45 @@ from db_utils import fetch_new_actions_from_db, fetch_new_tool_calls
 from model_factory import create_model
 from time_utils import compute_time_label, get_active_agents_for_round
 
+# Jev runtime gates (activation feed window + post validity monitor). Optional: if the
+# app package is not importable the round loop runs exactly as before.
+try:
+    from app.services.jev_simulation_gates import RecentFeed, ValidityMonitor
+except Exception:  # pragma: no cover - only when app/ is not importable
+    RecentFeed = None
+    ValidityMonitor = None
+
+
+def _init_jev_gates(config, simulation_dir, log_info):
+    """Build the per-run feed window and validity monitor; never raises."""
+    feed = None
+    monitor = None
+    if RecentFeed is None or ValidityMonitor is None:
+        return feed, monitor
+    try:
+        feed = RecentFeed()
+        monitor = ValidityMonitor(simulation_dir, config.get("agent_configs", []))
+        if monitor.enabled:
+            log_info(f"Jev validity monitor on -> {monitor.jsonl_path}")
+    except Exception as e:
+        log_info(f"Jev gates unavailable ({e}); running without them")
+        feed, monitor = None, None
+    return feed, monitor
+
+
+def _after_round_jev(feed, monitor, round_num, actual_actions, log_info):
+    """Score the round's posts and roll the feed window forward; never raises."""
+    try:
+        if monitor is not None:
+            scored = monitor.score_round(round_num, actual_actions)
+            if scored:
+                log_info(f"Round {round_num}: Jev scored {scored} posts for validity")
+        if feed is not None:
+            feed.push_actions(actual_actions)
+    except Exception as e:
+        log_info(f"Round {round_num}: Jev gate step failed ({e}); continuing")
+
+
 try:
     import oasis
     from oasis import (
@@ -142,7 +181,9 @@ async def run_twitter_simulation(
 
     if effect_engine:
         effect_engine.set_env(result.env, result.agent_graph, "twitter")
-    
+
+    jev_feed, jev_validity = _init_jev_gates(config, simulation_dir, log_info)
+
     if action_logger:
         action_logger.log_simulation_start(config)
     
@@ -184,6 +225,16 @@ async def run_twitter_simulation(
         if initial_actions:
             await result.env.step(initial_actions)
             log_info(f"Published {len(initial_actions)} initial posts")
+            if jev_feed is not None:
+                jev_feed.push_actions([
+                    {
+                        "agent_id": post.get("poster_agent_id", 0),
+                        "agent_name": agent_names.get(post.get("poster_agent_id", 0), ""),
+                        "action_type": "CREATE_POST",
+                        "action_args": {"content": post.get("content", "")},
+                    }
+                    for post in initial_posts
+                ])
     
     if action_logger:
         action_logger.log_round_end(0, initial_action_count)
@@ -221,7 +272,8 @@ async def run_twitter_simulation(
         time_label = compute_time_label(round_num, time_scale)
 
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, config, simulated_hour, round_num,
+            recent_feed=jev_feed.items() if jev_feed is not None else None,
         )
 
         if action_logger:
@@ -262,6 +314,8 @@ async def run_twitter_simulation(
                 state_actions = effect_engine.to_action_dicts(applied, agent_names)
                 actual_actions.extend(state_actions)
                 log_info(f"Round {round_num + 1}: Applied {len(applied)} state effects")
+
+        _after_round_jev(jev_feed, jev_validity, round_num + 1, actual_actions, log_info)
 
         round_action_count = 0
         for action_data in actual_actions:
@@ -371,7 +425,9 @@ async def run_reddit_simulation(
 
     if effect_engine:
         effect_engine.set_env(result.env, result.agent_graph, "reddit")
-    
+
+    jev_feed, jev_validity = _init_jev_gates(config, simulation_dir, log_info)
+
     if action_logger:
         action_logger.log_simulation_start(config)
     
@@ -421,6 +477,16 @@ async def run_reddit_simulation(
         if initial_actions:
             await result.env.step(initial_actions)
             log_info(f"Published {len(initial_actions)} initial posts")
+            if jev_feed is not None:
+                jev_feed.push_actions([
+                    {
+                        "agent_id": post.get("poster_agent_id", 0),
+                        "agent_name": agent_names.get(post.get("poster_agent_id", 0), ""),
+                        "action_type": "CREATE_POST",
+                        "action_args": {"content": post.get("content", "")},
+                    }
+                    for post in initial_posts
+                ])
     
     if action_logger:
         action_logger.log_round_end(0, initial_action_count)
@@ -458,7 +524,8 @@ async def run_reddit_simulation(
         time_label = compute_time_label(round_num, time_scale)
 
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, config, simulated_hour, round_num,
+            recent_feed=jev_feed.items() if jev_feed is not None else None,
         )
 
         if action_logger:
@@ -498,6 +565,8 @@ async def run_reddit_simulation(
                 state_actions = effect_engine.to_action_dicts(applied, agent_names)
                 actual_actions.extend(state_actions)
                 log_info(f"Round {round_num + 1}: Applied {len(applied)} state effects")
+
+        _after_round_jev(jev_feed, jev_validity, round_num + 1, actual_actions, log_info)
 
         round_action_count = 0
         for action_data in actual_actions:

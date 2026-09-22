@@ -16,11 +16,14 @@ import re
 import threading
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI
 
 from ..config import Config
+from ..utils.jev_client import JevAnswer, JevClient
+from ..utils.jev_gate import gated
+from ..utils.jev_metrics import LEDGER
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.simulation_tools")
@@ -479,7 +482,76 @@ Example: {{"0": "leader", "1": "analyst", "2": "observer"}}
 Return ONLY the JSON object, no other text."""
 
 
+_TOOL_ROLE_OPTIONS = {
+    "leader": "Government officials, heads of state, corporate executives",
+    "diplomat": "Diplomats, negotiators, mediators",
+    "analyst": "Researchers, journalists, think tank members",
+    "operative": "Military, intelligence, field operatives",
+    "observer": "Citizens, activists, commentators",
+    "none": "Purely social media participants that should have no tools",
+}
+
+
+SITE_TOOL_ROLES = "tool_roles"
+
+
+def _agent_id(ac: dict[str, Any]) -> int | None:
+    raw = ac.get("agent_id")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _role_state(ac: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": ac.get("entity_name", "unknown"),
+        "entity_type": ac.get("entity_type", "unknown"),
+        "stance": ac.get("stance", "neutral"),
+    }
+
+
+def _accept_role(_ac: dict[str, Any], answers: dict[str, JevAnswer]) -> str | None:
+    answer = answers.get("role")
+    if answer is None or answer.value not in _TOOL_ROLE_OPTIONS or answer.confidence < Config.JEV_MIN_CONFIDENCE:
+        return None
+    return str(answer.value)
+
+
 def assign_tool_roles(
+    agent_configs: list[dict[str, Any]],
+    simulation_requirement: str,
+) -> dict[int, str]:
+    """Assign one tool role per agent from its entity type, name and stance.
+
+    Runs through the Jev gate (``utils/jev_gate.py``): with Jev active each
+    agent is a typed choice, and only the unsure ones go to the original LLM
+    batch prompt; with Jev off every agent goes to the LLM exactly as before.
+    """
+    items = [ac for ac in agent_configs if _agent_id(ac) is not None]
+    if not items:
+        return {}
+    question = {
+        "role": JevClient.choice_q(
+            f"Which tool role fits this agent in the simulation scenario: {simulation_requirement}",
+            _TOOL_ROLE_OPTIONS,
+        )
+    }
+    result = gated(
+        site=SITE_TOOL_ROLES,
+        jev=JevClient.from_config(),
+        items=items,
+        key=lambda ac: cast(int, _agent_id(ac)),  # items are pre-filtered to a non-None id
+        jev_run=lambda client, batch: client.evaluate_many(
+            [(_role_state(ac), question) for ac in batch], site=SITE_TOOL_ROLES
+        ),
+        accept=_accept_role,
+        llm_run=lambda batch: _assign_tool_roles_llm(batch, simulation_requirement),
+    )
+    return {int(k): str(v) for k, v in result.values.items()}
+
+
+def _assign_tool_roles_llm(
     agent_configs: list[dict[str, Any]],
     simulation_requirement: str,
 ) -> dict[int, str]:
@@ -511,6 +583,7 @@ def assign_tool_roles(
             max_tokens=1000,
         )
         raw = response.choices[0].message.content.strip()
+        LEDGER.record_llm_call(SITE_TOOL_ROLES, prompt_chars=len(prompt), completion_chars=len(raw))
 
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         if not json_match:
