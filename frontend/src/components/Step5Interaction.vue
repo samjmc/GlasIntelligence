@@ -271,6 +271,7 @@
                   <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
                 </div>
                 <div class="message-text" v-html="renderMarkdown(msg.content)"></div>
+                <div v-if="msg.reconstructed" class="reconstructed-note">{{ RECONSTRUCTED_NOTE }}</div>
               </div>
             </div>
             <div v-if="isSending" class="chat-message assistant">
@@ -285,6 +286,10 @@
                 </div>
               </div>
             </div>
+          </div>
+
+          <div v-if="chatTarget === 'agent' && interviewMode === 'reconstructed'" class="interview-mode-banner">
+            The simulation has finished. Agents answer {{ RECONSTRUCTED_NOTE.toLowerCase() }}.
           </div>
 
           <!-- Chat Input -->
@@ -363,7 +368,11 @@
               ></textarea>
             </div>
 
-            <button 
+            <div v-if="interviewMode === 'reconstructed'" class="interview-mode-banner">
+              The simulation has finished. Agents answer {{ RECONSTRUCTED_NOTE.toLowerCase() }}.
+            </div>
+
+            <button
               class="survey-submit-btn"
               :disabled="selectedAgents.size === 0 || !surveyQuestion.trim() || isSurveying"
               @click="submitSurvey"
@@ -401,6 +410,7 @@
                   <span>{{ result.question }}</span>
                 </div>
                 <div class="result-answer" v-html="renderMarkdown(result.answer)"></div>
+                <div v-if="result.reconstructed" class="reconstructed-note">{{ RECONSTRUCTED_NOTE }}</div>
               </div>
             </div>
           </div>
@@ -413,7 +423,11 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { chatWithReport, getReport, getAgentLog } from '../api/report'
-import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
+import { interviewAgents, getSimulationProfilesRealtime, getEnvStatus } from '../api/simulation'
+import { isDemoMode } from '../demo/config'
+
+// Shown when the backend answered from the recorded run because the simulation process had exited.
+const RECONSTRUCTED_NOTE = 'Reconstructed from the recorded run'
 
 const props = defineProps({
   reportId: String,
@@ -444,6 +458,9 @@ const selectedAgents = ref(new Set())
 const surveyQuestion = ref('')
 const surveyResults = ref([])
 const isSurveying = ref(false)
+
+// Interview path the backend will use: 'live' | 'reconstructed' | null (unknown / demo)
+const interviewMode = ref(null)
 
 // Report Data
 const reportOutline = ref(null)
@@ -740,8 +757,9 @@ const sendToAgent = async (message) => {
     
     // Convert object dictionary to array, prioritize reddit platform responses
     let responseContent = null
+    let reconstructed = res.data.mode === 'reconstructed'
     const agentId = selectedAgentIndex.value
-    
+
     if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
       // Prefer reddit platform response, then twitter
       const redditKey = `reddit_${agentId}`
@@ -749,6 +767,7 @@ const sendToAgent = async (message) => {
       const agentResult = resultsDict[redditKey] || resultsDict[twitterKey] || Object.values(resultsDict)[0]
       if (agentResult) {
         responseContent = agentResult.response || agentResult.answer
+        reconstructed = reconstructed || agentResult.mode === 'reconstructed'
       }
     } else if (Array.isArray(resultsDict) && resultsDict.length > 0) {
       // Compatible with array format
@@ -756,9 +775,11 @@ const sendToAgent = async (message) => {
     }
     
     if (responseContent) {
+      if (reconstructed) interviewMode.value = 'reconstructed'
       chatHistory.value.push({
         role: 'assistant',
         content: responseContent,
+        reconstructed,
         timestamp: new Date().toISOString()
       })
       addLog(`${selectedAgent.value.username} replied`)
@@ -831,13 +852,15 @@ const submitSurvey = async () => {
         
         // Prefer reddit platform response, then twitter
         let responseContent = 'No response'
-        
+        let reconstructed = res.data.mode === 'reconstructed'
+
         if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
           const redditKey = `reddit_${agentIdx}`
           const twitterKey = `twitter_${agentIdx}`
           const agentResult = resultsDict[redditKey] || resultsDict[twitterKey]
           if (agentResult) {
             responseContent = agentResult.response || agentResult.answer || 'No response'
+            reconstructed = reconstructed || agentResult.mode === 'reconstructed'
           }
         } else if (Array.isArray(resultsDict)) {
           // Compatible with array format
@@ -852,7 +875,8 @@ const submitSurvey = async () => {
           agent_name: agent?.username || `Agent ${agentIdx}`,
           profession: agent?.profession,
           question: surveyQuestion.value.trim(),
-          answer: responseContent
+          answer: responseContent,
+          reconstructed
         })
       }
       
@@ -951,9 +975,24 @@ watch(() => props.reportId, (newId) => {
   }
 }, { immediate: true })
 
+// Ask which path will answer interviews, so a finished run shows a note instead of a dead end.
+// The static demo replays a tape with no env-status entry; asking there would trip its watchdog.
+const loadInterviewStatus = async (simulationId) => {
+  if (isDemoMode) return
+  try {
+    const res = await getEnvStatus({ simulation_id: simulationId })
+    if (res.success && res.data?.interview_available) {
+      interviewMode.value = res.data.interview_mode || null
+    }
+  } catch {
+    // Status is advisory only: interviews still work and mark their own mode.
+  }
+}
+
 watch(() => props.simulationId, (newId) => {
   if (newId) {
     loadProfiles()
+    loadInterviewStatus(newId)
   }
 }, { immediate: true })
 </script>
@@ -2092,6 +2131,22 @@ watch(() => props.simulationId, (newId) => {
 }
 
 /* Chat Input */
+.reconstructed-note {
+  margin-top: 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: #9CA3AF;
+}
+
+.interview-mode-banner {
+  margin: 0 24px 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #F3F4F6;
+  font-size: 12px;
+  color: #6B7280;
+}
+
 .chat-input-area {
   padding: 16px 24px;
   border-top: 1px solid #E5E7EB;
