@@ -1,0 +1,863 @@
+{
+  "scenario": "energy-price-cap",
+  "tape": "..\\frontend\\public\\demo\\energy-price-cap\\tape.json",
+  "agents": 11,
+  "actions": 234,
+  "content_actions": 122,
+  "provider": "cloudflare",
+  "model": "typesafe/jev",
+  "stance": {
+    "rows": [
+      {
+        "agent": "energy retail companies",
+        "jev": "neutral",
+        "jev_conf": 0.37,
+        "jev_intensity": 3,
+        "llm_report": "opposing",
+        "llm_intensity": 5,
+        "llm_config": "opposing",
+        "probabilities": {
+          "neutral": 0.53,
+          "ambivalent": 0.19,
+          "supportive": 0.01,
+          "opposing": 0.27
+        }
+      },
+      {
+        "agent": "Sainsbury's",
+        "jev": "neutral",
+        "jev_conf": 0.68,
+        "jev_intensity": 2,
+        "llm_report": "neutral",
+        "llm_intensity": 2,
+        "llm_config": "neutral",
+        "probabilities": {
+          "neutral": 0.75,
+          "ambivalent": 0.15,
+          "supportive": 0.07,
+          "opposing": 0.03
+        }
+      },
+      {
+        "agent": "MoneySavingExpert/EDF",
+        "jev": "neutral",
+        "jev_conf": 0.81,
+        "jev_intensity": 3,
+        "llm_report": "neutral",
+        "llm_intensity": 2,
+        "llm_config": "neutral",
+        "probabilities": {
+          "ambivalent": 0.1,
+          "opposing": 0.0,
+          "supportive": 0.04,
+          "neutral": 0.86
+        }
+      },
+      {
+        "agent": "British Gas",
+        "jev": "neutral",
+        "jev_conf": 0.61,
+        "jev_intensity": 2,
+        "llm_report": "opposing",
+        "llm_intensity": 3,
+        "llm_config": "opposing",
+        "probabilities": {
+          "neutral": 0.71,
+          "supportive": 0.01,
+          "ambivalent": 0.14,
+          "opposing": 0.14
+        }
+      },
+      {
+        "agent": "MoneySavingExpert",
+        "jev": "neutral",
+        "jev_conf": 0.76,
+        "jev_intensity": 3,
+        "llm_report": "neutral",
+        "llm_intensity": 2,
+        "llm_config": "neutral",
+        "probabilities": {
+          "opposing": 0.02,
+          "neutral": 0.82,
+          "ambivalent": 0.07,
+          "supportive": 0.09
+        }
+      },
+      {
+        "agent": "Drax",
+        "jev": "neutral",
+        "jev_conf": 0.91,
+        "jev_intensity": 2,
+        "llm_report": "supportive",
+        "llm_intensity": 2,
+        "llm_config": "neutral",
+        "probabilities": {
+          "neutral": 0.92,
+          "opposing": 0.03,
+          "ambivalent": 0.04,
+          "supportive": 0.01
+        }
+      },
+      {
+        "agent": "Bulb Energy",
+        "jev": "neutral",
+        "jev_conf": 0.86,
+        "jev_intensity": 2,
+        "llm_report": "opposing",
+        "llm_intensity": 4,
+        "llm_config": "opposing",
+        "probabilities": {
+          "neutral": 0.9,
+          "ambivalent": 0.06,
+          "supportive": 0.01,
+          "opposing": 0.03
+        }
+      },
+      {
+        "agent": "E.ON",
+        "jev": "neutral",
+        "jev_conf": 0.81,
+        "jev_intensity": 2,
+        "llm_report": "opposing",
+        "llm_intensity": 3,
+        "llm_config": "opposing",
+        "probabilities": {
+          "supportive": 0.01,
+          "ambivalent": 0.06,
+          "neutral": 0.85,
+          "opposing": 0.08
+        }
+      },
+      {
+        "agent": "Cornwall Insight",
+        "jev": "neutral",
+        "jev_conf": 0.95,
+        "jev_intensity": 3,
+        "llm_report": "neutral",
+        "llm_intensity": 1,
+        "llm_config": "neutral",
+        "probabilities": {
+          "ambivalent": 0.02,
+          "opposing": 0.01,
+          "neutral": 0.96,
+          "supportive": 0.01
+        }
+      },
+      {
+        "agent": "OVO",
+        "jev": "neutral",
+        "jev_conf": 0.78,
+        "jev_intensity": 2,
+        "llm_report": "opposing",
+        "llm_intensity": 3,
+        "llm_config": "opposing",
+        "probabilities": {
+          "supportive": 0.03,
+          "opposing": 0.05,
+          "neutral": 0.83,
+          "ambivalent": 0.09
+        }
+      },
+      {
+        "agent": "April 2027 forecast",
+        "jev": "neutral",
+        "jev_conf": 0.41,
+        "jev_intensity": 4,
+        "llm_report": "neutral",
+        "llm_intensity": 2,
+        "llm_config": "observer",
+        "probabilities": {
+          "supportive": 0.32,
+          "neutral": 0.55,
+          "opposing": 0.03,
+          "ambivalent": 0.1
+        }
+      }
+    ],
+    "jev_vs_llm_report": {
+      "n": 11,
+      "agree": 5,
+      "rate": 0.455
+    },
+    "jev_vs_llm_config": {
+      "n": 11,
+      "agree": 5,
+      "rate": 0.455
+    },
+    "llm_report_vs_llm_config": {
+      "n": 11,
+      "agree": 9,
+      "rate": 0.818
+    },
+    "confident_share": 0.818,
+    "jev_vs_llm_report_confident_only": {
+      "n": 9,
+      "agree": 4,
+      "rate": 0.444
+    }
+  },
+  "tool_roles": {
+    "rows": [
+      {
+        "agent": "energy retail companies",
+        "jev": "analyst",
+        "jev_conf": 0.57,
+        "llm": "none"
+      },
+      {
+        "agent": "Sainsbury's",
+        "jev": "analyst",
+        "jev_conf": 0.8,
+        "llm": "none"
+      },
+      {
+        "agent": "MoneySavingExpert/EDF",
+        "jev": "analyst",
+        "jev_conf": 0.89,
+        "llm": "none"
+      },
+      {
+        "agent": "British Gas",
+        "jev": "analyst",
+        "jev_conf": 0.4,
+        "llm": "none"
+      },
+      {
+        "agent": "MoneySavingExpert",
+        "jev": "analyst",
+        "jev_conf": 0.95,
+        "llm": "none"
+      },
+      {
+        "agent": "Drax",
+        "jev": "analyst",
+        "jev_conf": 0.93,
+        "llm": "none"
+      },
+      {
+        "agent": "Bulb Energy",
+        "jev": "analyst",
+        "jev_conf": 0.59,
+        "llm": "none"
+      },
+      {
+        "agent": "E.ON",
+        "jev": "analyst",
+        "jev_conf": 0.44,
+        "llm": "none"
+      },
+      {
+        "agent": "Cornwall Insight",
+        "jev": "analyst",
+        "jev_conf": 0.96,
+        "llm": "none"
+      },
+      {
+        "agent": "OVO",
+        "jev": "analyst",
+        "jev_conf": 0.39,
+        "llm": "none"
+      },
+      {
+        "agent": "April 2027 forecast",
+        "jev": "observer",
+        "jev_conf": 0.4,
+        "llm": "none"
+      }
+    ],
+    "jev_vs_llm": {
+      "n": 11,
+      "agree": 0,
+      "rate": 0.0
+    },
+    "jev_distribution": {
+      "analyst": 10,
+      "observer": 1
+    }
+  },
+  "risk_scores": {
+    "rows": [
+      {
+        "risk": "Supplier exits or special administration due to financial strain from price cap",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.84,
+          0.92
+        ],
+        "llm": [
+          4,
+          5
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "critical"
+      },
+      {
+        "risk": "Delayed or cancelled investment in gas-fired generation, affecting energy security",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.9,
+          0.8
+        ],
+        "llm": [
+          4,
+          4
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "critical"
+      },
+      {
+        "risk": "Tariff restructuring increases standing charges, disproportionately affecting low-consumpt",
+        "jev": [
+          5,
+          4
+        ],
+        "jev_conf": [
+          0.6,
+          0.62
+        ],
+        "llm": [
+          5,
+          3
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "high"
+      },
+      {
+        "risk": "Regulatory escalation by Ofgem may create compliance burden and uncertainty for suppliers",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.83,
+          0.76
+        ],
+        "llm": [
+          4,
+          3
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "high"
+      },
+      {
+        "risk": "Consumer switching rates surge, leading to market instability and potential supplier acqui",
+        "jev": [
+          3,
+          4
+        ],
+        "jev_conf": [
+          0.84,
+          0.79
+        ],
+        "llm": [
+          3,
+          3
+        ],
+        "jev_severity": "high",
+        "llm_severity": "moderate"
+      }
+    ],
+    "exact_pair_agreement": {
+      "n": 5,
+      "agree": 1,
+      "rate": 0.2
+    },
+    "severity_band_agreement": {
+      "n": 5,
+      "agree": 2,
+      "rate": 0.4
+    },
+    "mean_abs_diff_likelihood": 0,
+    "mean_abs_diff_impact": 0.8
+  },
+  "validity": {
+    "n_scored": 122,
+    "on_persona_mean": 0.788,
+    "on_persona_share_below_0_3": 0.0,
+    "on_persona_share_above_0_7": 0.713,
+    "per_agent_mean": {
+      "energy retail companies": 0.8,
+      "Cornwall Insight": 0.886,
+      "Sainsbury's": 0.846,
+      "MoneySavingExpert/EDF": 0.744,
+      "British Gas": 0.725,
+      "MoneySavingExpert": 0.901,
+      "Drax": 0.841,
+      "Bulb Energy": 0.629,
+      "E.ON": 0.708,
+      "April 2027 forecast": 0.72,
+      "OVO": 0.706
+    },
+    "per_type_mean": {
+      "CREATE_POST": 0.749,
+      "QUOTE_POST": 0.807,
+      "CREATE_COMMENT": 0.836
+    },
+    "quotes_scored": 24,
+    "quote_adds_new_content_mean": 0.87,
+    "quote_share_restating": 0.042,
+    "lowest": []
+  },
+  "dynamics": {
+    "windows": [
+      "r0-4",
+      "r5-6"
+    ],
+    "trajectories": {
+      "energy retail companies": {
+        "r0-4": {
+          "stance": "supportive",
+          "conf": 0.59
+        },
+        "r5-6": {
+          "stance": "ambivalent",
+          "conf": 0.37
+        }
+      },
+      "Sainsbury's": {
+        "r0-4": {
+          "stance": "neutral",
+          "conf": 0.57
+        },
+        "r5-6": {
+          "stance": "neutral",
+          "conf": 0.42
+        }
+      },
+      "MoneySavingExpert/EDF": {
+        "r0-4": {
+          "stance": "neutral",
+          "conf": 0.86
+        },
+        "r5-6": {
+          "stance": "ambivalent",
+          "conf": 0.63
+        }
+      },
+      "British Gas": {
+        "r0-4": {
+          "stance": "supportive",
+          "conf": 0.34
+        },
+        "r5-6": {
+          "stance": "neutral",
+          "conf": 0.74
+        }
+      },
+      "MoneySavingExpert": {
+        "r0-4": {
+          "stance": "neutral",
+          "conf": 0.58
+        },
+        "r5-6": {
+          "stance": "ambivalent",
+          "conf": 0.24
+        }
+      },
+      "Drax": {
+        "r0-4": {
+          "stance": "ambivalent",
+          "conf": 0.15
+        },
+        "r5-6": {
+          "stance": "opposing",
+          "conf": 0.8
+        }
+      },
+      "Bulb Energy": {
+        "r0-4": {
+          "stance": "supportive",
+          "conf": 0.4
+        },
+        "r5-6": {
+          "stance": "ambivalent",
+          "conf": 0.7
+        }
+      },
+      "E.ON": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.8
+        },
+        "r5-6": {
+          "stance": "neutral",
+          "conf": 0.84
+        }
+      },
+      "Cornwall Insight": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.82
+        },
+        "r5-6": {
+          "stance": "opposing",
+          "conf": 0.81
+        }
+      },
+      "OVO": {
+        "r0-4": {
+          "stance": "supportive",
+          "conf": 0.78
+        },
+        "r5-6": {
+          "stance": "supportive",
+          "conf": 0.64
+        }
+      },
+      "April 2027 forecast": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.79
+        },
+        "r5-6": {
+          "stance": "opposing",
+          "conf": 0.83
+        }
+      }
+    },
+    "per_window": {
+      "r0-4": {
+        "n_agents": 11,
+        "mean_p_opposing": 0.278,
+        "mean_p_supportive": 0.261,
+        "mean_uncertainty": 0.294
+      },
+      "r5-6": {
+        "n_agents": 11,
+        "mean_p_opposing": 0.282,
+        "mean_p_supportive": 0.206,
+        "mean_uncertainty": 0.272
+      }
+    },
+    "agents_whose_stance_moved": 7
+  },
+  "activation": {
+    "rounds_evaluated": 6,
+    "n_agent_rounds": 66,
+    "base_rate_acted": 0.758,
+    "jev_auc": 0.776,
+    "baseline_activity_level_auc": 0.781,
+    "jev_mean_p_when_acted": 0.74,
+    "jev_mean_p_when_idle": 0.664,
+    "jev_precision_at_0_5": 0.766,
+    "jev_recall_at_0_5": 0.98,
+    "confusion": {
+      "tp": 49,
+      "fp": 15,
+      "fn": 1,
+      "tn": 1
+    }
+  },
+  "actor_filter": {
+    "rows": [
+      {
+        "entity": "energy retail companies",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.96,
+        "label": "actor"
+      },
+      {
+        "entity": "Sainsbury's",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "MoneySavingExpert/EDF",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.98,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.99,
+        "label": "actor"
+      },
+      {
+        "entity": "British Gas",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "MoneySavingExpert",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.99,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "Drax",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "Bulb Energy",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "E.ON",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "Cornwall Insight",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.9,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.73,
+        "label": "actor"
+      },
+      {
+        "entity": "OVO",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.99,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.99,
+        "label": "actor"
+      },
+      {
+        "entity": "April 2027 forecast",
+        "jev_with_bio": "non_actor_concept",
+        "conf_with_bio": 0.8,
+        "jev_name_only": "non_actor_concept",
+        "conf_name_only": 0.78,
+        "label": "non_actor_concept"
+      }
+    ],
+    "jev_vs_hand_label_with_bio": {
+      "n": 11,
+      "agree": 11,
+      "rate": 1.0
+    },
+    "jev_vs_hand_label_name_only": {
+      "n": 11,
+      "agree": 11,
+      "rate": 1.0
+    },
+    "would_drop_as_non_actor_name_only": [
+      "April 2027 forecast"
+    ],
+    "hand_labelled_non_actors": [
+      "April 2027 forecast"
+    ]
+  },
+  "wall_seconds": 30.5,
+  "ledger": {
+    "mode": "active",
+    "provider": "cloudflare",
+    "started_at": 1790064792.5562649,
+    "elapsed_s": 30.5,
+    "prices": {
+      "jev_in_per_mtok": 0.042,
+      "llm_in_per_mtok": 0.27,
+      "llm_out_per_mtok": 1.1,
+      "note": "LLM figures are estimates from prompt/completion characters (4 chars ~ 1 token)."
+    },
+    "sites": {
+      "eval_activation": {
+        "jev_calls": 66,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 96333,
+        "jev_latency_ms": 27325.36010001786,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00404599,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 414.0,
+        "shadow_agreement_rate": null
+      },
+      "eval_actor_filter": {
+        "jev_calls": 22,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 9300,
+        "jev_latency_ms": 9032.48199999507,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.0003906,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 410.6,
+        "shadow_agreement_rate": null
+      },
+      "eval_dynamics": {
+        "jev_calls": 22,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 16268,
+        "jev_latency_ms": 6899.8132000124315,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00068326,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 313.6,
+        "shadow_agreement_rate": null
+      },
+      "eval_risk_scores": {
+        "jev_calls": 5,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 3613,
+        "jev_latency_ms": 1619.4742000079714,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00015175,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 323.9,
+        "shadow_agreement_rate": null
+      },
+      "eval_stance": {
+        "jev_calls": 11,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 8095,
+        "jev_latency_ms": 7450.360799994087,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00033999,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 677.3,
+        "shadow_agreement_rate": null
+      },
+      "eval_tool_roles": {
+        "jev_calls": 11,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 5524,
+        "jev_latency_ms": 3601.539999996021,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00023201,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 327.4,
+        "shadow_agreement_rate": null
+      },
+      "eval_validity": {
+        "jev_calls": 122,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 59229,
+        "jev_latency_ms": 53898.206600038975,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00248762,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 441.8,
+        "shadow_agreement_rate": null
+      }
+    },
+    "totals": {
+      "jev_calls": 259,
+      "jev_failed_calls": 0,
+      "jev_input_tokens": 198362,
+      "jev_latency_ms": 109827.23690006242,
+      "items_total": 0,
+      "items_jev_confident": 0,
+      "items_jev_low_confidence": 0,
+      "items_jev_failed": 0,
+      "items_llm": 0,
+      "llm_calls": 0,
+      "llm_prompt_chars": 0,
+      "llm_completion_chars": 0,
+      "shadow_compared": 0,
+      "shadow_agreed": 0,
+      "jev_cost_usd": 0.0083312,
+      "llm_cost_usd_est": 0.0,
+      "llm_cost_avoided_usd_est": null,
+      "jev_confident_rate": null,
+      "jev_mean_latency_ms": 424.0,
+      "shadow_agreement_rate": null
+    }
+  },
+  "llm_equivalent": {
+    "note": "characters/4 ~ tokens; LLM prices from Config.JEV_LLM_PRICE_*",
+    "batched_3_decisions_usd_est": 0.001343,
+    "same_calls_on_llm_usd_est": 0.070652,
+    "jev_actual_usd": 0.008331,
+    "jev_vs_same_calls_on_llm_ratio": 8.5
+  }
+}

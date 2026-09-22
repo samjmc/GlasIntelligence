@@ -1,0 +1,855 @@
+{
+  "scenario": "pharmacy-first-caps",
+  "tape": "..\\frontend\\public\\demo\\pharmacy-first-caps\\tape.json",
+  "agents": 8,
+  "actions": 444,
+  "content_actions": 152,
+  "provider": "cloudflare",
+  "model": "typesafe/jev",
+  "stance": {
+    "rows": [
+      {
+        "agent": "Pharmacy First",
+        "jev": "neutral",
+        "jev_conf": 0.93,
+        "jev_intensity": 2,
+        "llm_report": "supportive",
+        "llm_intensity": 4,
+        "llm_config": "supportive",
+        "probabilities": {
+          "neutral": 0.95,
+          "supportive": 0.01,
+          "opposing": 0.02,
+          "ambivalent": 0.02
+        }
+      },
+      {
+        "agent": "Pre-registration Trainee Pharmacy Technician",
+        "jev": "neutral",
+        "jev_conf": 0.51,
+        "jev_intensity": 2,
+        "llm_report": "opposing",
+        "llm_intensity": 4,
+        "llm_config": "neutral",
+        "probabilities": {
+          "ambivalent": 0.05,
+          "opposing": 0.31,
+          "supportive": 0.01,
+          "neutral": 0.63
+        }
+      },
+      {
+        "agent": "All newly qualified pharmacists",
+        "jev": "opposing",
+        "jev_conf": 0.96,
+        "jev_intensity": 5,
+        "llm_report": "opposing",
+        "llm_intensity": 5,
+        "llm_config": "opposing",
+        "probabilities": {
+          "neutral": 0.03,
+          "ambivalent": 0.0,
+          "supportive": 0.0,
+          "opposing": 0.97
+        }
+      },
+      {
+        "agent": "Remote Pharmacist",
+        "jev": "neutral",
+        "jev_conf": 0.94,
+        "jev_intensity": 3,
+        "llm_report": "neutral",
+        "llm_intensity": 2,
+        "llm_config": "opposing",
+        "probabilities": {
+          "neutral": 0.95,
+          "ambivalent": 0.02,
+          "supportive": 0.0,
+          "opposing": 0.03
+        }
+      },
+      {
+        "agent": "NHSBSA",
+        "jev": "neutral",
+        "jev_conf": 0.96,
+        "jev_intensity": 2,
+        "llm_report": "supportive",
+        "llm_intensity": 3,
+        "llm_config": "neutral",
+        "probabilities": {
+          "opposing": 0.0,
+          "supportive": 0.01,
+          "neutral": 0.98,
+          "ambivalent": 0.01
+        }
+      },
+      {
+        "agent": "independent prescribing",
+        "jev": "neutral",
+        "jev_conf": 0.55,
+        "jev_intensity": 3,
+        "llm_report": "opposing",
+        "llm_intensity": 4,
+        "llm_config": "supportive",
+        "probabilities": {
+          "neutral": 0.65,
+          "ambivalent": 0.21,
+          "supportive": 0.01,
+          "opposing": 0.13
+        }
+      },
+      {
+        "agent": "Pharmacy First consultations",
+        "jev": "neutral",
+        "jev_conf": 0.9,
+        "jev_intensity": 3,
+        "llm_report": "ambivalent",
+        "llm_intensity": 3,
+        "llm_config": "opposing",
+        "probabilities": {
+          "neutral": 0.93,
+          "ambivalent": 0.04,
+          "supportive": 0.01,
+          "opposing": 0.02
+        }
+      },
+      {
+        "agent": "2026/27 CPCF funding",
+        "jev": "neutral",
+        "jev_conf": 0.84,
+        "jev_intensity": 4,
+        "llm_report": "opposing",
+        "llm_intensity": 3,
+        "llm_config": "neutral",
+        "probabilities": {
+          "supportive": 0.01,
+          "neutral": 0.88,
+          "opposing": 0.08,
+          "ambivalent": 0.03
+        }
+      }
+    ],
+    "jev_vs_llm_report": {
+      "n": 8,
+      "agree": 2,
+      "rate": 0.25
+    },
+    "jev_vs_llm_config": {
+      "n": 8,
+      "agree": 4,
+      "rate": 0.5
+    },
+    "llm_report_vs_llm_config": {
+      "n": 8,
+      "agree": 2,
+      "rate": 0.25
+    },
+    "confident_share": 0.75,
+    "jev_vs_llm_report_confident_only": {
+      "n": 6,
+      "agree": 2,
+      "rate": 0.333
+    }
+  },
+  "tool_roles": {
+    "rows": [
+      {
+        "agent": "Pharmacy First",
+        "jev": "analyst",
+        "jev_conf": 0.91,
+        "llm": "none"
+      },
+      {
+        "agent": "Pre-registration Trainee Pharmacy Technician",
+        "jev": "analyst",
+        "jev_conf": 0.85,
+        "llm": "none"
+      },
+      {
+        "agent": "All newly qualified pharmacists",
+        "jev": "analyst",
+        "jev_conf": 0.58,
+        "llm": "none"
+      },
+      {
+        "agent": "Remote Pharmacist",
+        "jev": "analyst",
+        "jev_conf": 0.99,
+        "llm": "none"
+      },
+      {
+        "agent": "NHSBSA",
+        "jev": "analyst",
+        "jev_conf": 0.87,
+        "llm": "none"
+      },
+      {
+        "agent": "independent prescribing",
+        "jev": "analyst",
+        "jev_conf": 0.67,
+        "llm": "none"
+      },
+      {
+        "agent": "Pharmacy First consultations",
+        "jev": "analyst",
+        "jev_conf": 0.62,
+        "llm": "none"
+      },
+      {
+        "agent": "2026/27 CPCF funding",
+        "jev": "analyst",
+        "jev_conf": 0.74,
+        "llm": "none"
+      }
+    ],
+    "jev_vs_llm": {
+      "n": 8,
+      "agree": 0,
+      "rate": 0.0
+    },
+    "jev_distribution": {
+      "analyst": 8
+    }
+  },
+  "risk_scores": {
+    "rows": [
+      {
+        "risk": "Reduced participation by pharmacy multiples in Pharmacy First, leading to decreased patien",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.91,
+          0.74
+        ],
+        "llm": [
+          4,
+          4
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "critical"
+      },
+      {
+        "risk": "Increased closure rate among independent pharmacies, exacerbating pharmacy deserts and red",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.74,
+          0.91
+        ],
+        "llm": [
+          3,
+          4
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "high"
+      },
+      {
+        "risk": "Policy escalation or revision of payment caps may create uncertainty and administrative bu",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.79,
+          0.82
+        ],
+        "llm": [
+          4,
+          3
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "high"
+      },
+      {
+        "risk": "Increased workforce attrition among pharmacists and technicians, leading to staffing short",
+        "jev": [
+          3,
+          4
+        ],
+        "jev_conf": [
+          0.84,
+          0.74
+        ],
+        "llm": [
+          3,
+          4
+        ],
+        "jev_severity": "high",
+        "llm_severity": "high"
+      },
+      {
+        "risk": "Shift of minor condition consultations from pharmacies to GP practices, increasing GP work",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.66,
+          0.67
+        ],
+        "llm": [
+          3,
+          3
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "moderate"
+      },
+      {
+        "risk": "Patient dissatisfaction and potential health deterioration due to reduced access to timely",
+        "jev": [
+          4,
+          4
+        ],
+        "jev_conf": [
+          0.87,
+          0.84
+        ],
+        "llm": [
+          3,
+          3
+        ],
+        "jev_severity": "critical",
+        "llm_severity": "moderate"
+      }
+    ],
+    "exact_pair_agreement": {
+      "n": 6,
+      "agree": 2,
+      "rate": 0.333
+    },
+    "severity_band_agreement": {
+      "n": 6,
+      "agree": 2,
+      "rate": 0.333
+    },
+    "mean_abs_diff_likelihood": 0.5,
+    "mean_abs_diff_impact": 0.5
+  },
+  "validity": {
+    "n_scored": 152,
+    "on_persona_mean": 0.831,
+    "on_persona_share_below_0_3": 0.0,
+    "on_persona_share_above_0_7": 0.947,
+    "per_agent_mean": {
+      "Pharmacy First": 0.805,
+      "Remote Pharmacist": 0.787,
+      "independent prescribing": 0.861,
+      "Pharmacy First consultations": 0.831,
+      "Pre-registration Trainee Pharmacy Technician": 0.817,
+      "NHSBSA": 0.891,
+      "2026/27 CPCF funding": 0.791,
+      "All newly qualified pharmacists": 0.895
+    },
+    "per_type_mean": {
+      "CREATE_POST": 0.809,
+      "QUOTE_POST": 0.863,
+      "CREATE_COMMENT": 0.847
+    },
+    "quotes_scored": 20,
+    "quote_adds_new_content_mean": 0.883,
+    "quote_share_restating": 0.05,
+    "lowest": []
+  },
+  "dynamics": {
+    "windows": [
+      "r0-4",
+      "r5-9",
+      "r10-14",
+      "r15-19",
+      "r20-24"
+    ],
+    "trajectories": {
+      "Pharmacy First": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.96
+        },
+        "r5-9": {
+          "stance": "supportive",
+          "conf": 0.39
+        },
+        "r10-14": {
+          "stance": "supportive",
+          "conf": 0.76
+        },
+        "r15-19": {
+          "stance": "neutral",
+          "conf": 0.9
+        },
+        "r20-24": {
+          "stance": "supportive",
+          "conf": 0.5
+        }
+      },
+      "Pre-registration Trainee Pharmacy Technician": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.98
+        },
+        "r5-9": {
+          "stance": "neutral",
+          "conf": 0.58
+        },
+        "r10-14": {
+          "stance": "opposing",
+          "conf": 0.99
+        }
+      },
+      "All newly qualified pharmacists": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 1.0
+        },
+        "r5-9": {
+          "stance": "opposing",
+          "conf": 0.95
+        },
+        "r10-14": {
+          "stance": "opposing",
+          "conf": 0.99
+        },
+        "r15-19": {
+          "stance": "opposing",
+          "conf": 0.99
+        }
+      },
+      "Remote Pharmacist": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.96
+        },
+        "r5-9": {
+          "stance": "opposing",
+          "conf": 0.93
+        },
+        "r15-19": {
+          "stance": "opposing",
+          "conf": 0.78
+        },
+        "r20-24": {
+          "stance": "opposing",
+          "conf": 1.0
+        }
+      },
+      "NHSBSA": {
+        "r0-4": {
+          "stance": "neutral",
+          "conf": 0.97
+        },
+        "r5-9": {
+          "stance": "neutral",
+          "conf": 0.93
+        },
+        "r10-14": {
+          "stance": "neutral",
+          "conf": 0.96
+        },
+        "r15-19": {
+          "stance": "neutral",
+          "conf": 0.99
+        },
+        "r20-24": {
+          "stance": "neutral",
+          "conf": 1.0
+        }
+      },
+      "independent prescribing": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 0.99
+        },
+        "r5-9": {
+          "stance": "opposing",
+          "conf": 0.99
+        },
+        "r10-14": {
+          "stance": "opposing",
+          "conf": 1.0
+        },
+        "r15-19": {
+          "stance": "opposing",
+          "conf": 0.99
+        }
+      },
+      "Pharmacy First consultations": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 1.0
+        },
+        "r10-14": {
+          "stance": "opposing",
+          "conf": 1.0
+        },
+        "r15-19": {
+          "stance": "opposing",
+          "conf": 0.97
+        },
+        "r20-24": {
+          "stance": "opposing",
+          "conf": 1.0
+        }
+      },
+      "2026/27 CPCF funding": {
+        "r0-4": {
+          "stance": "opposing",
+          "conf": 1.0
+        },
+        "r5-9": {
+          "stance": "opposing",
+          "conf": 0.98
+        },
+        "r10-14": {
+          "stance": "opposing",
+          "conf": 1.0
+        },
+        "r15-19": {
+          "stance": "opposing",
+          "conf": 0.99
+        },
+        "r20-24": {
+          "stance": "opposing",
+          "conf": 0.95
+        }
+      }
+    },
+    "per_window": {
+      "r0-4": {
+        "n_agents": 8,
+        "mean_p_opposing": 0.867,
+        "mean_p_supportive": 0.006,
+        "mean_uncertainty": 0.01
+      },
+      "r5-9": {
+        "n_agents": 7,
+        "mean_p_opposing": 0.601,
+        "mean_p_supportive": 0.093,
+        "mean_uncertainty": 0.133
+      },
+      "r10-14": {
+        "n_agents": 7,
+        "mean_p_opposing": 0.711,
+        "mean_p_supportive": 0.124,
+        "mean_uncertainty": 0.033
+      },
+      "r15-19": {
+        "n_agents": 7,
+        "mean_p_opposing": 0.689,
+        "mean_p_supportive": 0.036,
+        "mean_uncertainty": 0.037
+      },
+      "r20-24": {
+        "n_agents": 5,
+        "mean_p_opposing": 0.592,
+        "mean_p_supportive": 0.126,
+        "mean_uncertainty": 0.082
+      }
+    },
+    "agents_whose_stance_moved": 2
+  },
+  "activation": {
+    "rounds_evaluated": 24,
+    "n_agent_rounds": 189,
+    "base_rate_acted": 0.64,
+    "jev_auc": 0.478,
+    "baseline_activity_level_auc": 0.716,
+    "jev_mean_p_when_acted": 0.749,
+    "jev_mean_p_when_idle": 0.751,
+    "jev_precision_at_0_5": 0.636,
+    "jev_recall_at_0_5": 0.983,
+    "confusion": {
+      "tp": 119,
+      "fp": 68,
+      "fn": 2,
+      "tn": 0
+    }
+  },
+  "actor_filter": {
+    "rows": [
+      {
+        "entity": "Pharmacy First",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.74,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.95,
+        "label": "actor"
+      },
+      {
+        "entity": "Pre-registration Trainee Pharmacy Technician",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.98,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.91,
+        "label": "actor"
+      },
+      {
+        "entity": "All newly qualified pharmacists",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.99,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.96,
+        "label": "actor"
+      },
+      {
+        "entity": "Remote Pharmacist",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 0.82,
+        "jev_name_only": "actor",
+        "conf_name_only": 0.59,
+        "label": "actor"
+      },
+      {
+        "entity": "NHSBSA",
+        "jev_with_bio": "actor",
+        "conf_with_bio": 1.0,
+        "jev_name_only": "actor",
+        "conf_name_only": 1.0,
+        "label": "actor"
+      },
+      {
+        "entity": "independent prescribing",
+        "jev_with_bio": "non_actor_concept",
+        "conf_with_bio": 0.83,
+        "jev_name_only": "non_actor_concept",
+        "conf_name_only": 0.76,
+        "label": "non_actor_concept"
+      },
+      {
+        "entity": "Pharmacy First consultations",
+        "jev_with_bio": "non_actor_concept",
+        "conf_with_bio": 0.72,
+        "jev_name_only": "non_actor_concept",
+        "conf_name_only": 0.79,
+        "label": "non_actor_concept"
+      },
+      {
+        "entity": "2026/27 CPCF funding",
+        "jev_with_bio": "non_actor_concept",
+        "conf_with_bio": 0.84,
+        "jev_name_only": "non_actor_concept",
+        "conf_name_only": 0.58,
+        "label": "non_actor_concept"
+      }
+    ],
+    "jev_vs_hand_label_with_bio": {
+      "n": 8,
+      "agree": 8,
+      "rate": 1.0
+    },
+    "jev_vs_hand_label_name_only": {
+      "n": 8,
+      "agree": 8,
+      "rate": 1.0
+    },
+    "would_drop_as_non_actor_name_only": [
+      "independent prescribing",
+      "Pharmacy First consultations"
+    ],
+    "hand_labelled_non_actors": [
+      "independent prescribing",
+      "Pharmacy First consultations",
+      "2026/27 CPCF funding"
+    ]
+  },
+  "wall_seconds": 64.3,
+  "ledger": {
+    "mode": "active",
+    "provider": "cloudflare",
+    "started_at": 1790064728.1936717,
+    "elapsed_s": 64.3,
+    "prices": {
+      "jev_in_per_mtok": 0.042,
+      "llm_in_per_mtok": 0.27,
+      "llm_out_per_mtok": 1.1,
+      "note": "LLM figures are estimates from prompt/completion characters (4 chars ~ 1 token)."
+    },
+    "sites": {
+      "eval_activation": {
+        "jev_calls": 192,
+        "jev_failed_calls": 3,
+        "jev_input_tokens": 287742,
+        "jev_latency_ms": 170005.04909991287,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.01208516,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 885.4,
+        "shadow_agreement_rate": null
+      },
+      "eval_actor_filter": {
+        "jev_calls": 16,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 6809,
+        "jev_latency_ms": 6253.3399000094505,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00028598,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 390.8,
+        "shadow_agreement_rate": null
+      },
+      "eval_dynamics": {
+        "jev_calls": 34,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 25352,
+        "jev_latency_ms": 12000.057500008552,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00106478,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 352.9,
+        "shadow_agreement_rate": null
+      },
+      "eval_risk_scores": {
+        "jev_calls": 6,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 4362,
+        "jev_latency_ms": 1924.9079000001075,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.0001832,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 320.8,
+        "shadow_agreement_rate": null
+      },
+      "eval_stance": {
+        "jev_calls": 8,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 5635,
+        "jev_latency_ms": 5708.888199987996,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00023667,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 713.6,
+        "shadow_agreement_rate": null
+      },
+      "eval_tool_roles": {
+        "jev_calls": 8,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 3947,
+        "jev_latency_ms": 2591.201799994451,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00016577,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 323.9,
+        "shadow_agreement_rate": null
+      },
+      "eval_validity": {
+        "jev_calls": 152,
+        "jev_failed_calls": 0,
+        "jev_input_tokens": 81579,
+        "jev_latency_ms": 49880.19390001136,
+        "items_total": 0,
+        "items_jev_confident": 0,
+        "items_jev_low_confidence": 0,
+        "items_jev_failed": 0,
+        "items_llm": 0,
+        "llm_calls": 0,
+        "llm_prompt_chars": 0,
+        "llm_completion_chars": 0,
+        "shadow_compared": 0,
+        "shadow_agreed": 0,
+        "jev_cost_usd": 0.00342632,
+        "llm_cost_usd_est": 0.0,
+        "llm_cost_avoided_usd_est": null,
+        "jev_confident_rate": null,
+        "jev_mean_latency_ms": 328.2,
+        "shadow_agreement_rate": null
+      }
+    },
+    "totals": {
+      "jev_calls": 416,
+      "jev_failed_calls": 3,
+      "jev_input_tokens": 415426,
+      "jev_latency_ms": 248363.6382999248,
+      "items_total": 0,
+      "items_jev_confident": 0,
+      "items_jev_low_confidence": 0,
+      "items_jev_failed": 0,
+      "items_llm": 0,
+      "llm_calls": 0,
+      "llm_prompt_chars": 0,
+      "llm_completion_chars": 0,
+      "shadow_compared": 0,
+      "shadow_agreed": 0,
+      "jev_cost_usd": 0.01744789,
+      "llm_cost_usd_est": 0.0,
+      "llm_cost_avoided_usd_est": null,
+      "jev_confident_rate": null,
+      "jev_mean_latency_ms": 597.0,
+      "shadow_agreement_rate": null
+    }
+  },
+  "llm_equivalent": {
+    "note": "characters/4 ~ tokens; LLM prices from Config.JEV_LLM_PRICE_*",
+    "batched_3_decisions_usd_est": 0.001118,
+    "same_calls_on_llm_usd_est": 0.139621,
+    "jev_actual_usd": 0.017448,
+    "jev_vs_same_calls_on_llm_ratio": 8.0
+  }
+}

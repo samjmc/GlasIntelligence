@@ -22,6 +22,7 @@ from ..config import Config
 from ..utils.logger import get_logger
 from .zep_graph_memory_updater import ZepGraphMemoryManager
 from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
+from .jev_simulation_gates import read_validity_alert
 
 logger = get_logger('glas.simulation_runner')
 
@@ -142,10 +143,13 @@ class SimulationRunState:
     
     # Error information
     error: Optional[str] = None
-    
+
     # Process ID (for stopping)
     process_pid: Optional[int] = None
-    
+
+    # Jev post-validity alert (reason text) surfaced from <sim_dir>/jev_validity_alert.json; informational only
+    validity_alert: Optional[str] = None
+
     def add_action(self, action: AgentAction):
         """Add action to recent actions list"""
         self.recent_actions.insert(0, action)
@@ -185,8 +189,9 @@ class SimulationRunState:
             "completed_at": self.completed_at,
             "error": self.error,
             "process_pid": self.process_pid,
+            "validity_alert": self.validity_alert,
         }
-    
+
     def to_detail_dict(self) -> Dict[str, Any]:
         """Detailed information including recent actions"""
         result = self.to_dict()
@@ -275,6 +280,7 @@ class SimulationRunner:
                 completed_at=data.get("completed_at"),
                 error=data.get("error"),
                 process_pid=data.get("process_pid"),
+                validity_alert=data.get("validity_alert"),
             )
             
             # Load recent actions
@@ -514,15 +520,19 @@ class SimulationRunner:
                         reddit_actions_log, reddit_position, state, "reddit"
                     )
                 
+                # Surface the Jev post-validity alert, if the run has raised one (never stops the run)
+                cls._apply_validity_alert(state, sim_dir)
+
                 # Update state
                 cls._save_run_state(state)
                 time.sleep(2)
-            
+
             # After process ends, read logs one final time
             if os.path.exists(twitter_actions_log):
                 cls._read_action_log(twitter_actions_log, twitter_position, state, "twitter")
             if os.path.exists(reddit_actions_log):
                 cls._read_action_log(reddit_actions_log, reddit_position, state, "reddit")
+            cls._apply_validity_alert(state, sim_dir)
             
             # Process ended
             exit_code = process.returncode
@@ -584,10 +594,20 @@ class SimulationRunner:
                 cls._stderr_files.pop(simulation_id, None)
     
     @classmethod
+    def _apply_validity_alert(cls, state: SimulationRunState, sim_dir: str) -> None:
+        """Copy the Jev validity alert (if the subprocess wrote one) onto the run state."""
+        if state.validity_alert:
+            return
+        alert = read_validity_alert(sim_dir)
+        if alert:
+            state.validity_alert = alert
+            logger.warning(f"Simulation {state.simulation_id}: Jev validity alert - {alert}")
+
+    @classmethod
     def _read_action_log(
-        cls, 
-        log_path: str, 
-        position: int, 
+        cls,
+        log_path: str,
+        position: int,
         state: SimulationRunState,
         platform: str
     ) -> int:

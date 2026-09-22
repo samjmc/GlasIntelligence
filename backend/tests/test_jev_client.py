@@ -8,10 +8,11 @@ from app.utils.jev_client import JevClient, JevError
 
 
 class _Resp:
-    def __init__(self, status: int, payload=None, text: str = ""):
+    def __init__(self, status: int, payload=None, text: str = "", headers: dict | None = None):
         self.status_code = status
         self._payload = payload
         self.text = text
+        self.headers = headers or {}
 
     def json(self):
         return self._payload
@@ -189,10 +190,31 @@ def test_401_is_not_retried():
 
 
 def test_retries_exhausted_raise():
-    client, session = _client(responses=[_Resp(529), _Resp(529), _Resp(529)])
-    with pytest.raises(JevError, match="after 3 attempts"):
+    client, session = _client(responses=[_Resp(529)] * jc._MAX_ATTEMPTS)
+    with pytest.raises(JevError, match=f"after {jc._MAX_ATTEMPTS} attempts"):
         client.evaluate("s", {"q": JevClient.noul_q("i")})
-    assert len(session.calls) == 3
+    assert len(session.calls) == jc._MAX_ATTEMPTS
+
+
+def test_retry_honours_retry_after_header(monkeypatch):
+    slept: list[float] = []
+    monkeypatch.setattr(jc.time, "sleep", slept.append)
+    client, session = _client(
+        responses=[_Resp(429, text="slow", headers={"Retry-After": "3"}), _Resp(200, {"answers": {"q": NOUL}})]
+    )
+    client.evaluate("s", {"q": JevClient.noul_q("i")})
+    assert len(session.calls) == 2
+    assert slept == [3.0]
+
+
+def test_retry_backoff_grows_and_is_capped(monkeypatch):
+    slept: list[float] = []
+    monkeypatch.setattr(jc.time, "sleep", slept.append)
+    client, _ = _client(responses=[_Resp(503)] * (jc._MAX_ATTEMPTS - 1) + [_Resp(200, {"answers": {"q": NOUL}})])
+    client.evaluate("s", {"q": JevClient.noul_q("i")})
+    assert len(slept) == jc._MAX_ATTEMPTS - 1
+    assert all(b > a for a, b in zip(slept, slept[1:], strict=False))  # grows
+    assert max(slept) <= jc._BACKOFF_CAP_SECONDS + 0.25
 
 
 # ---------------------------------------------------------------- evaluate_many
@@ -225,28 +247,60 @@ def test_evaluate_many_empty():
 # ---------------------------------------------------------------- config gating
 
 
-def test_from_config_none_when_disabled(monkeypatch):
-    monkeypatch.setattr(app_config.Config, "JEV_ENABLED", False)
+def test_from_config_none_when_mode_off(monkeypatch):
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "off")
     monkeypatch.setattr(app_config.Config, "JEV_API_KEY", "k")
     assert JevClient.from_config() is None
 
 
 def test_from_config_none_without_key(monkeypatch):
-    monkeypatch.setattr(app_config.Config, "JEV_ENABLED", True)
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "active")
     monkeypatch.setattr(app_config.Config, "JEV_API_KEY", "")
     assert JevClient.from_config() is None
 
 
 def test_from_config_none_for_cloudflare_without_account(monkeypatch):
-    monkeypatch.setattr(app_config.Config, "JEV_ENABLED", True)
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "active")
     monkeypatch.setattr(app_config.Config, "JEV_API_KEY", "k")
     monkeypatch.setattr(app_config.Config, "JEV_PROVIDER", "cloudflare")
     monkeypatch.setattr(app_config.Config, "CLOUDFLARE_ACCOUNT_ID", "")
     assert JevClient.from_config() is None
 
 
+def test_from_config_shadow_mode_still_builds_client(monkeypatch):
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "shadow")
+    monkeypatch.setattr(app_config.Config, "JEV_API_KEY", "k")
+    monkeypatch.setattr(app_config.Config, "JEV_PROVIDER", "typesafe")
+    monkeypatch.setattr(app_config.Config, "JEV_MODEL", "")
+    monkeypatch.setattr(app_config.Config, "JEV_BASE_URL", "")
+    assert JevClient.from_config() is not None
+
+
+def test_evaluate_records_tokens_and_latency_in_ledger():
+    from app.utils.jev_metrics import LEDGER
+
+    LEDGER.reset()
+    client, _ = _client(responses=[_Resp(200, {"answers": {"q": CHOICE}, "usage": {"input_tokens": 312}})])
+    client.evaluate("s", {"q": JevClient.choice_q("i", {"billing": ""})}, site="unit")
+    site = LEDGER.summary()["sites"]["unit"]
+    assert (site["jev_calls"], site["jev_input_tokens"], site["jev_failed_calls"]) == (1, 312, 0)
+    assert site["jev_cost_usd"] == pytest.approx(312 * app_config.Config.JEV_PRICE_IN_PER_MTOK / 1e6, rel=1e-3)
+    LEDGER.reset()
+
+
+def test_evaluate_failure_recorded_in_ledger():
+    from app.utils.jev_metrics import LEDGER
+
+    LEDGER.reset()
+    client, _ = _client(responses=[_Resp(401, text="bad key")])
+    with pytest.raises(JevError):
+        client.evaluate("s", {"q": JevClient.noul_q("i")}, site="unit")
+    assert LEDGER.summary()["sites"]["unit"]["jev_failed_calls"] == 1
+    LEDGER.reset()
+
+
 def test_from_config_builds_provider_client(monkeypatch):
-    monkeypatch.setattr(app_config.Config, "JEV_ENABLED", True)
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "active")
     monkeypatch.setattr(app_config.Config, "JEV_API_KEY", "k")
     monkeypatch.setattr(app_config.Config, "JEV_PROVIDER", "vercel")
     monkeypatch.setattr(app_config.Config, "JEV_MODEL", "")

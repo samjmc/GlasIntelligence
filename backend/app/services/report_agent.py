@@ -29,6 +29,7 @@ from .zep_tools import (
     InterviewResult
 )
 from .quantitative_analysis_service import QuantitativeAnalysisService
+from .jev_report_gates import SectionGateState, section_rejection_hint
 from .report_payload import (
     REPORT_DISCLAIMER_MD,
     build_report_payload_v1,
@@ -1113,6 +1114,23 @@ class ReportAgent:
             return "[Required] You must call estimate_risks before finishing this section."
         return None
 
+    def _jev_section_rejection(
+        self,
+        section: ReportSection,
+        content: str,
+        previous_sections: List[str],
+        gate_state: SectionGateState,
+    ) -> Optional[str]:
+        """Jev acceptance gates (repetition, numbers-from-evidence). None = accept. Never raises."""
+        evidence = "\n\n".join(f"[{name}]\n{text}" for name, text in self._quant_tool_cache.items())
+        return section_rejection_hint(
+            section_role=section.role,
+            content=content,
+            previous_sections=previous_sections,
+            evidence=evidence,
+            state=gate_state,
+        )
+
     def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
         """
         Execute a tool call
@@ -1569,6 +1587,7 @@ class ReportAgent:
             all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
         conflict_retries = 0  # Consecutive conflicts where tool call and Final Answer appear together
         used_tools = set()  # Track tool names already called
+        jev_gate_state = SectionGateState()  # Jev acceptance gates: each may reject at most once per section
 
         # Report context, used for InsightForge sub-question generation
         report_context = f"Section title: {section.title}\nSimulation requirement: {self.simulation_requirement}"
@@ -1686,6 +1705,11 @@ class ReportAgent:
 
                 # Normal completion
                 final_answer = response.split("Final Answer:")[-1].strip()
+                jev_hint = self._jev_section_rejection(section, final_answer, previous_sections, jev_gate_state)
+                if jev_hint:
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({"role": "user", "content": jev_hint})
+                    continue
                 logger.info(f"Section {section.title} generation complete (tool calls: {tool_calls_count})")
 
                 if self.report_logger:
@@ -1794,8 +1818,13 @@ class ReportAgent:
                 messages.append({"role": "user", "content": REACT_MISSING_QUANT_MSG})
                 continue
 
-            logger.info(f"Section {section.title} no 'Final Answer:' prefix detected, adopting LLM output as final content (tool calls: {tool_calls_count})")
             final_answer = response.strip()
+            jev_hint = self._jev_section_rejection(section, final_answer, previous_sections, jev_gate_state)
+            if jev_hint:
+                messages.append({"role": "user", "content": jev_hint})
+                continue
+
+            logger.info(f"Section {section.title} no 'Final Answer:' prefix detected, adopting LLM output as final content (tool calls: {tool_calls_count})")
 
             if self.report_logger:
                 self.report_logger.log_section_content(

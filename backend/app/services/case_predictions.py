@@ -10,7 +10,9 @@ prediction recording must never break or delay the report flow.
 from datetime import datetime
 from typing import Any, cast
 
+from ..utils.jev_client import JevClient
 from ..utils.logger import get_logger
+from .forecast_features import compute_forecast_features
 from .report_agent import ReportManager
 from .supabase_client import SupabaseDB
 
@@ -55,17 +57,21 @@ def predictions_from_payload(payload: dict, simulation_id: str) -> list[dict]:
                 "case_id": simulation_id,
                 "dimension": name,
                 "predicted_score": predicted_score,
-                "rationale": (
-                    f"probability range low/mid/high: {_fmt(low)}/{_fmt(mid)}/{_fmt(high)} (percent)"
-                ),
+                "rationale": (f"probability range low/mid/high: {_fmt(low)}/{_fmt(mid)}/{_fmt(high)} (percent)"),
             }
         )
     return rows
 
 
 def record_case_predictions(simulation_id: str, payload: dict) -> None:
-    """Insert missing and update changed (case_id, dimension) prediction rows."""
+    """Insert missing and update changed (case_id, dimension) prediction rows.
+
+    Outcome rows come from the scenario probabilities; ``feature:`` rows are
+    Jev's decomposed evidence signals (empty when Jev is off, so behaviour is
+    then identical to the outcome-only ledger).
+    """
     predictions = predictions_from_payload(payload, simulation_id)
+    predictions += compute_forecast_features(payload, JevClient.from_config(), case_id=simulation_id)
     if not predictions:
         return
     try:

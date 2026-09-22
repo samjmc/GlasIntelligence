@@ -374,6 +374,24 @@ class Config:
         8,
         env_key="JEV_MAX_WORKERS",
     )
+    # off | shadow | active.  shadow = run Jev AND the LLM on every item, record
+    # agreement in the metrics ledger, but keep using the LLM's answer — the safe
+    # way to measure a new gate before trusting it.  JEV_ENABLED=true is an alias
+    # for active when JEV_MODE is not set.
+    JEV_MODE = (os.environ.get("JEV_MODE") or ("active" if JEV_ENABLED else "off")).lower()
+    # Comma-separated gate names (see utils/jev_gate.py call sites) to force back to
+    # the pure-LLM path while the rest stay on JEV_MODE.
+    JEV_DISABLED_SITES = frozenset(s.strip() for s in os.environ.get("JEV_DISABLED_SITES", "").split(",") if s.strip())
+    # Reference prices (USD per million tokens) used ONLY to estimate spend in the
+    # Jev metrics ledger.  LLM defaults are DeepSeek chat list prices; Jev is the
+    # published input price with free output.
+    JEV_LLM_PRICE_IN_PER_MTOK = _safe_float(
+        os.environ.get("JEV_LLM_PRICE_IN_PER_MTOK", "0.27"), 0.27, env_key="JEV_LLM_PRICE_IN_PER_MTOK"
+    )
+    JEV_LLM_PRICE_OUT_PER_MTOK = _safe_float(
+        os.environ.get("JEV_LLM_PRICE_OUT_PER_MTOK", "1.10"), 1.10, env_key="JEV_LLM_PRICE_OUT_PER_MTOK"
+    )
+    JEV_PRICE_IN_PER_MTOK = _safe_float(os.environ.get("JEV_PRICE_IN_PER_MTOK", "0.042"), 0.042, env_key="JEV_PRICE_IN_PER_MTOK")
 
     # Multi-scenario bundle executive synthesis (reports + LLM merge + branch weights)
     ENABLE_BUNDLE_SYNTHESIS = os.environ.get("ENABLE_BUNDLE_SYNTHESIS", "true").lower() in (

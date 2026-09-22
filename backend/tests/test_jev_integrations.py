@@ -13,6 +13,7 @@ from app import config as app_config
 from app.services import simulation_tools as st
 from app.services.quantitative_analysis_service import QuantitativeAnalysisService
 from app.utils.jev_client import JevAnswer, JevClient
+from app.utils.jev_metrics import LEDGER
 
 
 class FakeJev:
@@ -21,16 +22,28 @@ class FakeJev:
     def __init__(self, answers):
         self.answers = answers
         self.items = None
+        self.site = None
 
-    def evaluate_many(self, items, max_workers=None):
+    def evaluate_many(self, items, max_workers=None, *, site="unlabelled"):
         self.items = items
+        self.site = site
         assert len(items) == len(self.answers), "test script must cover every item"
         return self.answers
 
 
+@pytest.fixture(autouse=True)
+def _fresh_ledger():
+    LEDGER.reset()
+    yield
+    LEDGER.reset()
+
+
 @pytest.fixture
 def jev_on(monkeypatch):
+    """Active mode with a scripted Jev. The repo .env may set JEV_MODE, so pin it."""
     monkeypatch.setattr(app_config.Config, "JEV_MIN_CONFIDENCE", 0.6)
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "active")
+    monkeypatch.setattr(app_config.Config, "JEV_DISABLED_SITES", frozenset())
 
     def _install(answers):
         fake = FakeJev(answers)
@@ -38,6 +51,12 @@ def jev_on(monkeypatch):
         return fake
 
     return _install
+
+
+@pytest.fixture
+def jev_shadow(monkeypatch, jev_on):
+    monkeypatch.setattr(app_config.Config, "JEV_MODE", "shadow")
+    return jev_on
 
 
 @pytest.fixture
@@ -131,6 +150,56 @@ def test_tool_roles_jev_off_no_llm_key_returns_empty(monkeypatch, jev_off):
 
 def test_tool_roles_empty_input():
     assert st.assign_tool_roles([], "req") == {}
+
+
+def test_tool_roles_shadow_uses_llm_but_records_agreement(monkeypatch, jev_shadow):
+    fake = jev_shadow(
+        [
+            {"role": JevAnswer("choice", "leader", 0.95)},  # agrees with LLM
+            {"role": JevAnswer("choice", "analyst", 0.95)},  # disagrees (LLM says observer)
+            {"role": JevAnswer("choice", "analyst", 0.40)},  # unsure -> not compared
+        ]
+    )
+    monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
+    mock_openai = _llm_returning('{"0": "leader", "1": "observer", "2": "analyst"}')
+
+    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+        result = st.assign_tool_roles(_agents(), "req")
+
+    assert result == {0: "leader", 1: "observer", 2: "analyst"}  # LLM answers win in shadow
+    assert len(fake.items) == 3  # Jev still evaluated everything
+    site = LEDGER.summary()["sites"]["tool_roles"]
+    assert (site["shadow_compared"], site["shadow_agreed"]) == (2, 1)
+    assert site["items_llm"] == 3 and site["items_jev_confident"] == 2 and site["llm_calls"] == 1
+    assert site["llm_prompt_chars"] > 0
+
+
+def test_tool_roles_disabled_site_forces_llm(monkeypatch, jev_on):
+    fake = jev_on([{"role": JevAnswer("choice", "leader", 0.99)}] * 3)
+    monkeypatch.setattr(app_config.Config, "JEV_DISABLED_SITES", frozenset({"tool_roles"}))
+    monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
+    mock_openai = _llm_returning('{"0": "observer", "1": "observer", "2": "observer"}')
+
+    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+        result = st.assign_tool_roles(_agents(), "req")
+
+    assert result == {0: "observer", 1: "observer", 2: "observer"}
+    assert fake.items is None  # Jev never called
+
+
+def test_tool_roles_active_ledger_counts(monkeypatch, jev_on):
+    jev_on([{"role": JevAnswer("choice", "leader", 0.95)}, {"role": JevAnswer("choice", "x", 0.9)}, None])
+    monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
+    mock_openai = _llm_returning('{"1": "observer", "2": "analyst"}')
+
+    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+        st.assign_tool_roles(_agents(), "req")
+
+    site = LEDGER.summary()["sites"]["tool_roles"]
+    assert site["items_total"] == 3
+    assert (site["items_jev_confident"], site["items_jev_low_confidence"], site["items_jev_failed"]) == (1, 1, 1)
+    assert site["items_llm"] == 2
+    assert site["llm_cost_avoided_usd_est"] is not None and site["llm_cost_avoided_usd_est"] > 0
 
 
 # ====================================================================== stance analysis
@@ -301,7 +370,8 @@ def test_risk_matrix_jev_rescoring_updates_numbers_severity_and_order(monkeypatc
     assert len(fake.items[0][1]["likelihood"]["criteria"]) == 5
 
 
-def test_risk_matrix_partial_rescoring_only_confident_dimension(monkeypatch, jev_on):
+def test_risk_matrix_one_unsure_dimension_keeps_llm_numbers_for_that_risk(monkeypatch, jev_on):
+    """A risk is re-scored as a unit: if either dimension is unsure, both LLM numbers stay."""
     jev_on(
         [
             {"likelihood": JevAnswer("score", 4.0, 0.9), "impact": JevAnswer("score", 0.0, 0.1)},
@@ -313,7 +383,26 @@ def test_risk_matrix_partial_rescoring_only_confident_dimension(monkeypatch, jev
     matrix = svc.risk_matrix("s")
 
     a = next(r for r in matrix.risks if r.risk == "Closures accelerate")
-    assert (a.likelihood, a.impact, a.severity) == (5, 3, "high")
+    assert (a.likelihood, a.impact, a.severity) == (3, 3, "moderate")
+    site = LEDGER.summary()["sites"]["risk_scores"]
+    assert (site["items_jev_low_confidence"], site["items_jev_failed"], site["items_jev_confident"]) == (1, 1, 0)
+
+
+def test_risk_matrix_shadow_records_agreement_without_changing_numbers(monkeypatch, jev_shadow):
+    jev_shadow(
+        [
+            {"likelihood": JevAnswer("score", 2.0, 0.9), "impact": JevAnswer("score", 2.0, 0.9)},  # -> (3,3) agrees
+            {"likelihood": JevAnswer("score", 4.0, 0.9), "impact": JevAnswer("score", 4.0, 0.9)},  # -> (5,5) disagrees
+        ]
+    )
+    svc = QuantitativeAnalysisService(llm_client=_risk_llm())
+
+    matrix = svc.risk_matrix("s")
+
+    by_name = {r.risk: r for r in matrix.risks}
+    assert (by_name["Closures accelerate"].likelihood, by_name["Minor admin friction"].likelihood) == (3, 2)
+    site = LEDGER.summary()["sites"]["risk_scores"]
+    assert (site["shadow_compared"], site["shadow_agreed"]) == (2, 1)
 
 
 def test_risk_matrix_jev_off_unchanged(monkeypatch, jev_off):

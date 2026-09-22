@@ -22,6 +22,7 @@ All three return the same ``answers`` map. Vercel names the yes/no type
 
 from __future__ import annotations
 
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ from typing import Any
 import requests  # type: ignore[import-untyped]
 
 from ..config import Config
+from .jev_metrics import LEDGER
 from .logger import get_logger
 
 logger = get_logger("glas.jev")
@@ -41,8 +43,22 @@ PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
 }
 
 _RETRY_STATUSES = {429, 502, 503, 529}
-_MAX_ATTEMPTS = 3
-_BACKOFF_SECONDS = 0.5
+_MAX_ATTEMPTS = 5
+_BACKOFF_SECONDS = 1.0
+_BACKOFF_CAP_SECONDS = 20.0
+
+
+def _retry_delay(resp: Any | None, attempt: int) -> float:
+    """Seconds to wait before retry ``attempt`` (0-based): Retry-After when the server sent one,
+    else exponential backoff with a little jitter so parallel workers do not re-collide."""
+    headers = getattr(resp, "headers", None) or {}
+    retry_after = headers.get("Retry-After") if hasattr(headers, "get") else None
+    if retry_after is not None:
+        try:
+            return float(min(_BACKOFF_CAP_SECONDS, max(0.0, float(retry_after))))
+        except (TypeError, ValueError):
+            pass
+    return min(_BACKOFF_CAP_SECONDS, _BACKOFF_SECONDS * (2.0**attempt)) + random.uniform(0.0, 0.25)
 
 
 class JevError(RuntimeError):
@@ -130,7 +146,7 @@ class JevClient:
     @classmethod
     def from_config(cls) -> JevClient | None:
         """Build a client from ``Config``; ``None`` when Jev is off or unconfigured."""
-        if not Config.JEV_ENABLED or not Config.JEV_API_KEY:
+        if Config.JEV_MODE == "off" or not Config.JEV_API_KEY:
             return None
         try:
             return cls(
@@ -173,10 +189,25 @@ class JevClient:
     # Calls
     # ------------------------------------------------------------------
 
-    def evaluate(self, state: Any, questions: dict[str, dict[str, Any]]) -> dict[str, JevAnswer]:
-        """Answer every question in ``questions`` against ``state`` in one round trip."""
+    def evaluate(
+        self,
+        state: Any,
+        questions: dict[str, dict[str, Any]],
+        *,
+        site: str = "unlabelled",
+    ) -> dict[str, JevAnswer]:
+        """Answer every question in ``questions`` against ``state`` in one round trip.
+
+        ``site`` labels the call in the metrics ledger (tokens, latency, failures).
+        """
         url, body = self._build_request(state, questions)
-        payload = self._post(url, body)
+        started = time.perf_counter()
+        try:
+            payload = self._post(url, body)
+        except Exception:
+            LEDGER.record_jev_call(site, input_tokens=0, latency_ms=(time.perf_counter() - started) * 1000, ok=False)
+            raise
+        latency_ms = (time.perf_counter() - started) * 1000
         # Cloudflare wraps partner models twice: its REST envelope {"result": ...},
         # then a job record {"state": "Completed", "result": {...}}. Peel until
         # the native {"model", "answers", "usage"} object is in hand.
@@ -184,16 +215,22 @@ class JevClient:
             payload = payload["result"]
         answers = payload.get("answers")
         if not isinstance(answers, dict):
-            state = payload.get("state")
-            if state and state != "Completed":
-                raise JevError(f"Jev job not completed (state={state!r}): {str(payload)[:200]}")
+            job_state = payload.get("state")
+            LEDGER.record_jev_call(site, input_tokens=0, latency_ms=latency_ms, ok=False)
+            if job_state and job_state != "Completed":
+                raise JevError(f"Jev job not completed (state={job_state!r}): {str(payload)[:200]}")
             raise JevError(f"Jev response has no answers map: {str(payload)[:200]}")
+        usage = payload.get("usage") or {}
+        input_tokens = usage.get("input_tokens", usage.get("inputTokens", 0)) if isinstance(usage, dict) else 0
+        LEDGER.record_jev_call(site, input_tokens=int(input_tokens or 0), latency_ms=latency_ms, ok=True)
         return {name: _normalise_answer(raw) for name, raw in answers.items()}
 
     def evaluate_many(
         self,
         items: list[tuple[Any, dict[str, dict[str, Any]]]],
         max_workers: int | None = None,
+        *,
+        site: str = "unlabelled",
     ) -> list[dict[str, JevAnswer] | None]:
         """``evaluate`` each ``(state, questions)`` concurrently, preserving order.
 
@@ -206,7 +243,7 @@ class JevClient:
 
         def _one(item: tuple[Any, dict[str, dict[str, Any]]]) -> dict[str, JevAnswer] | None:
             try:
-                return self.evaluate(*item)
+                return self.evaluate(*item, site=site)
             except Exception as e:
                 logger.warning(f"Jev evaluate failed: {e}")
                 return None
@@ -241,12 +278,12 @@ class JevClient:
                 resp = self._session.post(url, json=body, headers=headers, timeout=self.timeout)
             except requests.RequestException as e:
                 last_error = f"{type(e).__name__}: {e}"
-                time.sleep(_BACKOFF_SECONDS * (2**attempt))
+                time.sleep(_retry_delay(None, attempt))
                 continue
 
             if resp.status_code in _RETRY_STATUSES:
                 last_error = f"HTTP {resp.status_code}"
-                time.sleep(_BACKOFF_SECONDS * (2**attempt))
+                time.sleep(_retry_delay(resp, attempt))
                 continue
             if resp.status_code >= 400:
                 raise JevError(f"Jev HTTP {resp.status_code}: {resp.text[:200]}")
