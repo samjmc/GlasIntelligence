@@ -363,7 +363,7 @@ class GraphEnrichmentService:
         for node in nodes:
             if node.name:
                 names.add(node.name.strip().lower())
-            if any(l not in ("Entity", "Node") for l in (node.labels or [])):
+            if any(label not in ("Entity", "Node") for label in (node.labels or [])):
                 typed += 1
         return names, typed
 

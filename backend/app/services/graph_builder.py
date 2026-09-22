@@ -210,7 +210,8 @@ class GraphBuilderService:
                 attr_name = safe_attr_name(attr_def["name"])
                 attr_desc = attr_def.get("description", attr_name)
                 attrs[attr_name] = Field(description=attr_desc, default=None)
-                annotations[attr_name] = Optional[EntityText]
+                # Keep typing.Optional: Zep's ontology code inspects these at runtime.
+                annotations[attr_name] = Optional[EntityText]  # noqa: UP045
 
             attrs["__annotations__"] = annotations
 
@@ -231,7 +232,7 @@ class GraphBuilderService:
                 attr_name = safe_attr_name(attr_def["name"])
                 attr_desc = attr_def.get("description", attr_name)
                 attrs[attr_name] = Field(description=attr_desc, default=None)
-                annotations[attr_name] = Optional[str]
+                annotations[attr_name] = Optional[str]  # noqa: UP045 - see above
 
             attrs["__annotations__"] = annotations
 

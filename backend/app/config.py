@@ -426,6 +426,6 @@ class Config:
         return errors, warnings
 
 
-from .utils.logger import get_logger as _get_app_logger
+from .utils.logger import get_logger as _get_app_logger  # noqa: E402 - see bootstrap note at top of file
 
 _log = _get_app_logger("glas.config")

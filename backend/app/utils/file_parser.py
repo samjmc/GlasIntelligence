@@ -92,8 +92,8 @@ class FileParser:
         """Extract text from PDF"""
         try:
             import fitz  # PyMuPDF
-        except ImportError:
-            raise ImportError("PyMuPDF is required: pip install PyMuPDF")
+        except ImportError as e:
+            raise ImportError("PyMuPDF is required: pip install PyMuPDF") from e
 
         text_parts = []
         with fitz.open(file_path) as doc:

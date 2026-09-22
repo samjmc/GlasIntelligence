@@ -71,7 +71,6 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
         prepared_statuses = ["ready", "preparing", "running", "completed", "stopped", "failed"]
         if status in prepared_statuses and config_generated:
             profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
-            config_file = os.path.join(simulation_dir, "simulation_config.json")
 
             profiles_count = 0
             if os.path.exists(profiles_file):

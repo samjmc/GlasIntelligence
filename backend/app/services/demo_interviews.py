@@ -118,7 +118,7 @@ def canned_response(agent_id: int, prompt: str, platform: str = "reddit") -> dic
     """Return a canned interview result for one agent, shape-compatible with the live path."""
     prompt_lower = (prompt or "").lower()
     response = DEFAULT_RESPONSE
-    for keyword, (kid, text) in CANNED.items():
+    for keyword, (_kid, text) in CANNED.items():
         if keyword in prompt_lower:
             response = text
             break
@@ -136,7 +136,7 @@ def canned_response(agent_id: int, prompt: str, platform: str = "reddit") -> dic
 def canned_batch(simulation_id: str, interviews: list, platform: str | None = None) -> dict:
     """Build the batch result dict — mirrors the live interview/batch return shape."""
     results = {}
-    for i, interview in enumerate(interviews):
+    for _i, interview in enumerate(interviews):
         agent_id = interview["agent_id"]
         item_platform = interview.get("platform") or platform or "reddit"
         key = f"{item_platform}_{agent_id}"

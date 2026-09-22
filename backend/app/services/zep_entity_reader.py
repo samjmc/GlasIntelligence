@@ -272,13 +272,13 @@ class ZepEntityReader:
         for node in all_nodes:
             labels = node.get("labels", [])
 
-            custom_labels = [l for l in labels if l not in ["Entity", "Node"]]
+            custom_labels = [label for label in labels if label not in ["Entity", "Node"]]
 
             if not custom_labels:
                 continue
 
             if defined_entity_types:
-                matching_labels = [l for l in custom_labels if l in defined_entity_types]
+                matching_labels = [label for label in custom_labels if label in defined_entity_types]
                 if not matching_labels:
                     continue
                 entity_type = matching_labels[0]

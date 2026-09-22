@@ -167,17 +167,16 @@ def start_simulation():
             if session_row and session_row.get("simulation_count", 0) == 0:
                 credit_covered = True
 
-        if not credit_covered:
-            if not SupabaseDB.deduct_credit(g.user_id, "Simulation run"):
-                profile = SupabaseDB.get_profile(g.user_id)
-                return jsonify(
-                    {
-                        "success": False,
-                        "error": "insufficient_credits",
-                        "credits": profile.get("credits", 0) if profile else 0,
-                        "message": "You need at least 1 credit to run a simulation",
-                    }
-                ), 402
+        if not credit_covered and not SupabaseDB.deduct_credit(g.user_id, "Simulation run"):
+            profile = SupabaseDB.get_profile(g.user_id)
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "insufficient_credits",
+                    "credits": profile.get("credits", 0) if profile else 0,
+                    "message": "You need at least 1 credit to run a simulation",
+                }
+            ), 402
 
         if session_row:
             new_count = session_row.get("simulation_count", 0) + 1
@@ -568,8 +567,8 @@ def get_simulation_posts(simulation_id: str):
         try:
             cursor.execute(
                 """
-                SELECT * FROM post 
-                ORDER BY created_at DESC 
+                SELECT * FROM post
+                ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
             """,
                 (limit, offset),
@@ -628,9 +627,9 @@ def get_simulation_comments(simulation_id: str):
             if post_id:
                 cursor.execute(
                     """
-                    SELECT * FROM comment 
+                    SELECT * FROM comment
                     WHERE post_id = ?
-                    ORDER BY created_at DESC 
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """,
                     (post_id, limit, offset),
@@ -638,8 +637,8 @@ def get_simulation_comments(simulation_id: str):
             else:
                 cursor.execute(
                     """
-                    SELECT * FROM comment 
-                    ORDER BY created_at DESC 
+                    SELECT * FROM comment
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """,
                     (limit, offset),

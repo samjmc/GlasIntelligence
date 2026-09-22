@@ -207,10 +207,7 @@ def start_research(session_id):
     if rs == "completed" and not has_real_content:
         claim_payload["research_dossier"] = None
     query = SupabaseDB.client().table("scenario_sessions").update(claim_payload).eq("id", session_id)
-    if rs is None:
-        query = query.is_("research_status", "null")
-    else:
-        query = query.eq("research_status", rs)
+    query = query.is_("research_status", "null") if rs is None else query.eq("research_status", rs)
     claim_resp = query.execute()
     if not claim_resp.data:
         return jsonify({"success": False, "error": "Research is already in progress"}), 409

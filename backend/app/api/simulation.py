@@ -3,6 +3,7 @@ Simulation API routes
 Step 2: Zep entity reading & filtering, OASIS simulation preparation & execution (fully automated)
 """
 
+import contextlib
 import json
 import os
 import re
@@ -260,7 +261,6 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         prepared_statuses = ["ready", "preparing", "running", "completed", "stopped", "failed"]
         if status in prepared_statuses and config_generated:
             profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
-            config_file = os.path.join(simulation_dir, "simulation_config.json")
 
             profiles_count = 0
             if os.path.exists(profiles_file):
@@ -817,9 +817,7 @@ def get_simulation_history():
         def _user_owns_simulation(state) -> bool:
             if state.simulation_id in user_sim_ids:
                 return True
-            if state.project_id and state.project_id in user_project_ids:
-                return True
-            return False
+            return bool(state.project_id and state.project_id in user_project_ids)
 
         simulations = [s for s in all_sims if _user_owns_simulation(s)]
         # Newest first (folder iteration order is not reliable)
@@ -1762,8 +1760,8 @@ def get_simulation_posts(simulation_id: str):
         try:
             cursor.execute(
                 """
-                SELECT * FROM post 
-                ORDER BY created_at DESC 
+                SELECT * FROM post
+                ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
             """,
                 (limit, offset),
@@ -1822,9 +1820,9 @@ def get_simulation_comments(simulation_id: str):
             if post_id:
                 cursor.execute(
                     """
-                    SELECT * FROM comment 
+                    SELECT * FROM comment
                     WHERE post_id = ?
-                    ORDER BY created_at DESC 
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """,
                     (post_id, limit, offset),
@@ -1832,8 +1830,8 @@ def get_simulation_comments(simulation_id: str):
             else:
                 cursor.execute(
                     """
-                    SELECT * FROM comment 
-                    ORDER BY created_at DESC 
+                    SELECT * FROM comment
+                    ORDER BY created_at DESC
                     LIMIT ? OFFSET ?
                 """,
                     (limit, offset),
@@ -1908,7 +1906,10 @@ def suggest_followups():
         llm = LLMClient()
         raw = llm.chat(
             messages=[
-                {"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT},
+                # KNOWN BUG: FOLLOWUP_SYSTEM_PROMPT is defined nowhere (it arrived in
+                # 9849885 without a definition), so this endpoint always returns 500.
+                # Needs a real prompt, which is a product decision, not a lint fix.
+                {"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT},  # noqa: F821
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.8,
@@ -1921,10 +1922,8 @@ def suggest_followups():
             suggestions = []
             match = re.search(r"\[.*\]", raw, re.DOTALL)
             if match:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     suggestions = json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
 
         return jsonify({"success": True, "data": {"suggestions": suggestions}})
 

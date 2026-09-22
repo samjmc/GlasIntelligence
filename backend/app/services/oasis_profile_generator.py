@@ -344,7 +344,6 @@ class OasisProfileGenerator:
         def search_edges():
             """Search edges (facts/relationships) - with retry"""
             max_retries = 3
-            last_exception = None
             delay = 2.0
 
             for attempt in range(max_retries):
@@ -353,7 +352,6 @@ class OasisProfileGenerator:
                         query=comprehensive_query, graph_id=self.graph_id, limit=30, scope="edges", reranker="rrf"
                     )
                 except Exception as e:
-                    last_exception = e
                     if attempt < max_retries - 1:
                         logger.debug(f"Zep edge search attempt {attempt + 1} failed: {str(e)[:80]}, retrying...")
                         time.sleep(delay)
@@ -365,7 +363,6 @@ class OasisProfileGenerator:
         def search_nodes():
             """Search nodes (entity summaries) - with retry"""
             max_retries = 3
-            last_exception = None
             delay = 2.0
 
             for attempt in range(max_retries):
@@ -374,7 +371,6 @@ class OasisProfileGenerator:
                         query=comprehensive_query, graph_id=self.graph_id, limit=20, scope="nodes", reranker="rrf"
                     )
                 except Exception as e:
-                    last_exception = e
                     if attempt < max_retries - 1:
                         logger.debug(f"Zep node search attempt {attempt + 1} failed: {str(e)[:80]}, retrying...")
                         time.sleep(delay)
@@ -482,7 +478,7 @@ class OasisProfileGenerator:
                 node_summary = node.get("summary", "")
 
                 # Filter out default labels
-                custom_labels = [l for l in node_labels if l not in ["Entity", "Node"]]
+                custom_labels = [label for label in node_labels if label not in ["Entity", "Node"]]
                 label_str = f" ({', '.join(custom_labels)})" if custom_labels else ""
 
                 if node_summary:
@@ -664,7 +660,7 @@ class OasisProfileGenerator:
                     result = json.loads(json_str)
                     result["_fixed"] = True
                     return result
-                except:
+                except Exception:
                     pass
 
         # 6. Try to extract partial information from content

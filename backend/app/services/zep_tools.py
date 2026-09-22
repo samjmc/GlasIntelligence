@@ -82,7 +82,7 @@ class NodeInfo:
 
     def to_text(self) -> str:
         """Convert to text format"""
-        entity_type = next((l for l in self.labels if l not in ["Entity", "Node"]), "Unknown type")
+        entity_type = next((label for label in self.labels if label not in ["Entity", "Node"]), "Unknown type")
         return f"Entity: {self.name} (type: {entity_type})\nSummary: {self.summary}"
 
 
@@ -279,7 +279,7 @@ class PanoramaResult:
         if self.all_nodes:
             text_parts.append("\n### [Entities Involved]")
             for node in self.all_nodes:
-                entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "Entity")
+                entity_type = next((label for label in node.labels if label not in ["Entity", "Node"]), "Entity")
                 text_parts.append(f"- **{node.name}** ({entity_type})")
 
         return "\n".join(text_parts)
@@ -328,10 +328,7 @@ class AgentInterview:
                     continue
                 if len(clean_quote) > 150:
                     dot_pos = clean_quote.find("\u3002", 80)
-                    if dot_pos > 0:
-                        clean_quote = clean_quote[: dot_pos + 1]
-                    else:
-                        clean_quote = clean_quote[:147] + "..."
+                    clean_quote = clean_quote[: dot_pos + 1] if dot_pos > 0 else clean_quote[:147] + "..."
                 if clean_quote and len(clean_quote) >= 10:
                     text += f'> "{clean_quote}"\n'
         return text
@@ -584,7 +581,7 @@ class ZepToolsService:
                 # Sort by score
                 scored_edges.sort(key=lambda x: x[0], reverse=True)
 
-                for score, edge in scored_edges[:limit]:
+                for _score, edge in scored_edges[:limit]:
                     if edge.fact:
                         facts.append(edge.fact)
                     edges_result.append(
@@ -608,7 +605,7 @@ class ZepToolsService:
 
                 scored_nodes.sort(key=lambda x: x[0], reverse=True)
 
-                for score, node in scored_nodes[:limit]:
+                for _score, node in scored_nodes[:limit]:
                     nodes_result.append(
                         {
                             "uuid": node.uuid,
@@ -885,7 +882,7 @@ class ZepToolsService:
         # Filter entities with actual types (not pure Entity nodes)
         entities = []
         for node in all_nodes:
-            custom_labels = [l for l in node.labels if l not in ["Entity", "Node"]]
+            custom_labels = [label for label in node.labels if label not in ["Entity", "Node"]]
             if custom_labels:
                 entities.append({"name": node.name, "type": custom_labels[0], "summary": node.summary})
 
@@ -985,7 +982,7 @@ class ZepToolsService:
                 node = self.get_node_detail(uuid)
                 if node:
                     node_map[uuid] = node
-                    entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "Entity")
+                    entity_type = next((label for label in node.labels if label not in ["Entity", "Node"]), "Entity")
 
                     related_facts = [f for f in all_facts if node.name.lower() in f.lower()]
 
@@ -1103,7 +1100,6 @@ Return a JSON-formatted list of sub-questions in English."""
 
         # Fetch all nodes
         all_nodes = self.get_all_nodes(graph_id)
-        node_map = {n.uuid: n for n in all_nodes}
         result.all_nodes = all_nodes
         result.total_nodes = len(all_nodes)
 
@@ -1119,14 +1115,6 @@ Return a JSON-formatted list of sub-questions in English."""
         for edge in all_edges:
             if not edge.fact:
                 continue
-
-            # Add entity names to facts
-            source_name = (
-                node_map.get(edge.source_node_uuid, NodeInfo("", "", [], "", {})).name or edge.source_node_uuid[:8]
-            )
-            target_name = (
-                node_map.get(edge.target_node_uuid, NodeInfo("", "", [], "", {})).name or edge.target_node_uuid[:8]
-            )
 
             # Determine whether expired/invalidated
             is_historical = edge.is_expired or edge.is_invalid

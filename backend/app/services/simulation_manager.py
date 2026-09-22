@@ -454,9 +454,8 @@ class SimulationManager:
                     continue
 
                 state = self._load_simulation_state(sim_id)
-                if state:
-                    if project_id is None or state.project_id == project_id:
-                        simulations.append(state)
+                if state and (project_id is None or state.project_id == project_id):
+                    simulations.append(state)
 
         return simulations
 

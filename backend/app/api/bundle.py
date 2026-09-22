@@ -1,5 +1,6 @@
 """Decision bundle API routes for grouping related simulations."""
 
+import contextlib
 import json
 import re
 import uuid
@@ -75,10 +76,8 @@ def create_bundle():
             suggested = []
             match = re.search(r"\[.*\]", raw, re.DOTALL)
             if match:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     suggested = json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
 
         if not isinstance(suggested, list):
             return jsonify(

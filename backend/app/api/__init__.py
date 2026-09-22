@@ -8,7 +8,7 @@ graph_bp = Blueprint("graph", __name__)
 simulation_bp = Blueprint("simulation", __name__)
 report_bp = Blueprint("report", __name__)
 
-from . import (
+from . import (  # noqa: E402 - route modules import the blueprints defined above
     graph,  # noqa: E402, F401
     report,  # noqa: E402, F401
     simulation,  # noqa: E402, F401

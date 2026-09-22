@@ -81,7 +81,12 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",
+    # UP042 would turn `class X(str, Enum)` into StrEnum. That is not a
+    # mechanical change: format()/f-string output of the members differs.
+    "UP042",
+]
 
 # temporary: owned by parallel branch. These files are being rewritten on other
 # branches right now; lint-fixing them here would only cause merge conflicts.
