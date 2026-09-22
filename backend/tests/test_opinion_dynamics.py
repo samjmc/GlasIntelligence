@@ -55,6 +55,9 @@ def _fresh_ledger():
 def jev_on(monkeypatch):
     monkeypatch.setattr(app_config.Config, "JEV_MODE", "active")
     monkeypatch.setattr(app_config.Config, "JEV_DISABLED_SITES", frozenset())
+    # Until a fake is installed there is NO client, so nothing can reach the real Jev
+    # (a JEV_API_KEY in the developer's environment would otherwise build one).
+    monkeypatch.setattr(JevClient, "from_config", classmethod(lambda cls: None))
 
     def _install(script):
         fake = FakeJev(script)
@@ -109,8 +112,6 @@ def test_windows_track_a_moving_agent(tmp_path, jev_on):
     assert out["movers"] == [
         {
             "agent": "Alice",
-            "from": "opposing",
-            "to": "supportive",
             "path": [{"window": "R1-5", "position": "opposing"}, {"window": "R6-10", "position": "supportive"}],
         }
     ]
@@ -139,12 +140,17 @@ def test_empty_windows_are_skipped_and_posts_capped(tmp_path, jev_on):
 
 
 def test_failed_jev_items_are_dropped_not_guessed(tmp_path, jev_on):
-    _write(tmp_path, "twitter", [_post(1, "Alice", "a"), _post(1, "Bob", "b")])
-    jev_on(lambda state: None if state["author"] == "Bob" else _answer("opposing", OPP))
+    # Bob's call failed; Carol's answer came back with no probability map.
+    _write(tmp_path, "twitter", [_post(1, "Alice", "a"), _post(1, "Bob", "b"), _post(1, "Carol", "c")])
+    no_probs = {"position": JevAnswer("choice", "neutral", 0.9, {})}
+    scripted = {"Alice": _answer("opposing", OPP), "Bob": None, "Carol": no_probs}
+    jev_on(lambda s: scripted[s["author"]])
     out = od.compute_opinion_dynamics("sim", "the policy", sim_dir=tmp_path)
 
-    assert out["jev_failed"] == 1
-    assert [a["agent"] for a in out["windows"][0]["agents"]] == ["Alice"]
+    assert out["jev_failed"] == 2
+    w = out["windows"][0]
+    assert [a["agent"] for a in w["agents"]] == ["Alice"]
+    assert w["mean_probabilities"]["opposing"] == 0.8  # not dragged down by Carol's empty map
 
 
 def test_no_posts_returns_none(tmp_path, jev_on):
@@ -197,6 +203,7 @@ def test_payload_has_no_key_when_jev_off():
 
 
 def test_payload_adds_key_when_active_and_is_otherwise_unchanged(tmp_path, monkeypatch, jev_on):
+    assert JevClient.from_config() is None  # the baseline must not build a real client
     baseline = _payload("sim_x")
     monkeypatch.setattr(app_config.Config, "OASIS_SIMULATION_DATA_DIR", str(tmp_path))
     _write(tmp_path / "sim_x", "twitter", [_post(1, "Alice", "a"), _post(6, "Alice", "b")])

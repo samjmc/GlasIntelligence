@@ -15,8 +15,6 @@ const DYNAMICS = {
   movers: [
     {
       agent: 'NHSBSA',
-      from: 'opposing',
-      to: 'neutral',
       path: [
         { window: 'R1-4', position: 'opposing' },
         { window: 'R5-8', position: 'neutral' },
@@ -28,7 +26,7 @@ const DYNAMICS = {
 describe('OpinionDynamicsChart', () => {
   it('draws one line per position across the windows, and the movers table', () => {
     const w = mount(OpinionDynamicsChart, { props: { dynamics: DYNAMICS } })
-    expect(w.find('[data-testid="opinion-dynamics"]').exists()).toBe(true)
+    expect(w.find('[data-test="opinion-dynamics"]').exists()).toBe(true)
 
     const lines = w.findAll('polyline')
     expect(lines).toHaveLength(4)
@@ -37,11 +35,16 @@ describe('OpinionDynamicsChart', () => {
     expect(w.text()).toContain('R1-4')
     expect(w.text()).toContain('R5-8')
     expect(w.text()).toContain('12% → 30%')
+    expect(w.findAll('tspan').map((t) => t.text())).toEqual(['n=3', 'n=3'])
 
     const rows = w.findAll('tbody tr')
     expect(rows).toHaveLength(1)
     expect(rows[0].text()).toContain('NHSBSA')
-    expect(rows[0].text()).toContain('R1-4 opposing → R5-8 neutral')
+    expect(rows[0].findAll('.od-badge').map((b) => b.text())).toEqual(['opposing', 'neutral'])
+    expect(rows[0].findAll('.od-step').map((s) => s.text().replace(/\s+/g, ' ').trim())).toEqual([
+      'R1-4 opposing',
+      '→R5-8 neutral',
+    ])
   })
 
   it('says so when nobody moved', () => {
@@ -56,7 +59,7 @@ describe('OpinionDynamicsChart', () => {
     ['no windows', { dynamics: { ...DYNAMICS, windows: [] } }],
   ])('renders nothing with %s', (_name, props) => {
     const w = mount(OpinionDynamicsChart, { props })
-    expect(w.find('[data-testid="opinion-dynamics"]').exists()).toBe(false)
+    expect(w.find('[data-test="opinion-dynamics"]').exists()).toBe(false)
     expect(w.find('svg').exists()).toBe(false)
     expect(w.text()).toBe('')
   })

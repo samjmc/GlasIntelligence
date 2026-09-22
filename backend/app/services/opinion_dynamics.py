@@ -46,10 +46,10 @@ CONTENT_TYPES = frozenset({"CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"})
 PLATFORMS = ("twitter", "reddit")
 
 
-def window_size(n_rounds: int, default: int = DEFAULT_WINDOW_ROUNDS) -> int:
-    """``default`` rounds per window, shrunk so a run of 2+ rounds still gets at least two windows."""
-    if n_rounds >= 2 * default:
-        return default
+def window_size(n_rounds: int) -> int:
+    """``DEFAULT_WINDOW_ROUNDS`` per window, shrunk so a run of 2+ rounds still gets at least two windows."""
+    if n_rounds >= 2 * DEFAULT_WINDOW_ROUNDS:
+        return DEFAULT_WINDOW_ROUNDS
     return max(1, math.ceil(n_rounds / 2))
 
 
@@ -90,7 +90,6 @@ def compute_opinion_dynamics(
     requirement: str,
     *,
     sim_dir: str | Path | None = None,
-    window_rounds: int = DEFAULT_WINDOW_ROUNDS,
 ) -> dict[str, Any] | None:
     """Per-window stance distribution for a simulation, or ``None`` when Jev is not active
     or the run has no posts to judge."""
@@ -103,7 +102,7 @@ def compute_opinion_dynamics(
     rounds = sorted({int(a.get("round") or 0) for a in actions})
     if not rounds:
         return None
-    size = window_size(rounds[-1] - rounds[0] + 1, window_rounds)
+    size = window_size(rounds[-1] - rounds[0] + 1)
     windows = [(r0, min(r0 + size - 1, rounds[-1])) for r0 in range(rounds[0], rounds[-1] + 1, size)]
 
     posts: dict[tuple[int, str], list[tuple[int, str, str]]] = defaultdict(list)
@@ -134,10 +133,13 @@ def compute_opinion_dynamics(
     # author's posts in front of every judgement, which is not what was evaluated.
     answers = jev.evaluate_many(items, site=SITE)
 
-    by_window: dict[int, list[tuple[str, JevAnswer]]] = defaultdict(list)
+    # An answer with no probability map would read as 0 for every position and drag
+    # the means down silently, so it counts as failed rather than as a vote.
+    by_window: dict[int, list[tuple[str, dict[str, float], JevAnswer]]] = defaultdict(list)
     for (w, name), ans in zip(keys, answers, strict=True):
-        if ans and "position" in ans:
-            by_window[w].append((name, ans["position"]))
+        dist = _probabilities(ans["position"]) if ans and "position" in ans else {}
+        if sum(dist.values()) > 0:
+            by_window[w].append((name, dist, ans["position"]))
     failed = len(items) - sum(len(v) for v in by_window.values())
     LEDGER.record_items(SITE, total=len(items), jev_confident=len(items) - failed, jev_failed=failed)
 
@@ -148,9 +150,9 @@ def compute_opinion_dynamics(
         if not judged:
             continue
         label = f"R{w0}-{w1}" if w1 != w0 else f"R{w0}"
-        dists = [_probabilities(ans) for _, ans in judged]
+        dists = [dist for _, dist, _ in judged]
         agents = []
-        for (name, ans), dist in zip(judged, dists, strict=True):
+        for name, dist, ans in judged:
             top = ans.value if ans.value in POSITIONS else max(dist, key=lambda p: dist[p])
             agents.append({"agent": name, "position": top, "confidence": round(ans.confidence, 3)})
             trajectories[name].append((label, top))
@@ -169,12 +171,7 @@ def compute_opinion_dynamics(
         return None
 
     movers = [
-        {
-            "agent": name,
-            "from": path[0][1],
-            "to": path[-1][1],
-            "path": [{"window": lb, "position": p} for lb, p in path],
-        }
+        {"agent": name, "path": [{"window": lb, "position": p} for lb, p in path]}
         for name, path in sorted(trajectories.items())
         if len({p for _, p in path}) > 1
     ]
@@ -184,7 +181,6 @@ def compute_opinion_dynamics(
     )
     return {
         "window_rounds": size,
-        "positions": list(POSITIONS),
         "windows": out_windows,
         "movers": movers,
         "agents_judged": len(trajectories),

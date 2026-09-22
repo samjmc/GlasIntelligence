@@ -1,5 +1,5 @@
 <template>
-  <div v-if="windows.length" class="od-card" data-testid="opinion-dynamics">
+  <div v-if="windows.length" class="od-card" data-test="opinion-dynamics">
     <div class="od-header">
       <h4>Opinion Over Time</h4>
       <span class="od-meta">{{ windows.length }} windows of {{ dynamics.window_rounds }} rounds · {{ dynamics.agents_judged }} agents</span>
@@ -10,7 +10,9 @@
         <line :x1="PAD_L" :x2="W - PAD_R" :y1="y(t)" :y2="y(t)" class="od-grid" />
         <text :x="PAD_L - 6" :y="y(t) + 3" class="od-axis" text-anchor="end">{{ t * 100 }}%</text>
       </g>
-      <text v-for="(w, i) in windows" :key="'x' + i" :x="x(i)" :y="H - 6" class="od-axis" text-anchor="middle">{{ w.label }}</text>
+      <text v-for="(w, i) in windows" :key="'x' + i" :x="x(i)" :y="H - 16" class="od-axis" text-anchor="middle">
+        {{ w.label }}<tspan :x="x(i)" dy="11">n={{ w.n_agents }}</tspan>
+      </text>
       <g v-for="p in POSITIONS" :key="p">
         <polyline :points="linePoints(p)" fill="none" :stroke="COLORS[p]" stroke-width="2" />
         <circle v-for="(w, i) in windows" :key="p + i" :cx="x(i)" :cy="y(prob(w, p))" r="3" :fill="COLORS[p]">
@@ -31,14 +33,17 @@
       <p v-if="!movers.length" class="od-none">No agent changed stance between windows.</p>
       <table v-else class="od-table">
         <thead>
-          <tr><th>Agent</th><th>From</th><th>To</th><th>Path</th></tr>
+          <tr><th>Agent</th><th>Stance per window</th></tr>
         </thead>
         <tbody>
           <tr v-for="m in movers" :key="m.agent">
             <td class="od-agent">{{ m.agent }}</td>
-            <td><span class="od-badge" :class="'stance-' + m.from">{{ m.from }}</span></td>
-            <td><span class="od-badge" :class="'stance-' + m.to">{{ m.to }}</span></td>
-            <td class="od-path">{{ m.path.map(s => `${s.window} ${s.position}`).join(' → ') }}</td>
+            <td class="od-path">
+              <span v-for="(s, i) in m.path" :key="i" class="od-step">
+                <span v-if="i" class="od-arrow">→</span>{{ s.window }}
+                <span class="od-badge" :class="'stance-' + s.position">{{ s.position }}</span>
+              </span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -58,11 +63,11 @@ const COLORS = { supportive: '#34d399', opposing: '#f87171', neutral: '#a3a3a3',
 const POSITIONS = ['supportive', 'opposing', 'neutral', 'ambivalent']
 const TICKS = [0, 0.25, 0.5, 0.75, 1]
 const W = 600
-const H = 190
+const H = 200
 const PAD_L = 40
 const PAD_R = 16
 const PAD_T = 10
-const PAD_B = 24
+const PAD_B = 32
 
 const windows = computed(() => props.dynamics?.windows || [])
 const movers = computed(() => props.dynamics?.movers || [])
@@ -180,6 +185,16 @@ const linePoints = (p) => windows.value.map((w, i) => `${x(i)},${y(prob(w, p))}`
   font-size: 11px;
   color: var(--text-secondary);
   font-family: var(--font-mono);
+}
+.od-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.od-arrow {
+  color: var(--text-tertiary);
 }
 .od-badge {
   font-size: 10px;
