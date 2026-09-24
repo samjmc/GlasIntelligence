@@ -39,8 +39,9 @@ def project_owner(project_id: str) -> str | None:
 def simulation_owner(simulation_id: str) -> str | None:
     # Read state.json directly: SimulationManager.get_simulation creates a directory for any id.
     try:
-        with open(os.path.join(SimulationManager.SIMULATION_DATA_DIR, simulation_id, "state.json"),
-                  encoding="utf-8") as f:
+        with open(
+            os.path.join(SimulationManager.SIMULATION_DATA_DIR, simulation_id, "state.json"), encoding="utf-8"
+        ) as f:
             project_id = json.load(f).get("project_id")
     except (OSError, json.JSONDecodeError):
         return None

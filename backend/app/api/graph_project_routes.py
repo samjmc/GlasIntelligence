@@ -2,10 +2,10 @@
 
 from flask import jsonify, request
 
-from . import graph_bp
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..models.project import ProjectManager, ProjectStatus
+from . import graph_bp
 
 
 @graph_bp.route("/project/<project_id>", methods=["GET"])

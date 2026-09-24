@@ -11,9 +11,11 @@ __pycache__/
 *.egg
 dist/
 build/
-backend/.venv/
+# No trailing slash on .venv: a slash matches directories only, and a
+# symlinked venv committed from macOS was tracked as a plain file.
+.venv
+.venv-*
 backend/venv/
-.venv/
 venv/
 
 # Environment files

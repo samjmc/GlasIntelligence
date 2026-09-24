@@ -198,7 +198,8 @@ def _render(entry: dict[str, Any], platform: str, agent_name: str) -> str:
 def own_memory(run: RecordedRun, platform: str, agent_id: int) -> list[dict[str, Any]]:
     """The agent's own actions, capped at MAX_OWN_ACTIONS: round-0 initial posts first, then the latest."""
     acts = [
-        a for a in run.actions(platform)
+        a
+        for a in run.actions(platform)
         if a.get("agent_id") == agent_id and a.get("action_type") not in NON_MEMORY_ACTIONS
     ]
     seeds, later = [], []
@@ -208,10 +209,14 @@ def own_memory(run: RecordedRun, platform: str, agent_id: int) -> list[dict[str,
     # Runs whose log predates round-0 logging: take the opening posts from the config instead.
     for post in run.config.get("event_config", {}).get("initial_posts", []):
         if post.get("poster_agent_id") == agent_id and post.get("content") not in logged:
-            seeds.append({
-                "round": 0, "agent_id": agent_id, "action_type": "CREATE_POST",
-                "action_args": {"content": post.get("content", "")},
-            })
+            seeds.append(
+                {
+                    "round": 0,
+                    "agent_id": agent_id,
+                    "action_type": "CREATE_POST",
+                    "action_args": {"content": post.get("content", "")},
+                }
+            )
     seeds = seeds[:MAX_OWN_ACTIONS]
     room = MAX_OWN_ACTIONS - len(seeds)
     return seeds + (later[-room:] if room > 0 else [])
@@ -291,8 +296,12 @@ def _answer_one(llm: LLMClient, run: RecordedRun, platform: str, agent_id: int, 
     try:
         messages = build_interview_messages(run, platform, agent_id, prompt)
         if messages is None:
-            return {"agent_id": agent_id, "response": None, "platform": platform,
-                    "error": f"Agent {agent_id} not found on {platform}"}
+            return {
+                "agent_id": agent_id,
+                "response": None,
+                "platform": platform,
+                "error": f"Agent {agent_id} not found on {platform}",
+            }
         text = llm.chat(messages, temperature=INTERVIEW_TEMPERATURE, max_tokens=INTERVIEW_MAX_TOKENS)
     except Exception as e:  # one agent's failure must not sink the batch
         logger.warning(f"Reconstructed interview failed: agent_id={agent_id}, platform={platform}: {e}")
@@ -314,8 +323,12 @@ def _run_jobs(run: RecordedRun, jobs: list[tuple[str, int, str]], timeout: float
             if future in done:
                 results[f"{platform}_{agent_id}"] = future.result()
             else:
-                results[f"{platform}_{agent_id}"] = {"agent_id": agent_id, "response": None, "platform": platform,
-                                                     "error": f"timed out after {timeout}s"}
+                results[f"{platform}_{agent_id}"] = {
+                    "agent_id": agent_id,
+                    "response": None,
+                    "platform": platform,
+                    "error": f"timed out after {timeout}s",
+                }
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
     return results
@@ -348,8 +361,11 @@ def reconstructed_batch(
     if not available:
         return {"success": False, **base, "error": "No recorded profiles for this simulation; nothing to interview"}
     if not jobs:
-        return {"success": False, **base,
-                "error": f"No valid agent_id on a recorded platform (recorded: {', '.join(available)})"}
+        return {
+            "success": False,
+            **base,
+            "error": f"No valid agent_id on a recorded platform (recorded: {', '.join(available)})",
+        }
     results = _run_jobs(run, jobs, timeout)
     if not any(r.get("response") for r in results.values()):
         errors = sorted({r.get("error", "no response") for r in results.values()})
@@ -363,10 +379,15 @@ def reconstructed_single(
     sim_dir: str, agent_id: int, prompt: str, platform: str | None = None, timeout: float = 60.0
 ) -> dict[str, Any]:
     """Single interview from the recorded run. Same shape as SimulationRunner.interview_agent."""
-    batch = reconstructed_batch(sim_dir, [{"agent_id": agent_id, "prompt": prompt, "platform": platform}],
-                                platform=platform, timeout=timeout)
-    base = {"agent_id": agent_id, "prompt": prompt, "timestamp": batch["timestamp"],
-            "mode": InterviewMode.RECONSTRUCTED.value}
+    batch = reconstructed_batch(
+        sim_dir, [{"agent_id": agent_id, "prompt": prompt, "platform": platform}], platform=platform, timeout=timeout
+    )
+    base = {
+        "agent_id": agent_id,
+        "prompt": prompt,
+        "timestamp": batch["timestamp"],
+        "mode": InterviewMode.RECONSTRUCTED.value,
+    }
     if not batch["success"]:
         return {"success": False, **base, "error": batch["error"]}
     results = batch["result"]["results"]
@@ -379,8 +400,9 @@ def reconstructed_single(
 # ============== Dispatch: live IPC when the process is alive, else reconstructed ==============
 
 
-def interview_single(simulation_id: str, agent_id: int, prompt: str, platform: str | None = None,
-                     timeout: float = 60.0) -> dict[str, Any]:
+def interview_single(
+    simulation_id: str, agent_id: int, prompt: str, platform: str | None = None, timeout: float = 60.0
+) -> dict[str, Any]:
     sim_dir = _require_sim_dir(simulation_id)
     if SimulationRunner.check_env_alive(simulation_id):
         result = SimulationRunner.interview_agent(
@@ -391,8 +413,9 @@ def interview_single(simulation_id: str, agent_id: int, prompt: str, platform: s
     return reconstructed_single(sim_dir, agent_id, prompt, platform, timeout)
 
 
-def interview_batch(simulation_id: str, interviews: list[dict[str, Any]], platform: str | None = None,
-                    timeout: float = 120.0) -> dict[str, Any]:
+def interview_batch(
+    simulation_id: str, interviews: list[dict[str, Any]], platform: str | None = None, timeout: float = 120.0
+) -> dict[str, Any]:
     sim_dir = _require_sim_dir(simulation_id)
     if SimulationRunner.check_env_alive(simulation_id):
         result = SimulationRunner.interview_agents_batch(
@@ -403,8 +426,9 @@ def interview_batch(simulation_id: str, interviews: list[dict[str, Any]], platfo
     return reconstructed_batch(sim_dir, interviews, platform, timeout)
 
 
-def interview_all(simulation_id: str, prompt: str, platform: str | None = None,
-                  timeout: float = 180.0) -> dict[str, Any]:
+def interview_all(
+    simulation_id: str, prompt: str, platform: str | None = None, timeout: float = 180.0
+) -> dict[str, Any]:
     sim_dir = _require_sim_dir(simulation_id)
     if SimulationRunner.check_env_alive(simulation_id):
         result = SimulationRunner.interview_all_agents(
@@ -427,5 +451,7 @@ def interview_status(simulation_id: str) -> dict[str, Any]:
     if SimulationRunner.check_env_alive(simulation_id):
         return {"interview_available": True, "interview_mode": InterviewMode.LIVE.value}
     available = bool(RecordedRun(sim_dir).platforms())
-    return {"interview_available": available,
-            "interview_mode": InterviewMode.RECONSTRUCTED.value if available else None}
+    return {
+        "interview_available": available,
+        "interview_mode": InterviewMode.RECONSTRUCTED.value if available else None,
+    }

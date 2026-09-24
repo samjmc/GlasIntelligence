@@ -34,8 +34,8 @@ def research_agent_chain() -> list:
         return [DeepResearchAgent()]
 
     if Config.SEARCH_RESEARCH_ENABLED:
-        from .search_research_agent import SearchResearchAgent
         from .llm_research_agent import LLMResearchAgent
+        from .search_research_agent import SearchResearchAgent
 
         return [SearchResearchAgent(), LLMResearchAgent()]
 

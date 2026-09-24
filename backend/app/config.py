@@ -5,6 +5,7 @@ Load configuration from .env file in project root
 
 import logging
 import os
+
 from dotenv import load_dotenv
 
 # Stdlib bootstrap: warnings during `class Config` body run before module end. Replaced with
@@ -108,9 +109,11 @@ class Config:
         "true",
         "yes",
     )
+    # 7 days: mutation-generation bumps are the primary invalidation; the TTL is
+    # only a time-based safety net, and every miss is a paid Zep read (5106829).
     GRAPH_SNAPSHOT_TTL_SECONDS = _safe_int(
-        os.environ.get("GRAPH_SNAPSHOT_TTL_SECONDS", "86400"),
-        86400,
+        os.environ.get("GRAPH_SNAPSHOT_TTL_SECONDS", "604800"),
+        604800,
         env_key="GRAPH_SNAPSHOT_TTL_SECONDS",
     )
     GRAPH_SNAPSHOT_STALE_MAX_AGE_SECONDS = _safe_int(
@@ -155,6 +158,11 @@ class Config:
         env_key="OASIS_DEFAULT_MAX_ROUNDS",
     )
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), "../uploads/simulations")
+
+    # Static demo mode: serve canned agent interviews instead of requiring a
+    # live OASIS subprocess (the demo replays a recorded run, so the process
+    # is gone). Set alongside the frontend's VITE_DEMO_MODE=1 build.
+    DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() in ("1", "true", "yes")
 
     # OASIS platform available actions config
     OASIS_TWITTER_ACTIONS = ["CREATE_POST", "LIKE_POST", "REPOST", "FOLLOW", "DO_NOTHING", "QUOTE_POST"]
@@ -317,9 +325,11 @@ class Config:
     # Directly materialize verified inventory entities as graph nodes via Zep's
     # add_nodes API (instead of relying solely on NER extraction from episodes,
     # which misses organisation names — see services/graph_enrichment_service.py).
-    GRAPH_MATERIALIZE_INVENTORY_ENABLED = os.environ.get(
-        "GRAPH_MATERIALIZE_INVENTORY_ENABLED", "true"
-    ).lower() in ("1", "true", "yes")
+    GRAPH_MATERIALIZE_INVENTORY_ENABLED = os.environ.get("GRAPH_MATERIALIZE_INVENTORY_ENABLED", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     SEARCH_RESEARCH_ENABLED = bool(TAVILY_API_KEY)
     # Model for the search-research chain (query gen, synthesis, critique,
     # verification). Defaults to the general LLM model; for Claude runs set it
@@ -344,6 +354,15 @@ class Config:
         "1",
         "true",
         "yes",
+    )
+
+    # Correlation discount heuristic: average pairwise correlation assumed when
+    # combining likelihood ratios without a correlation matrix (default 0.5,
+    # no formal derivation; preserved for behavioral compatibility).
+    CORRELATION_DEFAULT_AVG_CORRELATION = _safe_float(
+        os.environ.get("CORRELATION_DEFAULT_AVG_CORRELATION", "0.5"),
+        0.5,
+        env_key="CORRELATION_DEFAULT_AVG_CORRELATION",
     )
 
     # Jev (TypeSafe System One): typed classification / scoring with calibrated
@@ -391,7 +410,9 @@ class Config:
     JEV_LLM_PRICE_OUT_PER_MTOK = _safe_float(
         os.environ.get("JEV_LLM_PRICE_OUT_PER_MTOK", "1.10"), 1.10, env_key="JEV_LLM_PRICE_OUT_PER_MTOK"
     )
-    JEV_PRICE_IN_PER_MTOK = _safe_float(os.environ.get("JEV_PRICE_IN_PER_MTOK", "0.042"), 0.042, env_key="JEV_PRICE_IN_PER_MTOK")
+    JEV_PRICE_IN_PER_MTOK = _safe_float(
+        os.environ.get("JEV_PRICE_IN_PER_MTOK", "0.042"), 0.042, env_key="JEV_PRICE_IN_PER_MTOK"
+    )
 
     # Multi-scenario bundle executive synthesis (reports + LLM merge + branch weights)
     ENABLE_BUNDLE_SYNTHESIS = os.environ.get("ENABLE_BUNDLE_SYNTHESIS", "true").lower() in (
@@ -412,6 +433,6 @@ class Config:
         return errors, warnings
 
 
-from .utils.logger import get_logger as _get_app_logger
+from .utils.logger import get_logger as _get_app_logger  # noqa: E402 - see bootstrap note at top of file
 
 _log = _get_app_logger("glas.config")

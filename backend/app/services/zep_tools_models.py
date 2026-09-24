@@ -58,7 +58,7 @@ class NodeInfo:
 
     def to_text(self) -> str:
         """Convert to text format"""
-        entity_type = next((l for l in self.labels if l not in ["Entity", "Node"]), "Unknown type")
+        entity_type = next((label for label in self.labels if label not in ["Entity", "Node"]), "Unknown type")
         return f"Entity: {self.name} (type: {entity_type})\nSummary: {self.summary}"
 
 
@@ -255,7 +255,7 @@ class PanoramaResult:
         if self.all_nodes:
             text_parts.append("\n### [Entities Involved]")
             for node in self.all_nodes:
-                entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "Entity")
+                entity_type = next((label for label in node.labels if label not in ["Entity", "Node"]), "Entity")
                 text_parts.append(f"- **{node.name}** ({entity_type})")
 
         return "\n".join(text_parts)
@@ -304,10 +304,7 @@ class AgentInterview:
                     continue
                 if len(clean_quote) > 150:
                     dot_pos = clean_quote.find("\u3002", 80)
-                    if dot_pos > 0:
-                        clean_quote = clean_quote[: dot_pos + 1]
-                    else:
-                        clean_quote = clean_quote[:147] + "..."
+                    clean_quote = clean_quote[: dot_pos + 1] if dot_pos > 0 else clean_quote[:147] + "..."
                 if clean_quote and len(clean_quote) >= 10:
                     text += f'> "{clean_quote}"\n'
         return text
