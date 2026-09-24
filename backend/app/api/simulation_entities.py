@@ -4,11 +4,11 @@ import traceback
 
 from flask import jsonify, request
 
-from . import simulation_bp
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.zep_entity_reader import ZepEntityReader
 from ..utils.logger import get_logger
+from . import simulation_bp
 
 logger = get_logger("glas.api.simulation")
 

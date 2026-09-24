@@ -8,6 +8,7 @@ SocialAgent(tools=...) parameter. Handles:
 - Role-based tool assignment per agent
 """
 
+import contextlib
 import contextvars
 import inspect
 import json
@@ -109,10 +110,8 @@ class ToolCallLogger:
                 for line in f:
                     line = line.strip()
                     if line:
-                        try:
+                        with contextlib.suppress(json.JSONDecodeError):
                             entries.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
                 self._readers[reader_id] = f.tell()
         return entries
 

@@ -56,8 +56,7 @@ def compute_calibration_grades(predictions: list[dict], outcomes: list[dict]) ->
 
     dimension_biases = {d: sum(errs) / len(errs) for d, errs in errors_by_dimension.items()}
     dimension_accuracies = {
-        d: max(0.0, 1.0 - (sum(abs(e) for e in errs) / len(errs)) / 100.0)
-        for d, errs in errors_by_dimension.items()
+        d: max(0.0, 1.0 - (sum(abs(e) for e in errs) / len(errs)) / 100.0) for d, errs in errors_by_dimension.items()
     }
 
     all_errors = [e for errs in errors_by_dimension.values() for e in errs]
@@ -76,9 +75,7 @@ def compute_calibration_grades(predictions: list[dict], outcomes: list[dict]) ->
     }
 
     binary_pairs = [
-        (predicted / 100.0, actual / 100.0)
-        for _key, predicted, actual in matched
-        if actual in BINARY_OUTCOMES
+        (predicted / 100.0, actual / 100.0) for _key, predicted, actual in matched if actual in BINARY_OUTCOMES
     ]
     if binary_pairs:
         forecasts = [p for p, _o in binary_pairs]

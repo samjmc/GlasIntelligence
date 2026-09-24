@@ -15,11 +15,11 @@ import shutil
 import tempfile
 import threading
 import time
-from contextlib import nullcontext
+from collections.abc import Callable
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
-from collections.abc import Callable
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -148,10 +148,8 @@ def _atomic_write_text(path: str, text: str) -> None:
         os.replace(tmp, path)
     finally:
         if os.path.exists(tmp):
-            try:
+            with suppress(OSError):
                 os.unlink(tmp)
-            except OSError:
-                pass
 
 
 def _atomic_write_json(path: str, obj: Any) -> None:
@@ -164,10 +162,8 @@ def _atomic_write_json(path: str, obj: Any) -> None:
         os.replace(tmp, path)
     finally:
         if os.path.exists(tmp):
-            try:
+            with suppress(OSError):
                 os.unlink(tmp)
-            except OSError:
-                pass
 
 
 def _sha256_of_payload(payload: dict[str, Any]) -> str:
@@ -203,19 +199,15 @@ def _validate_payload(doc: dict[str, Any], graph_id: str, snapshot_path: str) ->
             "graph_cache: missing or empty content_sha256 for %s, rejecting snapshot",
             graph_id,
         )
-        try:
+        with suppress(OSError):
             os.unlink(snapshot_path)
-        except OSError:
-            pass
         return None
     stored_hash = raw_hash.strip()
     computed = _sha256_of_payload(doc)
     if stored_hash != computed:
         logger.warning("graph_cache: sha256 mismatch for %s, ignoring snapshot", graph_id)
-        try:
+        with suppress(OSError):
             os.unlink(snapshot_path)
-        except OSError:
-            pass
         return None
     return doc
 
@@ -281,10 +273,8 @@ def _dir_size(path: str) -> int:
     for root, _dirs, files in os.walk(path):
         for f in files:
             fp = os.path.join(root, f)
-            try:
+            with suppress(OSError):
                 n += os.path.getsize(fp)
-            except OSError:
-                pass
     return n
 
 
@@ -313,10 +303,8 @@ def try_read_snapshot(
             doc = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         logger.warning("graph_cache: corrupt snapshot %s: %s", graph_id, e)
-        try:
+        with suppress(OSError):
             os.unlink(path)
-        except OSError:
-            pass
         return CacheReadResult(None, CacheOutcome.MISS)
 
     if not isinstance(doc, dict):
