@@ -28,13 +28,13 @@ def test_graph_snapshot_ttl_default_is_seven_days():
 _BATCH = {"simulation_id": "sim_does_not_exist", "interviews": [{"agent_id": 0, "prompt": "What about the caps?"}]}
 
 
-def test_batch_interview_live_mode_reaches_env_guard(client):
+def test_batch_interview_live_mode_reaches_normal_path(client):
     res = client.post("/api/simulation/interview/batch", json=_BATCH)
     body = res.get_json()
     assert "DEMO_MODE" not in str(body)
-    # Not demo mode, and no OASIS subprocess for this id: the env-alive guard answers.
-    assert res.status_code == 400, body
-    assert "not running" in body["error"]
+    # Not demo mode, so the normal path answers: this simulation id does not exist.
+    assert res.status_code == 404, body
+    assert "does not exist" in body["error"]
 
 
 def test_batch_interview_demo_mode_serves_canned(client, monkeypatch):

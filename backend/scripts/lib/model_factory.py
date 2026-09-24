@@ -5,6 +5,7 @@ import sys
 from typing import Any  # noqa: UP035
 
 try:
+    from camel.configs import ChatGPTConfig
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
 except ImportError as e:
@@ -78,6 +79,24 @@ def create_model(config: dict[str, Any], use_boost: bool = False):
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=llm_model,
+        model_config_dict=openai_model_config(llm_base_url),
     )
+
+
+def openai_model_config(base_url: str | None) -> dict[str, Any]:
+    """CAMEL request config for an OpenAI-compatible endpoint.
+
+    DeepSeek V4.x models reason by default, and in thinking mode every follow-up
+    turn must echo the previous `reasoning_content` back. CAMEL's agent memory does
+    not, so multi-turn agent calls fail with HTTP 400 ("The `reasoning_content` in
+    the thinking mode must be passed back to the API") and the agent silently skips
+    its action (measured 2026-09-22 on deepseek-flash = V4.1-Flash). Agents do not
+    need hidden reasoning, so switch it off — the same fix utils/llm_client.py
+    already applies to the app's own DeepSeek calls.
+    """
+    cfg = ChatGPTConfig().as_dict()
+    if "deepseek" in (base_url or "").lower():
+        cfg["extra_body"] = {"thinking": {"type": "disabled"}}
+    return cfg
 
 

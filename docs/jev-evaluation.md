@@ -116,7 +116,28 @@ Both runs simulated **concepts as agents** ("independent prescribing", "2026/27 
 - **Keep off until re-specified:** tool roles (rubric is domain-inappropriate; both models degenerate).
 - **Money:** per-item Jev costs about one eighth of the same calls on the LLM. For the three batched decisions it replaces today the saving is negligible and the gain is latency and a confidence signal. A full simulation's worth of every new gate together is a few cents.
 
-## 5. Reproduce
+## 5. Live A/B run (2026-09-22)
+
+The same recorded Pharmacy First setup (8 agents, 8 opening posts) run for real twice, 8 rounds each, on **DeepSeek-V4.1-Flash** (`deepseek-flash`): once with `JEV_MODE=off`, once with `JEV_MODE=active`. Harness: `backend/scripts/jev_live_ab.py`. Zep, Tavily and Supabase were not used.
+
+| | Jev off | Jev active | Change |
+|---|---|---|---|
+| Actions | 149 | 168 | +13% |
+| Posts and comments with text | 57 | 66 | +16% |
+| Distinct post texts | 40 | 49 | +23% |
+| Mean distinct speakers per round | 3.89 | 4.22 | +8% |
+| Quote share of posts | 17.5% | 19.7% | +2.2 pts |
+| Posts judged off-persona (<0.3) | not scored | 0 of 50 | |
+| Quotes judged to merely restate | not scored | 0% | |
+| Wall time | 138 s | 179 s | +30% |
+| Jev calls / failures / cost | — | 186 / 0 / $0.009 | |
+| DeepSeek errors | 0 | 0 | |
+
+Read with care: this is **one run per arm**, and agent LLM output is not deterministic, so differences of this size can be noise. Two confounds: (1) the active run also used the Jev tool-role gate, which gave agents search tools (4 tool calls appeared) while the LLM path gave none — the offline evaluation already recommends keeping that gate off; (2) activation weighting shifted voice toward actors the feed addressed (NHSBSA 12 → 20 actions) and away from a peripheral one (the pre-registration trainee 17 → 2). Whether that is more realistic is a judgement, not a measurement.
+
+A real bug surfaced on the first attempt and is fixed: V4.1-Flash reasons by default and rejects follow-up turns that do not echo `reasoning_content`, which CAMEL agents never do, so agent calls failed with HTTP 400 and those agents silently skipped their turn. `scripts/lib/model_factory.py` now disables thinking for DeepSeek endpoints (the app's own `llm_client.py` already did). The errors print to stderr, not `simulation.log`.
+
+## 6. Reproduce
 
 ```powershell
 cd backend

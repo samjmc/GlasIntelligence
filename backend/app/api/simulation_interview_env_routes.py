@@ -12,6 +12,8 @@ from ..middleware.auth import require_auth
 from ..models.project import ProjectManager
 from ..config import Config
 from ..services.demo_interviews import canned_batch
+from ..services import offline_interview
+from ..services.offline_interview import SimulationNotFoundError
 from ..services.report_agent import ReportManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
@@ -31,8 +33,10 @@ def interview_agent():
     """
     Interview a single Agent
 
-    Note: This feature requires the simulation environment to be in running state
-    (entered wait-for-command mode after completing simulation loop)
+    Works for any simulation whose directory still exists. While the OASIS process is
+    alive (wait-for-command mode) the live agent answers over IPC ("mode": "live");
+    once it has exited the agent is rebuilt from the recorded run ("mode": "reconstructed").
+    See services/offline_interview.py.
 
     Request (JSON):
         {
@@ -99,21 +103,16 @@ def interview_agent():
         if platform and platform not in ("twitter", "reddit"):
             return jsonify({"success": False, "error": "platform parameter must be 'twitter' or 'reddit'"}), 400
 
-        if not SimulationRunner.check_env_alive(simulation_id):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Simulation environment is not running or has been closed. Please ensure simulation has completed and entered wait-for-command mode.",
-                }
-            ), 400
-
         optimized_prompt = optimize_interview_prompt(prompt)
 
-        result = SimulationRunner.interview_agent(
+        result = offline_interview.interview_single(
             simulation_id=simulation_id, agent_id=agent_id, prompt=optimized_prompt, platform=platform, timeout=timeout
         )
 
         return jsonify({"success": result.get("success", False), "data": result})
+
+    except SimulationNotFoundError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
 
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -132,7 +131,8 @@ def interview_agents_batch():
     """
     Batch interview multiple Agents
 
-    Note: This feature requires the simulation environment to be in running state
+    Live over IPC while the OASIS process is alive, otherwise reconstructed from the
+    recorded run; ``data.mode`` says which ("live" | "reconstructed").
 
     Request (JSON):
         {
@@ -199,20 +199,12 @@ def interview_agents_batch():
                     {"success": False, "error": f"Interview list item {i + 1} platform must be 'twitter' or 'reddit'"}
                 ), 400
 
-        # Demo mode: the OASIS subprocess does not exist for a recorded run,
-        # so serve canned, scenario-grounded responses instead (shape-compatible
-        # with the live path — see demo_interviews.py). Checked before the
-        # env-alive guard because the subprocess is always gone in a replay.
-        if Config.DEMO_MODE:
+        # Demo mode: serve canned, scenario-grounded responses (shape-compatible with the
+        # live path — see demo_interviews.py). Config does not define DEMO_MODE (the static
+        # demo replays a frontend tape and never reaches this route), so this stays off; a
+        # bare attribute read made every batch interview a 500.
+        if getattr(Config, "DEMO_MODE", False):
             return jsonify(canned_batch(simulation_id, interviews, platform))
-
-        if not SimulationRunner.check_env_alive(simulation_id):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Simulation environment is not running or has been closed. Please ensure simulation has completed and entered wait-for-command mode.",
-                }
-            ), 400
 
         optimized_interviews = []
         for interview in interviews:
@@ -220,11 +212,14 @@ def interview_agents_batch():
             optimized_interview["prompt"] = optimize_interview_prompt(interview.get("prompt", ""))
             optimized_interviews.append(optimized_interview)
 
-        result = SimulationRunner.interview_agents_batch(
+        result = offline_interview.interview_batch(
             simulation_id=simulation_id, interviews=optimized_interviews, platform=platform, timeout=timeout
         )
 
         return jsonify({"success": result.get("success", False), "data": result})
+
+    except SimulationNotFoundError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
 
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -243,7 +238,8 @@ def interview_all_agents():
     """
     Global interview - Interview all Agents with the same question
 
-    Note: This feature requires the simulation environment to be in running state
+    Live over IPC while the OASIS process is alive, otherwise reconstructed from the
+    recorded run; ``data.mode`` says which ("live" | "reconstructed").
 
     Request (JSON):
         {
@@ -288,21 +284,16 @@ def interview_all_agents():
         if platform and platform not in ("twitter", "reddit"):
             return jsonify({"success": False, "error": "platform parameter must be 'twitter' or 'reddit'"}), 400
 
-        if not SimulationRunner.check_env_alive(simulation_id):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Simulation environment is not running or has been closed. Please ensure simulation has completed and entered wait-for-command mode.",
-                }
-            ), 400
-
         optimized_prompt = optimize_interview_prompt(prompt)
 
-        result = SimulationRunner.interview_all_agents(
+        result = offline_interview.interview_all(
             simulation_id=simulation_id, prompt=optimized_prompt, platform=platform, timeout=timeout
         )
 
         return jsonify({"success": result.get("success", False), "data": result})
+
+    except SimulationNotFoundError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
 
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -393,9 +384,14 @@ def get_env_status():
                 "env_alive": true,
                 "twitter_available": true,
                 "reddit_available": true,
+                "interview_available": true,         // interviews can be answered right now
+                "interview_mode": "live",            // "live" | "reconstructed" | null
                 "message": "Environment is running, ready to receive Interview commands"
             }
         }
+
+    ``env_alive`` / ``twitter_available`` / ``reddit_available`` keep their old meaning (the
+    OASIS process); ``interview_available`` is what a caller should gate interviews on.
     """
     try:
         data = request.get_json() or {}
@@ -405,12 +401,15 @@ def get_env_status():
         if not simulation_id:
             return jsonify({"success": False, "error": "Please provide simulation_id"}), 400
 
-        env_alive = SimulationRunner.check_env_alive(simulation_id)
+        interview = offline_interview.interview_status(simulation_id)
+        env_alive = interview["interview_mode"] == offline_interview.InterviewMode.LIVE
 
         env_status = SimulationRunner.get_env_status_detail(simulation_id)
 
         if env_alive:
             message = "Environment is running, ready to receive Interview commands"
+        elif interview["interview_available"]:
+            message = "Environment has closed; interviews are answered from the recorded run"
         else:
             message = "Environment is not running or has been closed"
 
@@ -422,6 +421,8 @@ def get_env_status():
                     "env_alive": env_alive,
                     "twitter_available": env_status.get("twitter_available", False),
                     "reddit_available": env_status.get("reddit_available", False),
+                    "interview_available": interview["interview_available"],
+                    "interview_mode": interview["interview_mode"],
                     "message": message,
                 },
             }
