@@ -1389,7 +1389,7 @@ Return a JSON-formatted list of sub-questions in English."""
             if not api_result.get("success", False):
                 error_msg = api_result.get("error", "Unknown error")
                 logger.warning(f"Interview API returned failure: {error_msg}")
-                result.summary = f"Interview API call failed: {error_msg}. Please check the OASIS simulation environment status."
+                result.summary = f"Interview API call failed: {error_msg}"
                 return result
             
             # Step 5: Parse API response and build AgentInterview objects
@@ -1463,9 +1463,9 @@ Return a JSON-formatted list of sub-questions in English."""
             
             result.interviewed_count = len(result.interviews)
             
-        except ValueError as e:
-            logger.warning(f"Interview API call failed (environment not running?): {e}")
-            result.summary = f"Interview failed: {str(e)}. The simulation environment may be shut down; please ensure OASIS is running."
+        except (ValueError, offline_interview.SimulationNotFoundError) as e:
+            logger.warning(f"Interview API call failed: {e}")
+            result.summary = f"Interview failed: {str(e)}"
             return result
         except Exception as e:
             logger.error(f"Interview API call exception: {e}")

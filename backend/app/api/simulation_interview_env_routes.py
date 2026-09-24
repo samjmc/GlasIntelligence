@@ -199,12 +199,10 @@ def interview_agents_batch():
                     {"success": False, "error": f"Interview list item {i + 1} platform must be 'twitter' or 'reddit'"}
                 ), 400
 
-        # Demo mode: the OASIS subprocess does not exist for a recorded run,
-        # so serve canned, scenario-grounded responses instead (shape-compatible
-        # with the live path — see demo_interviews.py). Checked before the
-        # env-alive guard because the subprocess is always gone in a replay.
-        # Config has never defined DEMO_MODE (the static demo replays a frontend tape and never
-        # reaches this route), so a bare attribute read made every batch interview a 500.
+        # Demo mode: serve canned, scenario-grounded responses (shape-compatible with the
+        # live path — see demo_interviews.py). Config does not define DEMO_MODE (the static
+        # demo replays a frontend tape and never reaches this route), so this stays off; a
+        # bare attribute read made every batch interview a 500.
         if getattr(Config, "DEMO_MODE", False):
             return jsonify(canned_batch(simulation_id, interviews, platform))
 
@@ -403,11 +401,10 @@ def get_env_status():
         if not simulation_id:
             return jsonify({"success": False, "error": "Please provide simulation_id"}), 400
 
-        env_alive = SimulationRunner.check_env_alive(simulation_id)
+        interview = offline_interview.interview_status(simulation_id)
+        env_alive = interview["interview_mode"] == offline_interview.InterviewMode.LIVE
 
         env_status = SimulationRunner.get_env_status_detail(simulation_id)
-
-        interview = offline_interview.interview_status(simulation_id)
 
         if env_alive:
             message = "Environment is running, ready to receive Interview commands"

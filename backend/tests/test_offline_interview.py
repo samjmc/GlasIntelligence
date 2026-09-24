@@ -155,7 +155,7 @@ def test_dead_process_batch_is_reconstructed_in_live_shape(finished_run):
     for platform in ("twitter", "reddit"):
         r = results[f"{platform}_0"]
         assert r["agent_id"] == 0 and r["platform"] == platform
-        assert r["response"] == "Recorded-run answer." and r["mode"] == "reconstructed"
+        assert r["response"] == "Recorded-run answer."
     assert len(FakeLLM.calls) == 2
     assert all(m[-1] == {"role": "user", "content": "Why oppose the caps?"} for m in FakeLLM.calls)
 
@@ -251,6 +251,24 @@ def test_unknown_agent_gets_an_error_entry_not_a_crash(finished_run):
     assert "not found" in out["result"]["results"]["twitter_7"]["error"]
 
 
+def test_one_bad_record_does_not_sink_the_batch(finished_run, monkeypatch):
+    real = oi.build_interview_messages
+    monkeypatch.setattr(oi, "build_interview_messages",
+                        lambda run, p, a, q: (_ for _ in ()).throw(KeyError("bad row")) if a == 1 else real(run, p, a, q))
+    out = oi.interview_batch("sim_done", [{"agent_id": 0, "prompt": "Q"}, {"agent_id": 1, "prompt": "Q"}],
+                             platform="twitter")
+    assert out["success"] is True
+    assert out["result"]["results"]["twitter_0"]["response"] == "Recorded-run answer."
+    assert "bad row" in out["result"]["results"]["twitter_1"]["error"]
+
+
+def test_nothing_to_interview_says_why(finished_run):
+    (finished_run / "reddit_profiles.json").unlink()
+    out = oi.interview_single("sim_done", 0, "Q", platform="reddit")
+    assert out["success"] is False and "recorded: twitter" in out["error"]
+    assert FakeLLM.calls == []
+
+
 def test_llm_failure_on_every_agent_is_a_clean_failure(finished_run):
     FakeLLM.fail = True
     out = oi.interview_batch("sim_done", [{"agent_id": 0, "prompt": "Q"}])
@@ -305,9 +323,24 @@ def test_check_env_alive_false_when_recorded_pid_is_gone(finished_run):
     assert SimulationRunner.check_env_alive("sim_done") is False
 
 
+def test_check_env_alive_false_when_recorded_pid_is_reused_by_another_process(finished_run):
+    _stale_alive(finished_run, os.getpid())  # alive, but not this run's OASIS process
+    assert SimulationRunner.check_env_alive("sim_done") is False
+
+
 def test_check_env_alive_true_when_recorded_pid_runs(finished_run):
-    _stale_alive(finished_run, os.getpid())
-    assert SimulationRunner.check_env_alive("sim_done") is True
+    import subprocess
+    import sys
+
+    config_path = os.path.join(SimulationRunner.RUN_STATE_DIR, "sim_done", "simulation_config.json")
+    # Same argv shape as SimulationRunner.start_simulation: <python> <script> --config <config_path>
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "--config", config_path])
+    try:
+        _stale_alive(finished_run, proc.pid)
+        assert SimulationRunner.check_env_alive("sim_done") is True
+    finally:
+        proc.kill()
+        proc.wait()
 
 
 def test_check_env_alive_trusts_status_file_without_a_pid(finished_run):

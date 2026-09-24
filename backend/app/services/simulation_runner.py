@@ -1464,7 +1464,12 @@ class SimulationRunner:
         import psutil
 
         try:
-            return psutil.Process(state.process_pid).status() != psutil.STATUS_ZOMBIE
+            proc = psutil.Process(state.process_pid)
+            if proc.status() == psutil.STATUS_ZOMBIE:
+                return False
+            # PIDs are reused (a restarted container hands out the same small numbers), so the
+            # pid must still be the run we launched: its command line names this run's config.
+            return os.path.join(sim_dir, "simulation_config.json") in proc.cmdline()
         except psutil.NoSuchProcess:
             return False
         except psutil.AccessDenied:

@@ -288,17 +288,16 @@ def build_interview_messages(
 
 
 def _answer_one(llm: LLMClient, run: RecordedRun, platform: str, agent_id: int, prompt: str) -> dict[str, Any]:
-    messages = build_interview_messages(run, platform, agent_id, prompt)
-    if messages is None:
-        return {"agent_id": agent_id, "response": None, "platform": platform,
-                "error": f"Agent {agent_id} not found on {platform}"}
     try:
+        messages = build_interview_messages(run, platform, agent_id, prompt)
+        if messages is None:
+            return {"agent_id": agent_id, "response": None, "platform": platform,
+                    "error": f"Agent {agent_id} not found on {platform}"}
         text = llm.chat(messages, temperature=INTERVIEW_TEMPERATURE, max_tokens=INTERVIEW_MAX_TOKENS)
     except Exception as e:  # one agent's failure must not sink the batch
         logger.warning(f"Reconstructed interview failed: agent_id={agent_id}, platform={platform}: {e}")
         return {"agent_id": agent_id, "response": None, "platform": platform, "error": str(e)}
-    return {"agent_id": agent_id, "response": text, "timestamp": _now(), "platform": platform,
-            "mode": InterviewMode.RECONSTRUCTED.value}
+    return {"agent_id": agent_id, "response": text, "timestamp": _now(), "platform": platform}
 
 
 def _run_jobs(run: RecordedRun, jobs: list[tuple[str, int, str]], timeout: float) -> dict[str, dict[str, Any]]:
@@ -348,6 +347,9 @@ def reconstructed_batch(
     base = {"interviews_count": len(interviews), "timestamp": _now(), "mode": InterviewMode.RECONSTRUCTED.value}
     if not available:
         return {"success": False, **base, "error": "No recorded profiles for this simulation; nothing to interview"}
+    if not jobs:
+        return {"success": False, **base,
+                "error": f"No valid agent_id on a recorded platform (recorded: {', '.join(available)})"}
     results = _run_jobs(run, jobs, timeout)
     if not any(r.get("response") for r in results.values()):
         errors = sorted({r.get("error", "no response") for r in results.values()})
@@ -418,12 +420,12 @@ def interview_all(simulation_id: str, prompt: str, platform: str | None = None,
 
 def interview_status(simulation_id: str) -> dict[str, Any]:
     """Whether interviews can be answered, and by which path."""
-    if SimulationRunner.check_env_alive(simulation_id):
-        return {"interview_available": True, "interview_mode": InterviewMode.LIVE.value}
     try:
         sim_dir = _require_sim_dir(simulation_id)
     except SimulationNotFoundError:
         return {"interview_available": False, "interview_mode": None}
+    if SimulationRunner.check_env_alive(simulation_id):
+        return {"interview_available": True, "interview_mode": InterviewMode.LIVE.value}
     available = bool(RecordedRun(sim_dir).platforms())
     return {"interview_available": available,
             "interview_mode": InterviewMode.RECONSTRUCTED.value if available else None}

@@ -289,7 +289,7 @@
           </div>
 
           <div v-if="chatTarget === 'agent' && interviewMode === 'reconstructed'" class="interview-mode-banner">
-            The simulation has finished. Agents answer {{ RECONSTRUCTED_NOTE.toLowerCase() }}.
+            {{ RECONSTRUCTED_BANNER }}
           </div>
 
           <!-- Chat Input -->
@@ -369,10 +369,10 @@
             </div>
 
             <div v-if="interviewMode === 'reconstructed'" class="interview-mode-banner">
-              The simulation has finished. Agents answer {{ RECONSTRUCTED_NOTE.toLowerCase() }}.
+              {{ RECONSTRUCTED_BANNER }}
             </div>
 
-            <button
+            <button 
               class="survey-submit-btn"
               :disabled="selectedAgents.size === 0 || !surveyQuestion.trim() || isSurveying"
               @click="submitSurvey"
@@ -428,6 +428,7 @@ import { isDemoMode } from '../demo/config'
 
 // Shown when the backend answered from the recorded run because the simulation process had exited.
 const RECONSTRUCTED_NOTE = 'Reconstructed from the recorded run'
+const RECONSTRUCTED_BANNER = 'The simulation has finished. Answers are reconstructed from the recorded run.'
 
 const props = defineProps({
   reportId: String,
@@ -757,9 +758,9 @@ const sendToAgent = async (message) => {
     
     // Convert object dictionary to array, prioritize reddit platform responses
     let responseContent = null
-    let reconstructed = res.data.mode === 'reconstructed'
+    const reconstructed = res.data.mode === 'reconstructed'
     const agentId = selectedAgentIndex.value
-
+    
     if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
       // Prefer reddit platform response, then twitter
       const redditKey = `reddit_${agentId}`
@@ -767,7 +768,6 @@ const sendToAgent = async (message) => {
       const agentResult = resultsDict[redditKey] || resultsDict[twitterKey] || Object.values(resultsDict)[0]
       if (agentResult) {
         responseContent = agentResult.response || agentResult.answer
-        reconstructed = reconstructed || agentResult.mode === 'reconstructed'
       }
     } else if (Array.isArray(resultsDict) && resultsDict.length > 0) {
       // Compatible with array format
@@ -852,15 +852,14 @@ const submitSurvey = async () => {
         
         // Prefer reddit platform response, then twitter
         let responseContent = 'No response'
-        let reconstructed = res.data.mode === 'reconstructed'
-
+        const reconstructed = res.data.mode === 'reconstructed'
+        
         if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
           const redditKey = `reddit_${agentIdx}`
           const twitterKey = `twitter_${agentIdx}`
           const agentResult = resultsDict[redditKey] || resultsDict[twitterKey]
           if (agentResult) {
             responseContent = agentResult.response || agentResult.answer || 'No response'
-            reconstructed = reconstructed || agentResult.mode === 'reconstructed'
           }
         } else if (Array.isArray(resultsDict)) {
           // Compatible with array format
@@ -978,9 +977,11 @@ watch(() => props.reportId, (newId) => {
 // Ask which path will answer interviews, so a finished run shows a note instead of a dead end.
 // The static demo replays a tape with no env-status entry; asking there would trip its watchdog.
 const loadInterviewStatus = async (simulationId) => {
+  interviewMode.value = null
   if (isDemoMode) return
   try {
     const res = await getEnvStatus({ simulation_id: simulationId })
+    if (simulationId !== props.simulationId) return  // a newer simulation took over meanwhile
     if (res.success && res.data?.interview_available) {
       interviewMode.value = res.data.interview_mode || null
     }
@@ -2130,7 +2131,7 @@ watch(() => props.simulationId, (newId) => {
   30% { transform: translateY(-8px); }
 }
 
-/* Chat Input */
+/* Reconstructed-interview note and banner */
 .reconstructed-note {
   margin-top: 4px;
   font-size: 11px;
@@ -2147,6 +2148,7 @@ watch(() => props.simulationId, (newId) => {
   color: #6B7280;
 }
 
+/* Chat Input */
 .chat-input-area {
   padding: 16px 24px;
   border-top: 1px solid #E5E7EB;
