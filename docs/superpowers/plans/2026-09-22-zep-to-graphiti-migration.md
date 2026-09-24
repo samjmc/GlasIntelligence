@@ -1,6 +1,119 @@
 # Plan: move the knowledge graph from Zep Cloud to self-hosted Graphiti
 
-**Date:** 2026-09-22 · **Status:** proposed · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** (next: G1, after PR #11 merges; PR #13 merged 2026-09-24) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+
+## Vet results (2026-09-22) — these override anything below that conflicts
+
+Three independent read-only passes checked this plan against `main` at 837527d, the open PRs, and PyPI and Hugging Face metadata.
+
+**Blocker — dependency conflict (new step G0.5).** `camel-oasis==0.2.5` pins **`neo4j==5.23.0`** and **`sentence-transformers==3.0.0`** exactly. Every graphiti-core release since 0.12.0 needs `neo4j>=5.26`, and the `[sentence-transformers]` extra needs `>=3.2.1`. OASIS really imports both: `oasis/social_agent/agent_graph.py:19` and `oasis/social_platform/recsys.py:27`. So `uv add graphiti-core` will not resolve. **G0.5:**
+- **Option A (recommended):** in a scratch copy, add `[tool.uv] override-dependencies = ["neo4j>=5.26,<6", "sentence-transformers>=3.2.1,<4"]`. Both caps are mandatory: uncapped, uv picks neo4j 6.x and sentence-transformers 6.x, which drag in transformers 5. Then `uv lock`, run the full backend suite, and run an 8-round OASIS smoke (`scripts/jev_live_ab.py --rounds 8 --only off`). Accept only if the suite's failure set is unchanged and the smoke run has zero errors.
+- **Option B (fallback if A breaks OASIS):** run Graphiti in its own venv as a small sidecar process that the app calls over localhost HTTP. The async bridge then disappears too, at the cost of one extra process.
+
+**High — live graph memory is ON for every UI simulation today.** The API default is `False` (`simulation_run_routes.py:76`), but `frontend/src/components/Step3Simulation.vue:409` hard-codes `enable_graph_memory_update: true`. The sessionStorage key `glas_pref_graph_memory` that `docs/zep-footprint.md:45` describes does not exist in `frontend/src`. **This is a live Zep credit drain now**, so it moves to Phase 4.0 step 1 in the parent plan: the default becomes off, an explicit per-run opt-in, and a credit estimate is shown before starting.
+The updater also sends while holding `_buffer_lock` (`zep_graph_memory_updater.py:370-382`). Graphiti's `add_episode` blocks until extraction finishes, so send outside the lock, and add memory to the Graphiti cost table (one episode per 5 actions × several DeepSeek calls).
+
+**High — the "top-5 types for Zep" cap as written breaks things.** `Person` and `Organization` are appended *last* (`ontology_generator.py:407-425`). `graph_enrichment_service._CATEGORY_LABEL` (`:31-43`) sends 10 of its 11 categories to those two types. `zep_entity_reader.filter_defined_entities` (`:273-276`) drops `Entity`-only nodes, and `oasis_profile_generator` INDIVIDUAL/GROUP sets (`:169-178`) expect `person` / `organization`. **Fix:**
+- keep `Person` + `Organization` + the top 3 specific types;
+- remap dropped types to the fallbacks inside `add_nodes` labels;
+- filter `source_targets` to the kept types.
+
+**High — gate G1 AND the parent plan's Phase 4.0 on PR #11 merging.** PR #11 (CI health, 67 files) reformats `graph_builder.py`, `zep_tools.py`, `oasis_profile_generator.py`, `zep_entity_reader.py`, `zep_graph_memory_updater.py`, `ontology_generator.py`, `api/graph.py`, `config.py`, `zep_paging.py`, `graph_enrichment_service.py`, `tasks/graph_tasks.py`, `pyproject.toml` and `uv.lock`. The offline-interviews branch (not yet a PR) also edits `zep_tools.py` and `simulation_runner.py`, so add `simulation_runner.py` to the do-not-touch list until it merges.
+
+**High — the G1 inventory is incomplete.** The real surface is **18 SDK call sites using 13 methods, live in 7 service files plus `utils/zep_paging.py`**. `ontology_generator.py:453` is only a code-generation string. Services are also constructed, or `Config.ZEP_API_KEY` is checked directly, in:
+- `tasks/graph_tasks.py:38`, a Celery build path duplicating `api/graph.py`;
+- `api/graph.py:396,484,708,716,758,764`;
+- `api/simulation.py:63,75,101,107,135,143,463,1378,1391`;
+- `api/simulation_entities.py:29,38,55,58,76,81`;
+- `api/report.py:983,1056`;
+- `api/report_tools_routes.py:41,97`;
+- `services/report_agent.py:1017`;
+- `services/simulation_manager.py:276,326`.
+
+**G1 delta:**
+- keep every service constructor signature, and resolve the store internally;
+- replace every `ZEP_API_KEY` check with `graph_store_available()`;
+- `oasis_profile_generator.py:205` builds a Zep client only when the key exists, and otherwise *silently* returns no grounding facts (`:300`), so it must use the store;
+- `graph_builder.build_graph_async` / `_build_graph_worker` (`:53-185`) has no callers: delete it rather than migrate it.
+
+**High — a CPU embedder or reranker would stall the single event loop.** sentence-transformers `encode` and the BGE reranker are synchronous. On the bridge loop they block every graph call: the build-time graph poll, the 30 s simulation auto-refresh, and 5 profile workers × 2 searches, each with a 30 s timeout that silently means "no grounding". Wrap both in `asyncio.to_thread`.
+
+**High — the reranker download is ~2.2 GB, not 570 MB.** `BAAI/bge-reranker-v2-m3` `model.safetensors` is 2,166 MB; 568 M is its parameter count. `bge-small-en-v1.5` is 127 MB. Default `GRAPHITI_RERANKER=rrf`. The cross-encoder is opt-in once disk allows; C: now has 15 GB free after old clones were removed.
+
+**High — tests would make live, paid calls.** `tests/conftest.py` keeps a real `LLM_API_KEY` if one is in the environment, and Sam's user env vars include `NEO4J_URI`. So a "skip unless NEO4J_URI" contract test would run on every local `pytest`. **Fix:**
+- make Graphiti integration tests opt-in via `RUN_GRAPHITI_IT=1`;
+- register an `integration` marker and add `addopts = -m "not integration"`;
+- use `pytest.importorskip("graphiti_core")`;
+- import `graphiti_store` lazily so app import never needs graphiti.
+
+The planned "`ZEP_API_KEY` unset" guard cannot work, because `conftest.py:31` always sets a placeholder. Instead, monkeypatch `zep_cloud.client.Zep` to raise.
+
+**Tests G1 will break** (list them as required edits):
+- `test_graph_enrichment_materialize.py`: the `zep_client=` kwarg; asserts `AddNodeItem` reaches `client.graph.add_nodes` and `client.task.get.call_count`; patches `fetch_all_nodes`.
+- `test_graph_cache_wiring.py`: constructs a real `Zep`, swaps `updater.client`, and patches `er.fetch_all_nodes/edges`.
+- `test_jev_simulation.py:517`: patches `zep_entity_reader.Zep`.
+- `test_zep_paging.py:11`: the import path changes.
+
+**Medium:**
+- **Snapshot cache is backend-blind.** The key is only `graph_id` (`graph_snapshot_cache.py:69-74`), with a 24 h TTL. Add `graph_backend` to the snapshot meta, bump `SNAPSHOT_FORMAT_VERSION`, and add `graph_backend` to the project record (no such field today).
+- **Chunking lives in the callers:** `api/graph.py:491` and `graph_tasks.py:41`. The real default is the project's **300/30** (`project.py:49-50`), not 500/50. `preferred_chunk_size()` must be applied in both callers and override the stored project value. The Zep store's 700-byte target needs a **byte-aware** splitter, because `utils/file_parser.split_text_into_chunks` counts characters and backs off to sentence breaks.
+- **Progress bands and timeouts assume Zep's separate wait stage.** `api/graph.py` uses 15–50% add and 50–75% wait, plus 600 s / 300 s polls. Redesign them for a blocking `add_texts`. The frontend only displays `task.message` / `progress` and parses neither. `Step1GraphBuild.vue:125` has static "via Zep" copy to update.
+- **Historical facts.** `panorama_search` (`zep_tools.py:134-141,1196-1201`) depends on `invalid_at` / `expired_at`. Measure in G0 whether `add_episode_bulk` sets them; if not, use `add_episode` for the first build too, or accept the loss.
+- **G3 cost is larger than stated.** The pharmacy dossier is **58,449 characters** (the tape's `research/status` `summary_md`), not 30k. At today's 300/30 chunking that is about 215 chunks × 1 credit, **≈ 215 credits** plus enrichment. Compute the exact figure with the credit ledger's dry-run on the real text before asking to spend it.
+- **Production** (G5): the Hetzner pipeline was retired on 2026-08-10 (`579c7d9`, `6414ffd`); `docker-compose.prod.yml`, `deploy.yml` and `deploy.sh` no longer exist. Only GitHub Pages deploys, and there is no Zep secret anywhere. So G5 is "fix the README (lines 104-123, 156-211 describe the retired pipeline) and decide hosting from scratch", not "add a service to `docker-compose.prod.yml`".
+
+**Low:**
+- Also read: `processed`, `episode_ids`, `fact_type`, edge `attributes` / `created_at`, `add_nodes` `.nodes` / `.task_id`, and task `.status` / `.error`. The adapter value types must expose these, or the callers must change.
+- Graphiti `get_by_uuid` raises when a node is missing, so the adapter must catch it and return `None`.
+- `graph_builder` never calls `bump_mutation_generation`; `api/graph.py:605` writes the snapshot instead. Keep that behaviour, and don't claim "callers bump after writes".
+- Set `GRAPHITI_TELEMETRY_ENABLED=false` in the process env **before** the first `graphiti_core` import (posthog is a hard dependency).
+- The 750-line rule (`AGENTS.md:51`): split `zep_store.py` by concern (build / enrichment / read / memory).
+- Force-rebuild and reset (`api/graph.py:128,439`) leave old graphs behind, and there is no cleanup job. Add a group-delete sweep once we host Neo4j.
+
+**Corrected sequence:**
+- G0: spike in a throwaway venv, with the constraints `torch==2.9.1` and `sentence-transformers<4` so it doesn't download a new torch.
+- G0.5: resolvability.
+- Wait for PR #11 (and the interviews PR).
+- Then G1 → G2 → G3 → G4 → G5.
+
+## G0.5 + G0 results (2026-09-24) — verdict: GO
+
+Run in a scratch worktree (PR #11 head e44f351 + `main` 837527d), 0 Zep credits.
+
+**G0.5 — resolvability: PASS, with ONE override, not two.**
+- Change: add `"graphiti-core==0.30.2"` to `[project] dependencies`, and `[tool.uv] override-dependencies = ["neo4j>=5.26,<6"]`.
+- The sentence-transformers override is **not needed**. graphiti-core needs it only for its `[sentence-transformers]` extra (the BGE reranker), and we default to RRF. So OASIS keeps its pinned `sentence-transformers==3.0.0` (`recsys.py:27` is untouched), and our local embedder uses 3.0.0 too.
+- `uv lock` changed 3 packages only: +graphiti-core 0.30.2, neo4j 5.23.0 → 5.28.6, +posthog 7.60.0 (Graphiti telemetry; set `GRAPHITI_TELEMETRY_ENABLED=false`). torch stays 2.9.1+cpu; nothing re-downloaded.
+- OASIS's only neo4j use is `agent_graph.py:19` (`from neo4j import GraphDatabase`) for its optional `backend="neo4j"`; the app uses the default `igraph`.
+- Full backend suite: **458 passed** before and after (identical).
+- OASIS smoke, `jev_live_ab.py --rounds 8 --only off` on neo4j 5.28.6: exit 0, 138 actions over 9 rounds, 0 ERROR lines in `simulation.log`.
+
+**G0 — spike: GO on all three criteria.** Pharmacy dossier (58,449 chars, the tape's `summary_md`), the app's real 10-entity / 10-edge ontology, 2,000/100-char chunks (34 episodes), sequential `add_episode`, DeepSeek `deepseek-flash` with thinking disabled, `bge-small-en-v1.5` (384 dims) local embedder, RRF search, no reranker.
+
+| Measure | Result | Go threshold |
+|---|---|---|
+| Episodes ingested | **34 / 34 (100%)** | ≥ 90% |
+| Real stakeholder nodes | **35** in the stakeholder types (12 pharmacy bodies, 11 chains, 5 political, 3 named people, 4 patient groups), plus real bodies typed `Organization` (DHSC, NHS England, NICE, CQC, NHSBSA, King's Fund…) | ≥ 8 |
+| Cost per build | **$0.15** (DeepSeek balance delta, ±$0.01; 674 calls, 2.28 M prompt tokens of which 0.77 M cache hits, 68 k completion) | ≤ $1 |
+| Graph | 115 nodes (94 typed), 287 edges, 16 edges invalidated (so temporal facts work with `add_episode`) | — |
+| Wall time | 456 s (7.6 min), ~13 s per episode, slowest 42 s | — |
+| Search | 0.1–0.3 s per edge+node query; relevant facts on all 5 sample queries | — |
+| Zep equivalent | ~215 credits for the same text | — |
+
+**Finding that G2 MUST carry — DeepSeek mirrors the JSON schema.** In `json_object` mode Graphiti appends the Pydantic JSON schema to the prompt, and DeepSeek often answers in the schema's own shape: `{"title", "type", "description", "properties": {<the real values>}}`. Graphiti validates with `entity_type(**merged)`, which ignores extra keys, so the wrapper passes and a Map reaches Neo4j: `CypherTypeError: Property values can only be of primitive types`, and the **whole episode fails**. In the first dry run, 2 of 2 episodes failed this way.
+- Fix (in our client, not in Graphiti): subclass `OpenAIGenericClient._generate_response`. Validate each reply with `response_model.model_validate`. If the reply has none of the model's fields and exactly one dict value, try that inner dict **first** (with all-optional fields the wrapper itself "validates" as an empty answer and silently loses the data). Return `model_dump(mode="json", exclude_unset=True)`, so only the model's own fields are returned. Retry up to 3 times on a real mismatch, then raise. Graphiti's own tenacity retry covers only JSON decode and rate-limit errors.
+- Measured over the full build: **237 of 674 replies (35%) needed the unwrap**; 0 needed a retry; 0 gave up. So this is not an edge case. Without it Graphiti on DeepSeek does not work.
+- DeepSeek thinking must be off here too. `OpenAIGenericClient` has no `extra_body`, so pass `client=` a thin wrapper whose `chat.completions.create` adds `extra_body={"thinking": {"type": "disabled"}}`.
+
+**Other G0 facts for G2:**
+- Graphiti's defaults for llm, embedder and cross-encoder are all OpenAI clients (`graphiti.py:219-227`). The spike passed a `CrossEncoderClient` that raises if called, which proves RRF recipes never call it.
+- `EntityEdge.get_by_group_ids` **raises** `GroupsEdgesNotFoundError` on an empty group; it does not return `[]`. The adapter must catch it.
+- The Neo4j driver logs `UnknownPropertyKeyWarning` for every query on a fresh DB. Set `neo4j.notifications` to ERROR.
+- Graphiti creates free-form relation names outside `edge_types` (44 distinct names; the 10 typed ones are 216 of 287 edges, 75%). Callers that group by edge name must accept unknown names.
+- Quality risks to track in G3: non-actor nodes typed `Organization` (Australia, Brexit, England, "Pharmacy First" as the top-degree node), and missed merges (CPE / Community Pharmacy England, NHSBSA / NHS Business Services Authority). The Jev actor filter was not run in the spike (no Jev provider configured); run it in G3.
+- First load of the embedder downloads ~130 MB and took 52 s; later loads are local.
+
+The spike script is `docs/superpowers/plans/2026-09-24-graphiti-g0-spike.py` (reference only, not app code). It is the starting point for `graphiti_store.py`, `ontology.py` and the client above.
 
 ## Why
 
@@ -104,7 +217,7 @@ backend/app/services/graph_store/
    - **(c)** A hosted API (Voyage or Gemini).
 
    Whatever we pick, set `EMBEDDING_DIM` to match. Store the model name and dimension in a `graph_store_meta` node, and refuse to start on a mismatch, because mismatched vectors fail silently.
-5. **Reranker.** Use `BGERerankerClient` (local `BAAI/bge-reranker-v2-m3`, about 570 MB downloaded on first use) only for the `cross_encoder` path, which is `zep_tools` search. Persona grounding uses RRF, which needs no model. If the download size or CPU latency is a problem, fall back to RRF everywhere and note the quality change.
+5. **Reranker.** *(Vet: the model is ~2.2 GB, not 570 MB, so default to RRF; see the Vet results above.)* Use `BGERerankerClient` (local `BAAI/bge-reranker-v2-m3`) only for the `cross_encoder` path, which is `zep_tools` search. Persona grounding uses RRF, which needs no model. If the download size or CPU latency is a problem, fall back to RRF everywhere and note the quality change.
 6. **Ontology** (`ontology.py`), shared by both stores:
    - Build Pydantic models from the generator's dict.
    - Extend the reserved-name list to `uuid, name, group_id, labels, created_at, summary, attributes, name_embedding`. Graphiti raises `EntityTypeValidationError` on a clash; today's Zep list lacks `labels`, `attributes` and `name_embedding`.
