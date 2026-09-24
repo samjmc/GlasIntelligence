@@ -1,6 +1,6 @@
 # Plan: move the knowledge graph from Zep Cloud to self-hosted Graphiti
 
-**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** (next: G1, after PR #11 merges; PR #13 merged 2026-09-24) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** (next: G1; its gates PR #11 and PR #13 both merged 2026-09-24) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
 
 ## Vet results (2026-09-22) — these override anything below that conflicts
 
