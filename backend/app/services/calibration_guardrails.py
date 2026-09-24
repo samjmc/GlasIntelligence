@@ -88,8 +88,8 @@ def detect_scale(low: float, mid: float, high: float) -> tuple[float, float, flo
     If all values look like 0–1 fractions (each in [0, 1]), scale to 0–100.
     Does not scale mixed triplets (e.g. 0.5, 50, 80).
     """
-    l, m, h, _ = _detect_scale_with_reason(low, mid, high)
-    return l, m, h
+    lo, mi, hi, _ = _detect_scale_with_reason(low, mid, high)
+    return lo, mi, hi
 
 
 def enforce_ordering(low: float, mid: float, high: float) -> tuple[float, float, float]:

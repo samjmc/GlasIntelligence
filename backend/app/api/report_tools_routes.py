@@ -5,10 +5,10 @@ import traceback
 
 from flask import jsonify, request, send_file
 
-from . import report_bp
 from ..middleware.auth import require_auth
 from ..services.report_agent import ReportManager
 from ..utils.logger import get_logger
+from . import report_bp
 
 logger = get_logger("glas.api.report")
 

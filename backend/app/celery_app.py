@@ -1,6 +1,7 @@
 """Celery application factory for Glas Intelligence."""
 
 import os
+
 from celery import Celery
 
 

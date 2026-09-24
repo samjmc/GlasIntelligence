@@ -1,8 +1,10 @@
 """Industry feed API routes."""
 
 import os
-from datetime import datetime, UTC
-from flask import Blueprint, request, jsonify, g
+from datetime import UTC, datetime
+
+from flask import Blueprint, g, jsonify, request
+
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
@@ -97,7 +99,6 @@ def list_feed_simulations():
     industry_id = request.args.get("industry_id")
     limit = request.args.get("limit", 20, type=int)
     offset = request.args.get("offset", 0, type=int)
-    sim_type = request.args.get("type", "macro")
 
     try:
         q = (
@@ -124,8 +125,6 @@ def list_feed_simulations():
             views_limit = FREE_MONTHLY_VIEWS
 
         for item in items:
-            is_industry_specific = item.get("is_industry_specific", False)
-
             if not _feed_has_full_access(plan):
                 item.pop("report_id", None)
                 item.pop("simulation_id", None)
@@ -166,7 +165,6 @@ def get_feed_simulation(feed_id):
 
         item = resp.data[0]
         user_id, plan, profile = _get_user_plan()
-        is_industry_specific = item.get("is_industry_specific", False)
 
         if not _feed_has_full_access(plan):
             if user_id:

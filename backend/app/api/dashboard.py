@@ -1,6 +1,7 @@
 """User dashboard API routes."""
 
-from flask import Blueprint, jsonify, g
+from flask import Blueprint, g, jsonify
+
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB

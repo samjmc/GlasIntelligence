@@ -1,6 +1,6 @@
 """Deep research Celery task — runs in the celery-worker container, survives web server restarts."""
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from ..celery_app import celery_app
 from ..services.supabase_client import SupabaseDB

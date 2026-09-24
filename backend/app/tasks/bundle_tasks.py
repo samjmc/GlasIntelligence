@@ -268,7 +268,7 @@ def run_bundle_task(self, bundle_id, session_id, user_id):
                         bundle_id,
                     )
 
-            run_state = SimulationRunner.start_simulation(
+            SimulationRunner.start_simulation(
                 simulation_id=sim_id,
                 platform="parallel",
                 user_plan=user_plan,
