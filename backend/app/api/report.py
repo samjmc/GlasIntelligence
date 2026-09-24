@@ -17,6 +17,7 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
+from .simulation_access import caller_may_see, simulation_owner
 
 logger = get_logger('glas.api.report')
 
@@ -370,10 +371,10 @@ def list_reports():
         simulation_id = request.args.get('simulation_id')
         limit = request.args.get('limit', 50, type=int)
         
-        reports = ReportManager.list_reports(
-            simulation_id=simulation_id,
-            limit=limit
-        )
+        reports = [
+            r for r in ReportManager.list_reports(simulation_id=simulation_id, limit=None)
+            if caller_may_see(simulation_owner(r.simulation_id))
+        ][:limit]
         
         return jsonify({
             "success": True,

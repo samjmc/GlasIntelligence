@@ -28,6 +28,7 @@ from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
+from .simulation_access import caller_may_see
 
 logger = get_logger('glas.api')
 
@@ -73,10 +74,10 @@ def get_project(project_id: str):
 @require_auth
 def list_projects():
     """
-    List all projects
+    List the caller's projects
     """
     limit = request.args.get('limit', 50, type=int)
-    projects = ProjectManager.list_projects(limit=limit)
+    projects = [p for p in ProjectManager.list_projects(limit=None) if caller_may_see(p.user_id)][:limit]
     
     return jsonify({
         "success": True,
@@ -213,7 +214,7 @@ def generate_ontology():
                 "error": "Please upload at least one document"
             }), 400
         
-        project = ProjectManager.create_project(name=project_name)
+        project = ProjectManager.create_project(name=project_name, user_id=g.user_id)
         project.simulation_requirement = simulation_requirement
         
         if decision_intake:
@@ -673,21 +674,6 @@ def get_task(task_id: str):
     return jsonify({
         "success": True,
         "data": task.to_dict()
-    })
-
-
-@graph_bp.route('/tasks', methods=['GET'])
-@require_auth
-def list_tasks():
-    """
-    List all tasks
-    """
-    tasks = TaskManager().list_tasks()
-    
-    return jsonify({
-        "success": True,
-        "data": [t.to_dict() for t in tasks],
-        "count": len(tasks)
     })
 
 
