@@ -21,9 +21,9 @@ def run_full_pipeline(
     Run the complete simulation pipeline:
     prepare_simulation -> run_simulation -> generate_report -> generate_pdf
     """
-    from .simulation_tasks import prepare_simulation_task, run_simulation_task
-    from .report_tasks import generate_report_task
     from ..models.task import TaskManager, TaskStatus
+    from .report_tasks import generate_report_task
+    from .simulation_tasks import prepare_simulation_task, run_simulation_task
 
     task_manager = TaskManager()
     task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Starting full pipeline...")

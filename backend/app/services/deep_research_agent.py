@@ -10,14 +10,14 @@ import re
 import time
 from typing import Any
 
-from openai import OpenAI, RateLimitError, APIStatusError, APIConnectionError, APITimeoutError
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
 from ..config import Config
 from ..utils.logger import get_logger
 from .research_angles import (
     ALL_ANGLE_IDS,
-    classify_scenario,
     build_research_prompt,
+    classify_scenario,
     get_angles_by_ids,
 )
 

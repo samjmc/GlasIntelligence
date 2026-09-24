@@ -9,11 +9,11 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from openai import RateLimitError, APIStatusError, APIConnectionError, APITimeoutError
+from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 
 from ..config import Config
-from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
+from ..utils.logger import get_logger
 from .research_angles import RESEARCH_ANGLES
 
 logger = get_logger("glas.llm_research")

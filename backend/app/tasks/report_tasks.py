@@ -18,9 +18,9 @@ def generate_report_task(self, simulation_id: str, task_id: str):
         logger.info(f"[{task_id}] Generating report for simulation {simulation_id}")
         task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Generating report...")
 
+        from ..models.project import ProjectManager
         from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
         from ..services.simulation_manager import SimulationManager
-        from ..models.project import ProjectManager
 
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)

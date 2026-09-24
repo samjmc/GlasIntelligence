@@ -1,15 +1,18 @@
 """Decision bundle API routes for grouping related simulations."""
 
+import contextlib
 import json
 import re
 import uuid
-from flask import Blueprint, request, jsonify, g
+from datetime import UTC
+
+from flask import Blueprint, g, jsonify, request
+
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..services.supabase_client import SupabaseDB
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from datetime import UTC
 
 bundle_bp = Blueprint("bundle", __name__)
 logger = get_logger("glas.api.bundle")
@@ -73,10 +76,8 @@ def create_bundle():
             suggested = []
             match = re.search(r"\[.*\]", raw, re.DOTALL)
             if match:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     suggested = json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
 
         if not isinstance(suggested, list):
             return jsonify(

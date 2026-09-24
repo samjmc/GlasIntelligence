@@ -196,10 +196,7 @@ class SearchResearchAgent:
         follow_up_queries: list[str] = []
 
         for round_num in range(1, max_rounds + 1):
-            if round_num == 1:
-                queries = self._generate_queries(llm, scenario)
-            else:
-                queries = follow_up_queries
+            queries = self._generate_queries(llm, scenario) if round_num == 1 else follow_up_queries
 
             all_queries.extend(queries)
             logger.info("Round %d/%d: running %d queries", round_num, max_rounds, len(queries))

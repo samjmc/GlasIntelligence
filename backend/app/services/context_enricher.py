@@ -13,7 +13,7 @@ from typing import Protocol, runtime_checkable
 
 from ..config import Config
 from ..utils.logger import get_logger
-from .grounding_bundle import sync_grounding_sources_from_project, ingest_dossier_sources
+from .grounding_bundle import ingest_dossier_sources, sync_grounding_sources_from_project
 
 logger = get_logger("glas.context_enricher")
 
