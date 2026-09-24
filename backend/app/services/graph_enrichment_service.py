@@ -10,17 +10,17 @@ Verified inventory entities are also materialized directly via Zep's add_nodes A
 """
 
 import time
-from typing import Any
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from zep_cloud import AddNodeItem, EpisodeData
 from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.llm_client import LLMClient
-from ..utils.zep_paging import fetch_all_nodes
 from ..utils.logger import get_logger
+from ..utils.zep_paging import fetch_all_nodes
 from .graph_snapshot_cache import bump_mutation_generation
 
 logger = get_logger("glas.graph_enrichment")
@@ -363,7 +363,7 @@ class GraphEnrichmentService:
         for node in nodes:
             if node.name:
                 names.add(node.name.strip().lower())
-            if any(l not in ("Entity", "Node") for l in (node.labels or [])):
+            if any(label not in ("Entity", "Node") for label in (node.labels or [])):
                 typed += 1
         return names, typed
 

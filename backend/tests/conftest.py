@@ -133,6 +133,9 @@ class _MockQueryChain:
     def lte(self, *a, **k):
         return self
 
+    def lt(self, *a, **k):
+        return self
+
     def in_(self, *a, **k):
         return self
 

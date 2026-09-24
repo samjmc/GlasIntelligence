@@ -38,6 +38,7 @@ def _get_signing_key(token: str):
             last_err = e
             if attempt < 2:
                 import time
+
                 time.sleep(0.5 * (attempt + 1))
     raise last_err if last_err is not None else RuntimeError("JWKS signing key fetch failed")
 
