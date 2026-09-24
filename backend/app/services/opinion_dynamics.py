@@ -92,7 +92,7 @@ def compute_opinion_dynamics(
     sim_dir: str | Path | None = None,
 ) -> dict[str, Any] | None:
     """Per-window stance distribution for a simulation, or ``None`` when Jev is not active
-    or the run has no posts to judge."""
+    or unreachable, or the run has no posts to judge."""
     jev = JevClient.from_config()
     if site_mode(SITE, jev) != MODE_ACTIVE:
         return None
@@ -122,6 +122,8 @@ def compute_opinion_dynamics(
         )
     }
     keys = sorted(posts)
+    if not keys:
+        return None
     items = [
         (
             {"author": name, "posts": "\n---\n".join(t for _, _, t in sorted(posts[(w, name)]))[:MAX_POST_CHARS]},
@@ -131,7 +133,14 @@ def compute_opinion_dynamics(
     ]
     # One call per agent-window, not one per window: sharing a state would put every
     # author's posts in front of every judgement, which is not what was evaluated.
-    answers = jev.evaluate_many(items, site=SITE)
+    # Probe with one first: if Jev is down, every item burns its full retry budget
+    # (~30 s+ each) and this runs on the report's critical path.
+    answers = jev.evaluate_many(items[:1], site=SITE)
+    if not answers[0]:
+        logger.warning(f"[{SITE}] first Jev call failed; skipping opinion dynamics")
+        LEDGER.record_items(SITE, total=1, jev_failed=1)
+        return None
+    answers += jev.evaluate_many(items[1:], site=SITE)
 
     # An answer with no probability map would read as 0 for every position and drag
     # the means down silently, so it counts as failed rather than as a vote.

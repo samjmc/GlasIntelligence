@@ -94,7 +94,7 @@ def test_windows_track_a_moving_agent(tmp_path, jev_on):
     fake = jev_on(lambda state: _answer("supportive", SUP) if "back it" in state["posts"] else _answer("opposing", OPP))
     out = od.compute_opinion_dynamics("sim", "the policy", sim_dir=tmp_path)
 
-    assert fake.sites == ["opinion_dynamics"]
+    assert set(fake.sites) == {"opinion_dynamics"}
     assert len(fake.items) == 4  # 2 agents x 2 windows; LIKE_POST and events add nothing
     alice_w2 = next(s for s, _ in fake.items if s["author"] == "Alice" and "back it" in s["posts"])
     assert alice_w2["posts"] == "Actually I now back it.\n---\nChanged my mind, yes."  # both platforms, round order
@@ -151,6 +151,13 @@ def test_failed_jev_items_are_dropped_not_guessed(tmp_path, jev_on):
     w = out["windows"][0]
     assert [a["agent"] for a in w["agents"]] == ["Alice"]
     assert w["mean_probabilities"]["opposing"] == 0.8  # not dragged down by Carol's empty map
+
+
+def test_jev_down_costs_one_call_not_one_per_agent_window(tmp_path, jev_on):
+    _write(tmp_path, "twitter", [_post(r, name, "x") for r in (1, 6) for name in ("Alice", "Bob", "Carol")])
+    fake = jev_on(lambda state: None)
+    assert od.compute_opinion_dynamics("sim", "the policy", sim_dir=tmp_path) is None
+    assert len(fake.items) == 1  # the probe; the other 5 agent-windows are never sent
 
 
 def test_no_posts_returns_none(tmp_path, jev_on):
