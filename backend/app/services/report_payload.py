@@ -10,6 +10,7 @@ from typing import Any
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+from . import opinion_dynamics
 from .grounding_bundle import grounding_summary_text
 
 logger = get_logger("glas.report_payload")
@@ -466,6 +467,16 @@ def build_report_payload_v1(
 
     if decision_payload is not None:
         payload["decision"] = decision_payload
+
+    # Optional and Jev-only (None unless JEV_MODE=active). Top level and last, so the
+    # size-capped payload_preamble_for_prompt truncates it before any existing table.
+    try:
+        dynamics = opinion_dynamics.compute_opinion_dynamics(simulation_id, simulation_requirement)
+    except Exception as e:  # an optional chart must never fail the report
+        logger.warning(f"Opinion dynamics skipped: {e}")
+        dynamics = None
+    if dynamics is not None:
+        payload["opinion_dynamics"] = dynamics
     return payload
 
 
