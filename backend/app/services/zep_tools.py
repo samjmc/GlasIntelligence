@@ -353,7 +353,10 @@ class InterviewResult:
     # Statistics
     total_agents: int = 0
     interviewed_count: int = 0
-    
+
+    # Which path answered: "live" (OASIS process over IPC) or "reconstructed" (recorded run)
+    interview_mode: str = "live"
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "interview_topic": self.interview_topic,
@@ -363,7 +366,8 @@ class InterviewResult:
             "selection_reasoning": self.selection_reasoning,
             "summary": self.summary,
             "total_agents": self.total_agents,
-            "interviewed_count": self.interviewed_count
+            "interviewed_count": self.interviewed_count,
+            "interview_mode": self.interview_mode,
         }
     
     def to_text(self) -> str:
@@ -372,6 +376,10 @@ class InterviewResult:
             "## In-Depth Interview Report",
             f"**Interview topic:** {self.interview_topic}",
             f"**Interviewees:** {self.interviewed_count} / {self.total_agents} simulated agents",
+            *(
+                ["**Interview mode:** reconstructed from the recorded run (the simulation process had exited)"]
+                if self.interview_mode == "reconstructed" else []
+            ),
             "\n### Interviewee Selection Rationale",
             self.selection_reasoning or "(Auto-selected)",
             "\n---",
@@ -1296,8 +1304,8 @@ Return a JSON-formatted list of sub-questions in English."""
         Returns:
             InterviewResult: Interview result
         """
-        from .simulation_runner import SimulationRunner
-        
+        from . import offline_interview
+
         logger.info(f"InterviewAgents in-depth interview (real API): {interview_requirement[:50]}...")
         
         result = InterviewResult(
@@ -1367,20 +1375,21 @@ Return a JSON-formatted list of sub-questions in English."""
             
             logger.info(f"Calling batch interview API (dual-platform): {len(interviews_request)} agents")
             
-            # Call SimulationRunner's batch interview method (no platform, dual-platform)
-            api_result = SimulationRunner.interview_agents_batch(
+            # Live IPC while the OASIS process is alive, else reconstructed from the recorded run
+            api_result = offline_interview.interview_batch(
                 simulation_id=simulation_id,
                 interviews=interviews_request,
                 platform=None,
                 timeout=180.0
             )
-            
-            logger.info(f"Interview API returned: {api_result.get('interviews_count', 0)} results, success={api_result.get('success')}")
+            result.interview_mode = api_result.get("mode", result.interview_mode)
+
+            logger.info(f"Interview API returned: {api_result.get('interviews_count', 0)} results, success={api_result.get('success')}, mode={result.interview_mode}")
             
             if not api_result.get("success", False):
                 error_msg = api_result.get("error", "Unknown error")
                 logger.warning(f"Interview API returned failure: {error_msg}")
-                result.summary = f"Interview API call failed: {error_msg}. Please check the OASIS simulation environment status."
+                result.summary = f"Interview API call failed: {error_msg}"
                 return result
             
             # Step 5: Parse API response and build AgentInterview objects
@@ -1389,7 +1398,8 @@ Return a JSON-formatted list of sub-questions in English."""
 
             # Jev gate (interview_format): retry non-plain-text answers once with a reminder line
             results_dict = self._retry_malformed_interview_answers(
-                simulation_id, selected_indices, selected_agents, results_dict, optimized_prompt
+                simulation_id, selected_indices, selected_agents, results_dict, optimized_prompt,
+                mode=result.interview_mode,
             )
 
             for i, agent_idx in enumerate(selected_indices):
@@ -1453,9 +1463,9 @@ Return a JSON-formatted list of sub-questions in English."""
             
             result.interviewed_count = len(result.interviews)
             
-        except ValueError as e:
-            logger.warning(f"Interview API call failed (environment not running?): {e}")
-            result.summary = f"Interview failed: {str(e)}. The simulation environment may be shut down; please ensure OASIS is running."
+        except (ValueError, offline_interview.SimulationNotFoundError) as e:
+            logger.warning(f"Interview API call failed: {e}")
+            result.summary = f"Interview failed: {str(e)}"
             return result
         except Exception as e:
             logger.error(f"Interview API call exception: {e}")
@@ -1481,6 +1491,7 @@ Return a JSON-formatted list of sub-questions in English."""
         selected_agents: List[Dict[str, Any]],
         results_dict: Dict[str, Any],
         prompt: str,
+        mode: str = "live",
     ) -> Dict[str, Any]:
         """Jev gate: ask once per answer whether it is plain text and in persona; re-interview the
         confidently non-plain (agent, platform) pairs ONCE with a reminder line.
@@ -1506,13 +1517,20 @@ Return a JSON-formatted list of sub-questions in English."""
             if not to_retry:
                 return results_dict
 
+            from . import offline_interview
             from .simulation_runner import SimulationRunner
 
             # ``prompt`` is the already-optimised interview prompt (plain-text rules + questions);
             # the retry only adds the reminder line in front of it.
             retry_prompt = f"{INTERVIEW_FORMAT_REMINDER}\n{prompt}"
             logger.info(f"Jev interview_format: retrying {len(to_retry)} non-plain answers with a reminder")
-            retry_result = SimulationRunner.interview_agents_batch(
+            # Retry down the same path the first answers came from.
+            batch = (
+                offline_interview.interview_batch
+                if mode == offline_interview.InterviewMode.RECONSTRUCTED.value
+                else SimulationRunner.interview_agents_batch
+            )
+            retry_result = batch(
                 simulation_id=simulation_id,
                 interviews=[
                     {"agent_id": agent_idx, "prompt": retry_prompt, "platform": platform}

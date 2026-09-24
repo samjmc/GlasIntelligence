@@ -1448,7 +1448,32 @@ class SimulationRunner:
             return False
 
         ipc_client = SimulationIPCClient(sim_dir)
-        return ipc_client.check_env_alive()
+        if not ipc_client.check_env_alive():
+            return False
+
+        # env_status.json keeps saying "alive" when a crash or redeploy kills the
+        # subprocess before it can write "stopped"; IPC would then wait out its full
+        # timeout. Confirm the process is really there.
+        process = cls._processes.get(simulation_id)
+        if process is not None:
+            return process.poll() is None
+        state = cls.get_run_state(simulation_id)
+        if state is None or state.process_pid is None:
+            return True  # nothing recorded to check against: trust env_status.json as before
+
+        import psutil
+
+        try:
+            proc = psutil.Process(state.process_pid)
+            if proc.status() == psutil.STATUS_ZOMBIE:
+                return False
+            # PIDs are reused (a restarted container hands out the same small numbers), so the
+            # pid must still be the run we launched: its command line names this run's config.
+            return os.path.join(sim_dir, "simulation_config.json") in proc.cmdline()
+        except psutil.NoSuchProcess:
+            return False
+        except psutil.AccessDenied:
+            return True  # it exists; we just may not inspect it
 
     @classmethod
     def get_env_status_detail(cls, simulation_id: str) -> Dict[str, Any]:
