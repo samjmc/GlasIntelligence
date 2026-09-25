@@ -215,6 +215,19 @@ def client(app):
 
 
 @pytest.fixture
+def api(monkeypatch):
+    """Test client that also starts on a stale local lockfile (see below)."""
+    import zep_cloud
+
+    # A stale local lockfile ships a zep_cloud without AddNodeItem/EpisodeData, which breaks
+    # create_app() at import. Only fill the gap; with a current zep_cloud this does nothing.
+    for name in ("AddNodeItem", "EpisodeData"):
+        if not hasattr(zep_cloud, name):
+            monkeypatch.setattr(zep_cloud, name, type(name, (), {}), raising=False)
+    return create_app(TestConfig).test_client()
+
+
+@pytest.fixture
 def app_context(app):
     """Push an application context."""
     with app.app_context():

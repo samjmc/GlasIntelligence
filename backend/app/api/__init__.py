@@ -12,6 +12,7 @@ from . import (  # noqa: E402 - route modules import the blueprints defined abov
     graph,  # noqa: E402, F401
     report,  # noqa: E402, F401
     simulation,  # noqa: E402, F401
+    simulation_access,  # noqa: E402, F401 - owner check on all three blueprints
     simulation_interview_env_routes,  # noqa: E402, F401
 )
 from .billing import billing_bp  # noqa: E402, F401
