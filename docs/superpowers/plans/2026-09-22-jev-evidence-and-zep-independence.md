@@ -1,6 +1,46 @@
 # Plan: trustworthy Jev evidence, cheaper runs, and independence from Zep credits
 
-**Date:** 2026-09-22 · **Owner:** this session · **Status:** proposed
+**Date:** 2026-09-22 · **Owner:** this session · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)**
+
+## Vet results (2026-09-22) — these override anything below that conflicts
+
+**Phase 0 is done:** PR #9, 837527d.
+
+**Blocker — repeats must be separate processes (Phase 1.2).** `jev_live_ab.py:169-175` evicts `app.*` and the runner modules, but `scripts/lib/db_utils.py:11` keeps a reference to the OLD `ToolCallLogger` class. So from run 2 onward `fetch_new_tool_calls` reads run 1's logger, and `TOOL_*` actions silently vanish from the feed and every metric. `builtins.open` is also re-wrapped on every re-import (`run_parallel_simulation.py:51-65`), and `action_logger.py:151` drops log handlers without closing them. **Fix:** give every repeat a fresh process (`jev_live_ab.py --only <mode> --out <dir_i>`) and its own directory, driven by a small orchestrator.
+
+**High — exact cost per run cannot come from the balance.** Verified 2026-09-22: DeepSeek's `total_balance` is a string with **2 decimal places**, so a few-cent run reads $0.00–0.01. **Fix:** sum `usage` tokens from each LLM response — CAMEL returns usage per step; otherwise use a thin OpenAI-client wrapper in `model_factory` — and use the balance only as a whole-batch cross-check.
+
+**High — seeds don't pair the runs.** `platform_runners.py:274-277, 526-529` never pass `rng`. OASIS (`recsys.py:163,413,646,749`) and openai's retry jitter share the global `random`. **Fix:** treat runs as independent samples (the permutation test is right for that), pass each platform its own `random.Random(seed)`, and do the "≥90% same decisions" equivalence check offline only.
+
+**High — `JEV_DISABLED_SITES=tool_roles` does not equalise the arms.** Every tape agent has `tool_role: "none"` with `enable_agent_tools: true`, so `assign_tool_roles` runs on its LLM path. That path uses a raw OpenAI client **without** the DeepSeek thinking-off fix (`simulation_tools.py:578-584`, `max_tokens=1000`), so it returns an empty reply and gives `{}` (`:588-591`, `:606-608`). That is also a **production bug**: tool roles never get assigned on V4.1. Scenario tools also re-roll each run (temperature 0.7, `:334-340`), and `effect_targets` still runs through Jev in the active arm.
+**Fix:** for the A/B, set `cfg["enable_agent_tools"] = False` in `build_sim_dir`. That also removes the tool-logger leak's effect. Separately, fix the thinking-off gap in `simulation_tools.py`'s two raw OpenAI calls.
+
+**High — validity is scored in the active arm only.** Off mode never builds a Jev client (`jev_client.py:149`). **Fix:** after each run, score both arms' `actions.jsonl` with the same `ValidityMonitor` questions.
+
+**Medium — metrics.** The key `round` is correct (`action_logger.py:55`). But round 0 (the 8 identical opening posts, `platform_runners.py:212-219`) dilutes every difference, and the two platforms share round numbers. **Fix:** exclude round 0 and report each platform separately. For stderr error counting, don't swap `sys.stderr`, because handlers capture the old stream (`logger.py:80`). Pipe the subprocess stderr or attach a counting `logging.Handler`.
+
+**High — Phase 2 assumptions.**
+- **Today's cost:** one Jev request per eligible agent per round per platform (2 yes/no questions each), on up to 8 threads. It blocks the async round loop (`platform_runners.py:274`), and the validity scoring after every round blocks it too (`:318`). With N = 8, all requests already go out as one parallel wave. So batching cuts request count, not necessarily wall time, and the ledger's summed `jev_latency_ms` is not wall time.
+- **Before claiming a speed-up:** time each site, and state acceptance "per platform per round".
+- **Batching** needs a new request builder and a way to map answers back to agents. The existing question is named `interest_at_stake`. One failed request now sends ~10 agents to baseline, not one. Tests that break: `test_jev_simulation.py:193-197, 212-216, 290-293`.
+- **Voice floor:** the weights sum to exactly 1.0 (`jev_simulation_gates.py:46-48`), so Jev can only ever LOWER an agent's activation below `activity_level`. That is the root cause of quiet agents being silenced. A 0.5× floor overrides `ACTIVATION_P_FLOOR` whenever activity > 0.1. Shadow agreement tests p ≥ 0.5 (`:196`), which is impossible for agents with activity < 0.5 (the trainee has 0.2). `rng.sample` caps the round size, so a floor guarantees no share. Tests that break: `:209, :211, :241-242`. **Better fix:** rescale so Jev can raise as well as lower. For example, p = activity_level × (0.5 + 1.0 × signal), clamped. Then compare evenness (Gini) against the off arm.
+
+**High — Phase 3.** `jev_eval_tape.py` has no labels argument, and `ACTOR_LABELS` is hard-coded (19 entries). Its `measure_activation` tests the OLD single "would_act" question, and its `measure_validity` uses different prompts from the live monitor. **Fix:** add `--labels`, import the question builders from `jev_simulation_gates.py` so offline and live evaluation ask the same thing, and bin reliability on confidence = max(p, 1−p).
+
+**High — Phase 4.0 facts were wrong.**
+- The real build uses the project's **300/30 character** chunks (`project.py:49-50`, `api/graph.py:444-445`). The frontend sends only `project_id` (`MainView.vue:281`). So builds are ~110–150+ **1-credit** episodes; the "2 credits per chunk, 30% waste" claim is wrong.
+- The splitter (`utils/file_parser.split_text_into_chunks`) counts characters and backs off to sentence breaks, so a ≤700-byte target needs a byte-aware splitter. The saving is ~20–25% against 300-char chunks.
+- Live memory sends 5 actions per episode, so "≥1 credit per action" overstates it.
+- **Ledger write sites** (and every retry attempt): `graph_builder.py:311`, `graph_enrichment_service.py:307, 455`, `zep_graph_memory_updater.py:409` (inside a retry loop at `:407`). The ledger file needs a lock, because it is written from Flask threads and possibly Celery.
+- **4.0 gets a new step 1: turn live graph memory off by default.** `Step3Simulation.vue:409` hard-codes it ON, which is a live credit drain.
+- 4.0 is gated on PR #11: the vet found it rewrites `graph_builder.py`, `graph_enrichment_service.py` and `zep_graph_memory_updater.py`. The "none are owned by parallel sessions" claim below is wrong.
+- The top-5 type cap must keep `Person` + `Organization`; see the migration plan's vet section.
+
+**High — Phase 5.** `tavily_client.search` keeps only `title`, `url` and `content` (`tavily_client.py:18, 34-41`), dropping `published_date`. `outcome_resolution.py:74-79` filters on a `published` key that never exists, so that filter is a silent no-op today. **Fix:** map `published_date` to `published` in the client.
+Research has no cutoff parameter at all. Two other paths also leak post-cutoff news, with no date filter possible: the agents' DuckDuckGo tools (`simulation_tools.py:147-228`) and `deep_research_agent.py:119` `web_search_preview`. **So a leak-free backtest must also disable agent web tools and deep research for backtest runs.**
+`services/entity_expansion.py` no longer exists; the comment at `config.py:310` is stale.
+
+**Medium — lint.** PR #11 ignores `**/jev_*.py` in ruff as "owned by a parallel branch". That branch is this plan. Phase 2 must make `jev_simulation_gates.py` lint-clean and remove the ignore.
 
 Parallel sessions already running (do not touch their files): CI + dev-env health, offline agent interviews (`simulation_interview_env_routes.py`, `simulation_ipc.py`, `Step5Interaction.vue`, the `interview_agents` path in `zep_tools.py`), opinion-over-time chart (new `opinion_dynamics.py`, report payload assembly, `Step4Report.vue`).
 
@@ -74,7 +114,7 @@ What this means for the app:
 - Live graph memory stays off by default. If it is enabled, first estimate credits as agents × rounds × platforms and refuse if the budget cannot cover it.
 - Ontology vs the plan's type limit: add `ZEP_MAX_CUSTOM_TYPES` (default 5, the free-plan limit), and keep the entity and edge types sent to Zep within it. The generator should still rank all 10; only the top 5 are sent, and the rest are logged. Then learn what Zep actually does with more than 5 by reading the SDK and docs, not by spending credits. If the answer is still unclear, it costs one `set_ontology` call on a throwaway graph, which uses no episodes. This also becomes a Graphiti advantage, since Graphiti has no type limit.
 - Tests with a fake Zep client, so zero credits are spent.
-- Files: new `utils/zep_credit_ledger.py`, plus call sites in `graph_builder.py`, `graph_enrichment_service.py` and `zep_graph_memory_updater.py`. None are owned by the parallel sessions.
+- Files: new `utils/zep_credit_ledger.py`, plus call sites in `graph_builder.py`, `graph_enrichment_service.py` and `zep_graph_memory_updater.py`. *(Vet: all three ARE rewritten by PR #11, so wait for it to merge.)*
 
 **4.1 One graph interface (no behaviour change).** A `GraphStore` protocol covering the operations the app actually uses:
 - `create`, `set_ontology`, `add_text_batch`, `wait_for_episodes`, `add_nodes`, `delete`

@@ -8,7 +8,7 @@ import os
 import threading
 import traceback
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 
 from ..config import Config
 from ..middleware.auth import require_auth
@@ -29,6 +29,7 @@ from ..utils.file_parser import FileParser
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from . import graph_bp
+from .simulation_access import caller_may_see
 
 logger = get_logger("glas.api")
 
@@ -70,10 +71,10 @@ def get_project(project_id: str):
 @require_auth
 def list_projects():
     """
-    List all projects
+    List the caller's projects
     """
     limit = request.args.get("limit", 50, type=int)
-    projects = ProjectManager.list_projects(limit=limit)
+    projects = [p for p in ProjectManager.list_projects(limit=None) if caller_may_see(p.user_id)][:limit]
 
     return jsonify({"success": True, "data": [p.to_dict() for p in projects], "count": len(projects)})
 
@@ -188,7 +189,7 @@ def generate_ontology():
         if not uploaded_files or all(not f.filename for f in uploaded_files):
             return jsonify({"success": False, "error": "Please upload at least one document"}), 400
 
-        project = ProjectManager.create_project(name=project_name)
+        project = ProjectManager.create_project(name=project_name, user_id=g.user_id)
         project.simulation_requirement = simulation_requirement
 
         if decision_intake:
@@ -582,17 +583,6 @@ def get_task(task_id: str):
         return jsonify({"success": False, "error": f"Task not found: {task_id}"}), 404
 
     return jsonify({"success": True, "data": task.to_dict()})
-
-
-@graph_bp.route("/tasks", methods=["GET"])
-@require_auth
-def list_tasks():
-    """
-    List all tasks
-    """
-    tasks = TaskManager().list_tasks()
-
-    return jsonify({"success": True, "data": [t.to_dict() for t in tasks], "count": len(tasks)})
 
 
 # ============== Graph Data Endpoints ==============

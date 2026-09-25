@@ -406,15 +406,15 @@ const doStartSimulation = async () => {
       simulation_id: props.simulationId,
       platform: 'parallel',
       force: true,
-      enable_graph_memory_update: true
+      // Off: live graph memory writes every agent action to Zep, about 2,000+
+      // credits per simulation on a 10k/month free plan. Opt in via the API only.
+      enable_graph_memory_update: false
     }
     
     if (props.maxRounds) {
       params.max_rounds = props.maxRounds
       addLog(`Max simulation rounds: ${props.maxRounds}`)
     }
-    
-    addLog('Dynamic graph update mode enabled')
     
     const res = await startSimulation(params)
     

@@ -23,6 +23,7 @@ from ..services.zep_entity_reader import ZepEntityReader
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from . import simulation_bp
+from .simulation_access import caller_may_see, simulation_owner
 
 logger = get_logger("glas.api.simulation")
 
@@ -691,7 +692,11 @@ def list_simulations():
         project_id = request.args.get("project_id")
 
         manager = SimulationManager()
-        simulations = manager.list_simulations(project_id=project_id)
+        simulations = [
+            s
+            for s in manager.list_simulations(project_id=project_id)
+            if caller_may_see(simulation_owner(s.simulation_id))
+        ]
 
         return jsonify({"success": True, "data": [s.to_dict() for s in simulations], "count": len(simulations)})
 
@@ -797,29 +802,10 @@ def get_simulation_history():
     try:
         limit = request.args.get("limit", 20, type=int)
 
-        # Simulations explicitly recorded for this user in Supabase
-        user_sim_ids = set()
-        user_sims = SupabaseDB.list_simulations(g.user_id, limit=max(limit, 100))
-        for s in user_sims:
-            user_sim_ids.add(s.get("id"))
-
-        # Projects owned by this user — include local disk sims under those projects
-        # even if the simulations row was never inserted (common after migrations / edge cases)
-        user_project_ids = set()
-        for p in SupabaseDB.list_projects(g.user_id, limit=200):
-            pid = p.get("id")
-            if pid:
-                user_project_ids.add(pid)
-
+        # Owner is recorded on the project (see simulation_access.py); the Supabase
+        # projects/simulations tables this used to read are never written.
         manager = SimulationManager()
-        all_sims = manager.list_simulations()
-
-        def _user_owns_simulation(state) -> bool:
-            if state.simulation_id in user_sim_ids:
-                return True
-            return bool(state.project_id and state.project_id in user_project_ids)
-
-        simulations = [s for s in all_sims if _user_owns_simulation(s)]
+        simulations = [s for s in manager.list_simulations() if caller_may_see(simulation_owner(s.simulation_id))]
         # Newest first (folder iteration order is not reliable)
         simulations.sort(key=lambda s: s.created_at or "", reverse=True)
         simulations = simulations[:limit]

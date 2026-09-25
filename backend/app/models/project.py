@@ -69,6 +69,9 @@ class Project:
     # Error information
     error: str | None = None
 
+    # Owner: the authenticated user who created the project (api/simulation_access.py)
+    user_id: str | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
@@ -93,6 +96,7 @@ class Project:
             "decision_intake": self.decision_intake,
             "research_dossier_path": self.research_dossier_path,
             "error": self.error,
+            "user_id": self.user_id,
         }
 
     @classmethod
@@ -124,6 +128,7 @@ class Project:
             decision_intake=data.get("decision_intake"),
             research_dossier_path=data.get("research_dossier_path"),
             error=data.get("error"),
+            user_id=data.get("user_id"),
         )
 
 
@@ -159,12 +164,13 @@ class ProjectManager:
         return os.path.join(cls._get_project_dir(project_id), "extracted_text.txt")
 
     @classmethod
-    def create_project(cls, name: str = "Unnamed Project") -> Project:
+    def create_project(cls, name: str = "Unnamed Project", user_id: str | None = None) -> Project:
         """
         Create a new project
 
         Args:
             name: Project name
+            user_id: Owner (the authenticated user creating it)
 
         Returns:
             Newly created Project object
@@ -175,7 +181,12 @@ class ProjectManager:
         now = datetime.now().isoformat()
 
         project = Project(
-            project_id=project_id, name=name, status=ProjectStatus.CREATED, created_at=now, updated_at=now
+            project_id=project_id,
+            name=name,
+            status=ProjectStatus.CREATED,
+            created_at=now,
+            updated_at=now,
+            user_id=user_id,
         )
 
         # Create project directory structure
