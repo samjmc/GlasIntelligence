@@ -10,8 +10,6 @@ from . import simulation_bp
 from .simulation_helpers import optimize_interview_prompt
 from ..middleware.auth import require_auth
 from ..models.project import ProjectManager
-from ..config import Config
-from ..services.demo_interviews import canned_batch
 from ..services import offline_interview
 from ..services.offline_interview import SimulationNotFoundError
 from ..services.report_agent import ReportManager
@@ -198,13 +196,6 @@ def interview_agents_batch():
                 return jsonify(
                     {"success": False, "error": f"Interview list item {i + 1} platform must be 'twitter' or 'reddit'"}
                 ), 400
-
-        # Demo mode: serve canned, scenario-grounded responses (shape-compatible with the
-        # live path — see demo_interviews.py). Config does not define DEMO_MODE (the static
-        # demo replays a frontend tape and never reaches this route), so this stays off; a
-        # bare attribute read made every batch interview a 500.
-        if getattr(Config, "DEMO_MODE", False):
-            return jsonify(canned_batch(simulation_id, interviews, platform))
 
         optimized_interviews = []
         for interview in interviews:
