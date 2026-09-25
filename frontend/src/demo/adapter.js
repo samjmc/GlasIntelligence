@@ -1,6 +1,7 @@
 import { loadTape, resolve, elapsedFor, resetSkipMs, NOT_RECORDED, TAPE_LOAD_FAILED } from './tape'
 import { decodeDemoId } from './sessionId'
 import { SESSION_KEY } from './config'
+import { isStep5Request, loadStep5, step5Response } from './step5'
 
 // Paths that fire on the Home page before the user has chosen a scenario
 // (billing status check, session sidebar, history panel). These are expected
@@ -49,6 +50,10 @@ export function getActiveSessionId() {
   return activeSessionId
 }
 
+export function getActiveScenario() {
+  return activeScenario
+}
+
 function announceIfMissing(body, path) {
   if (body && body.error === NOT_RECORDED && typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('demo:not-recorded', { detail: { path } }))
@@ -58,7 +63,7 @@ function announceIfMissing(body, path) {
   }
 }
 
-async function answer(method, url) {
+async function answer(method, url, requestBody) {
   if (!activeScenario) {
     // No scenario chosen and none stored — only suppress the watchdog for the
     // small set of paths that legitimately fire on Home before the picker.
@@ -71,6 +76,11 @@ async function answer(method, url) {
     const body = { success: false, error: NOT_RECORDED, path: normUrl }
     announceIfMissing(body, normUrl)
     return { status: 200, body }
+  }
+  // Step 5 answers depend on the request body, which the tape cannot key on (see step5.js).
+  if (isStep5Request(method, url)) {
+    const step5 = step5Response(await loadStep5(activeScenario), method, url, requestBody)
+    if (step5) return step5
   }
   const tape = await loadTape(activeScenario)
   const elapsed = elapsedFor(activeSessionId, Date.now())
@@ -109,7 +119,7 @@ export async function demoAdapter(config) {
 
   let status, body
   try {
-    ;({ status, body } = await answer(method, url))
+    ;({ status, body } = await answer(method, url, config.data))
   } catch {
     body = loadFailureBody(url)
     status = 200
@@ -131,7 +141,7 @@ export async function demoFetch(url, options = {}) {
 
   let status, body
   try {
-    ;({ status, body } = await answer(method, String(url)))
+    ;({ status, body } = await answer(method, String(url), options.body))
   } catch {
     body = loadFailureBody(String(url))
     status = 200

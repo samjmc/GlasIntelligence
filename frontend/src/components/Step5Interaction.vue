@@ -292,6 +292,17 @@
             {{ RECONSTRUCTED_BANNER }}
           </div>
 
+          <div v-if="chatDemoQuestions.length" class="demo-questions" data-test="demo-questions">
+            <span class="demo-questions-label">Recorded questions</span>
+            <button
+              v-for="q in chatDemoQuestions"
+              :key="q"
+              class="demo-question"
+              :disabled="isSending"
+              @click="askRecorded(q)"
+            >{{ q }}</button>
+          </div>
+
           <!-- Chat Input -->
           <div class="chat-input-area">
             <textarea 
@@ -366,6 +377,16 @@
                 placeholder="Enter a question for all selected agents..."
                 rows="3"
               ></textarea>
+              <div v-if="demoQuestions" class="demo-questions" data-test="demo-survey-questions">
+                <span class="demo-questions-label">Recorded questions</span>
+                <button
+                  v-for="q in demoQuestions.agent"
+                  :key="q"
+                  class="demo-question"
+                  :class="{ active: surveyQuestion === q }"
+                  @click="surveyQuestion = q"
+                >{{ q }}</button>
+              </div>
             </div>
 
             <div v-if="interviewMode === 'reconstructed'" class="interview-mode-banner">
@@ -462,6 +483,14 @@ const isSurveying = ref(false)
 
 // Interview path the backend will use: 'live' | 'reconstructed' | null (unknown / demo)
 const interviewMode = ref(null)
+
+// The static demo can only answer the questions recorded for it (demo/step5.js); null elsewhere.
+const demoQuestions = ref(null)
+const chatDemoQuestions = computed(() => {
+  if (!demoQuestions.value) return []
+  if (chatTarget.value === 'report_agent') return demoQuestions.value.report
+  return selectedAgent.value ? demoQuestions.value.agent : []
+})
 
 // Report Data
 const reportOutline = ref(null)
@@ -961,6 +990,7 @@ onMounted(() => {
   addLog('Step5 Deep Interaction initialized')
   loadReportData()
   loadProfiles()
+  loadDemoQuestions()
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -973,6 +1003,21 @@ watch(() => props.reportId, (newId) => {
     loadReportData()
   }
 }, { immediate: true })
+
+const loadDemoQuestions = async () => {
+  if (!isDemoMode) return
+  const [{ getActiveScenario }, { loadStep5 }] = await Promise.all([
+    import('../demo/adapter'),
+    import('../demo/step5'),
+  ])
+  const bank = await loadStep5(getActiveScenario()).catch(() => null)
+  if (bank) demoQuestions.value = { report: bank.report_questions, agent: bank.agent_questions }
+}
+
+const askRecorded = (question) => {
+  chatInput.value = question
+  sendMessage()
+}
 
 // Ask which path will answer interviews, so a finished run shows a note instead of a dead end.
 // The static demo replays a tape with no env-status entry; asking there would trip its watchdog.
@@ -2146,6 +2191,45 @@ watch(() => props.simulationId, (newId) => {
   background: #F3F4F6;
   font-size: 12px;
   color: #6B7280;
+}
+
+/* Recorded questions (static demo only) */
+.demo-questions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 24px 8px;
+}
+
+.survey-setup .demo-questions {
+  margin: 8px 0 0;
+}
+
+.demo-questions-label {
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.demo-question {
+  padding: 4px 10px;
+  border: 1px solid #E5E7EB;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font-size: 12px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.demo-question:hover:not(:disabled),
+.demo-question.active {
+  border-color: #111827;
+  color: #111827;
+}
+
+.demo-question:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Chat Input */

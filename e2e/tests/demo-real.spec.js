@@ -1,4 +1,17 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { test, expect } from '@playwright/test'
+
+// Step 5 answers recorded for the pharmacy tape (backend/scripts/build_demo_step5.py).
+const PHARMACY_STEP5 = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '../../frontend/public/demo/pharmacy-first-caps/step5.json'), 'utf-8'),
+)
+
+// The start of an answer as the page shows it: first non-empty line, markdown marks gone.
+function shownStart(markdown) {
+  const line = markdown.split('\n').find((l) => l.trim())
+  return line.replace(/^[\s>#*-]+/, '').replace(/[*_`]/g, '').trim().slice(0, 50)
+}
 
 // Per-test timeout: the real golden tapes are far larger than the synthetic
 // demo-e2e fixture — the pharmacy tape is ~35 MB and simulates 23,025,840 ms of
@@ -76,6 +89,32 @@ test('Pharmacy First golden run plays end-to-end', async ({ page }) => {
   await expect(page.locator('[data-test="watchdog-tape-failed"]')).toHaveCount(0)
   await expect(page.locator('[data-test="watchdog-not-recorded"]')).toHaveCount(0)
   await expect(page.locator('[data-test="picker-error"]')).toHaveCount(0)
+
+  // Step 5: the recorded questions answer with the recorded answers, for the
+  // report agent, for one agent, and in a survey.
+  await page.locator('[data-test="report-complete"]').click()
+  const chatQuestions = page.locator('[data-test="demo-questions"] .demo-question')
+  await expect(chatQuestions).toHaveCount(PHARMACY_STEP5.report_questions.length)
+  await chatQuestions.first().click()
+  await expect(page.getByText(shownStart(PHARMACY_STEP5.report_answers[0]))).toBeVisible()
+
+  await page.locator('.agent-pill').click()
+  await page.locator('.dropdown-item').nth(3).click()
+  await expect(chatQuestions).toHaveCount(PHARMACY_STEP5.agent_questions.length)
+  await chatQuestions.first().click()
+  await expect(page.getByText(shownStart(PHARMACY_STEP5.agents['3'].answers[0]))).toBeVisible()
+  await expect(page.getByText('Reconstructed from the recorded run').first()).toBeVisible()
+
+  await page.locator('.survey-pill').click()
+  await page.locator('.agent-checkbox').first().click()
+  await page.locator('[data-test="demo-survey-questions"] .demo-question').nth(1).click()
+  await page.locator('.survey-submit-btn').click()
+  await expect(
+    page.locator('.result-answer').getByText(shownStart(PHARMACY_STEP5.agents['0'].answers[1])),
+  ).toBeVisible()
+
+  await expect(page.locator('[data-test="watchdog-tape-failed"]')).toHaveCount(0)
+  await expect(page.locator('[data-test="watchdog-not-recorded"]')).toHaveCount(0)
 })
 
 test('Energy Caps golden run plays end-to-end', async ({ page }) => {
