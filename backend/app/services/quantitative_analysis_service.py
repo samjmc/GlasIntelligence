@@ -6,20 +6,20 @@ probability estimates, and risk matrices from simulation data. Designed to be
 called by the Report Agent as tools alongside the existing qualitative retrieval tools.
 """
 
-import os
-import json
 import csv
+import json
 import math
-from typing import Any
+import os
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from ..config import Config
-from ..utils.logger import get_logger
 from ..utils.jev_client import JevAnswer, JevClient
 from ..utils.jev_gate import gated
 from ..utils.jev_metrics import LEDGER
 from ..utils.llm_client import LLMClient
+from ..utils.logger import get_logger
 from .calibration_guardrails import apply_estimate_guardrails
 
 logger = get_logger("glas.quantitative_analysis")
@@ -861,7 +861,7 @@ class QuantitativeAnalysisService:
             type_stats[atype]["agent_count"] += 1
             type_stats[atype]["total_actions"] += agent["total_actions"]
 
-        for atype, data in type_stats.items():
+        for data in type_stats.values():
             data["avg_actions_per_agent"] = data["total_actions"] / max(data["agent_count"], 1)
         result.agent_type_activity = type_stats
 
@@ -1472,8 +1472,8 @@ class QuantitativeAnalysisService:
         if probs and probs.estimates:
             try:
                 from .monte_carlo_engine import (
-                    run_monte_carlo_on_estimates,
                     run_composite_monte_carlo,
+                    run_monte_carlo_on_estimates,
                 )
 
                 est_dicts = [e.to_dict() for e in probs.estimates]
