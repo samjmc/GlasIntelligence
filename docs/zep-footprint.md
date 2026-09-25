@@ -42,7 +42,7 @@ Only **user-initiated** graph refresh should pass `refresh: true` to `getGraphDa
 
 ## Graph memory (simulation → Zep writes)
 
-- **Default**: `enable_graph_memory_update` is **off** in the UI unless the user enables “Live graph memory” (stored in `sessionStorage` key `glas_pref_graph_memory`).
+- **Default**: `enable_graph_memory_update` is **off**. The UI (`Step3Simulation.vue`) always sends `false`, and the API default is `false`. There is no UI toggle; to opt in, call `POST /api/simulation/start` with `enable_graph_memory_update: true`. Cost: at least 1 Zep credit per agent action, about 2,000+ per simulation. (Until 2026-09-24 the UI hard-coded `true`, so every UI simulation spent those credits.)
 - **Backend batching** (when memory is on):
 
 | Variable | Default | Meaning |
@@ -55,7 +55,7 @@ Larger batches / longer intervals → fewer Zep writes and fewer cache generatio
 ## Rollback
 
 1. Revert or adjust `VITE_ZEP_*` / Docker build args and rebuild the frontend.
-2. Set graph memory checkbox default via UI session clear, or redeploy prior frontend build.
+2. Graph memory has no UI switch; the UI always sends `enable_graph_memory_update: false`.
 3. Unset or restore `ZEP_GRAPH_MEMORY_*` on the API if you changed them.
 
 ## Verification checklist (manual / HAR)
@@ -63,6 +63,6 @@ Larger batches / longer intervals → fewer Zep writes and fewer cache generatio
 1. Open a project with `graph_id`: count `GET /api/graph/data/...` over several minutes; should match configured intervals; **no** `refresh=true` unless the refresh control is used.
 2. Hidden tab: request rate should drop when `VITE_ZEP_GRAPH_SKIP_WHEN_HIDDEN=true`.
 3. Start simulation **without** graph memory: `POST` body contains `enable_graph_memory_update: false`.
-4. Enable graph memory: `true` in body; logs note Zep graph memory when server enables it.
+4. Enable graph memory (API only): `true` in the body; logs note Zep graph memory when the server enables it.
 
 Automated Playwright coverage is gated on auth/session fixtures; use this checklist for production validation. The e2e test `zep-footprint.spec.js` only checks that the app shell loads so CI stays green without auth fixtures.

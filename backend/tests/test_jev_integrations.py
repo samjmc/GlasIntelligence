@@ -96,7 +96,7 @@ def test_tool_roles_jev_confident_then_llm_only_for_unsure(monkeypatch, jev_on):
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning('{"1": "observer", "2": "analyst"}')
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         result = st.assign_tool_roles(_agents(), "Pharmacy First caps")
 
     assert result == {0: "leader", 1: "observer", 2: "analyst"}
@@ -113,7 +113,7 @@ def test_tool_roles_all_confident_skips_llm(monkeypatch, jev_on):
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning("{}")
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         result = st.assign_tool_roles(_agents(), "req")
 
     assert result == {0: "leader", 1: "observer", 2: "analyst"}
@@ -125,7 +125,7 @@ def test_tool_roles_jev_option_outside_set_falls_back(monkeypatch, jev_on):
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning('{"0": "leader"}')
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         result = st.assign_tool_roles(_agents(), "req")
 
     assert result == {0: "leader", 1: "none", 2: "none"}
@@ -135,7 +135,7 @@ def test_tool_roles_jev_off_sends_every_agent_to_llm(monkeypatch, jev_off):
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning('{"0": "leader", "1": "observer", "2": "analyst"}')
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         result = st.assign_tool_roles(_agents(), "req")
 
     assert result == {0: "leader", 1: "observer", 2: "analyst"}
@@ -163,7 +163,7 @@ def test_tool_roles_shadow_uses_llm_but_records_agreement(monkeypatch, jev_shado
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning('{"0": "leader", "1": "observer", "2": "analyst"}')
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         result = st.assign_tool_roles(_agents(), "req")
 
     assert result == {0: "leader", 1: "observer", 2: "analyst"}  # LLM answers win in shadow
@@ -180,7 +180,7 @@ def test_tool_roles_disabled_site_forces_llm(monkeypatch, jev_on):
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning('{"0": "observer", "1": "observer", "2": "observer"}')
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         result = st.assign_tool_roles(_agents(), "req")
 
     assert result == {0: "observer", 1: "observer", 2: "observer"}
@@ -192,7 +192,7 @@ def test_tool_roles_active_ledger_counts(monkeypatch, jev_on):
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     mock_openai = _llm_returning('{"1": "observer", "2": "analyst"}')
 
-    with patch("app.services.simulation_tools.OpenAI", mock_openai):
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
         st.assign_tool_roles(_agents(), "req")
 
     site = LEDGER.summary()["sites"]["tool_roles"]
@@ -200,6 +200,35 @@ def test_tool_roles_active_ledger_counts(monkeypatch, jev_on):
     assert (site["items_jev_confident"], site["items_jev_low_confidence"], site["items_jev_failed"]) == (1, 1, 1)
     assert site["items_llm"] == 2
     assert site["llm_cost_avoided_usd_est"] is not None and site["llm_cost_avoided_usd_est"] > 0
+
+
+def test_tool_roles_llm_disables_deepseek_thinking(monkeypatch, jev_off):
+    # With thinking on, DeepSeek V4.1 spends the whole max_tokens budget on hidden
+    # reasoning and returns empty content (measured 2026-09-24).
+    monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
+    monkeypatch.setattr(app_config.Config, "LLM_BASE_URL", "https://api.deepseek.com")
+    mock_openai = _llm_returning('{"0": "leader", "1": "observer", "2": "analyst"}')
+
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
+        assert st.assign_tool_roles(_agents(), "req") == {0: "leader", 1: "observer", 2: "analyst"}
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_scenario_tools_llm_disables_deepseek_thinking(monkeypatch):
+    monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
+    monkeypatch.setattr(app_config.Config, "LLM_BASE_URL", "https://api.deepseek.com")
+    mock_openai = _llm_returning(
+        '[{"name": "file_complaint", "description": "d", "param_name": "p", "param_description": "pd", "effects": []}]'
+    )
+
+    with patch("app.utils.llm_client.OpenAI", mock_openai):
+        tools = st.generate_scenario_tool_definitions("Pharmacy First caps", ["Organization"])
+
+    assert [t.name for t in tools] == ["file_complaint"]
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
 
 
 # ====================================================================== stance analysis
