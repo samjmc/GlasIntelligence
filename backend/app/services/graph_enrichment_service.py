@@ -14,14 +14,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from zep_cloud import AddNodeItem, EpisodeData
-from zep_cloud.client import Zep
-
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from ..utils.zep_paging import fetch_all_nodes
 from .graph_snapshot_cache import bump_mutation_generation
+from .graph_store import GraphStore, NewNode, get_graph_store
 
 logger = get_logger("glas.graph_enrichment")
 
@@ -95,10 +92,10 @@ class GraphEnrichmentService:
 
     def __init__(
         self,
-        zep_client: Zep,
+        store: GraphStore | None = None,
         llm_client: LLMClient | None = None,
     ):
-        self.client = zep_client
+        self.store = store or get_graph_store()
         self.llm = llm_client or LLMClient()
 
     def enrich_graph(
@@ -292,7 +289,7 @@ class GraphEnrichmentService:
             label = _CATEGORY_LABEL.get((entity.get("category") or "").lower(), "Organization")
             attrs = self._node_attributes_for(entity, label)
             items.append(
-                AddNodeItem(
+                NewNode(
                     name=name[:50],
                     summary=(entity.get("context") or "")[:500] or None,
                     label=label,
@@ -304,12 +301,11 @@ class GraphEnrichmentService:
         for i in range(0, len(items), 100):
             batch = items[i : i + 100]
             try:
-                resp = self.client.graph.add_nodes(graph_id=graph_id, nodes=batch)
-                batch_added = len(resp.nodes or []) if resp else 0
+                res = self.store.add_nodes(graph_id, batch)
+                batch_added = res.accepted
                 added += batch_added
-                task_id = getattr(resp, "task_id", None)
-                if resp and task_id:
-                    self._wait_for_add_nodes_task(task_id)
+                if res.task_id:
+                    self._wait_for_add_nodes_task(res.task_id)
                 logger.info(f"add_nodes: {batch_added} nodes accepted")
             except Exception as e:
                 logger.warning(f"add_nodes batch failed (non-fatal): {e}")
@@ -339,12 +335,12 @@ class GraphEnrichmentService:
         start = time.time()
         while time.time() - start < timeout:
             try:
-                task = self.client.task.get(task_id=task_id)
-                status = getattr(task, "status", None)
+                state = self.store.get_task_status(task_id)
+                status = state.status
                 if status == "succeeded":
                     return
                 if status == "failed":
-                    logger.warning(f"add_nodes task {task_id} failed: {getattr(task, 'error', None)}")
+                    logger.warning(f"add_nodes task {task_id} failed: {state.error}")
                     return
             except Exception as e:
                 logger.debug(f"add_nodes task poll error (retrying): {e}")
@@ -357,7 +353,7 @@ class GraphEnrichmentService:
 
     def _get_node_stats(self, graph_id: str) -> tuple[set, int]:
         """Return (all_node_names, typed_node_count) in a single pagination pass."""
-        nodes = fetch_all_nodes(self.client, graph_id)
+        nodes = self.store.list_nodes(graph_id)
         names = set()
         typed = 0
         for node in nodes:
@@ -448,20 +444,11 @@ class GraphEnrichmentService:
     # ───────────────────────────────────────────────────────────
 
     def _send_episodes(self, graph_id: str, passages: list[str]) -> list[str]:
-        episodes = [EpisodeData(data=passage, type="text") for passage in passages]
         episode_uuids = []
 
         try:
-            batch_result = self.client.graph.add_batch(
-                graph_id=graph_id,
-                episodes=episodes,
-            )
-            if batch_result and isinstance(batch_result, list):
-                for ep in batch_result:
-                    ep_uuid = getattr(ep, "uuid_", None) or getattr(ep, "uuid", None)
-                    if ep_uuid:
-                        episode_uuids.append(ep_uuid)
-            logger.info(f"Sent {len(episodes)} enrichment episodes, got {len(episode_uuids)} UUIDs")
+            episode_uuids = self.store.add_episodes(graph_id, passages)
+            logger.info(f"Sent {len(passages)} enrichment episodes, got {len(episode_uuids)} UUIDs")
         except Exception as e:
             logger.error(f"Failed to send enrichment episodes: {e}")
 
@@ -477,8 +464,7 @@ class GraphEnrichmentService:
         while pending and (time.time() - start) < self.EPISODE_PROCESSING_TIMEOUT:
             for ep_uuid in list(pending):
                 try:
-                    episode = self.client.graph.episode.get(uuid_=ep_uuid)
-                    if getattr(episode, "processed", False):
+                    if self.store.is_episode_processed(ep_uuid):
                         pending.remove(ep_uuid)
                 except Exception:
                     pass

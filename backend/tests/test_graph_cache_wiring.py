@@ -1,48 +1,56 @@
 """Tests for the graph snapshot cache wiring (reader read-through, memory-updater bump, API route)."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.services.graph_snapshot_cache import CacheOutcome, CacheReadResult
+from app.services.graph_store.fake_store import FakeGraphStore
 
 
 class TestEntityReaderReadThrough:
     def test_hit_reuses_snapshot_without_zep(self, monkeypatch):
         from app.services import zep_entity_reader as er
 
-        nodes = [
-            {"uuid": "n1", "name": "NHS England", "labels": ["Entity", "Org"], "summary": "", "attributes": {}}
-        ]
+        nodes = [{"uuid": "n1", "name": "NHS England", "labels": ["Entity", "Org"], "summary": "", "attributes": {}}]
         edges = [
-            {"uuid": "e1", "name": "regulates", "fact": "regulates", "source_node_uuid": "n1", "target_node_uuid": "n2", "attributes": {}}
+            {
+                "uuid": "e1",
+                "name": "regulates",
+                "fact": "regulates",
+                "source_node_uuid": "n1",
+                "target_node_uuid": "n2",
+                "attributes": {},
+            }
         ]
         monkeypatch.setattr(er, "try_get_lists_for_entity_reader", lambda gid: (nodes, edges))
 
         def boom(*_a, **_k):
             raise AssertionError("Zep should not be called on cache HIT")
 
-        monkeypatch.setattr(er, "fetch_all_nodes", boom)
-        monkeypatch.setattr(er, "fetch_all_edges", boom)
+        store = MagicMock()
+        store.list_nodes.side_effect = boom
+        store.list_edges.side_effect = boom
 
-        reader = er.ZepEntityReader(api_key="test-key")
+        reader = er.ZepEntityReader(store=store)
         assert reader.get_all_nodes("graph_x") == nodes
         assert reader.get_all_edges("graph_x") == edges
+        assert store.list_nodes.call_count == 0
+        assert store.list_edges.call_count == 0
 
     def test_miss_falls_through_to_zep(self, monkeypatch):
         from app.services import zep_entity_reader as er
 
-        class FakeNode:
-            uuid_ = "n1"
-            name = "NHS England"
-            labels = ["Entity", "Org"]
-            summary = "summary"
-            attributes = {"k": "v"}
+        store = FakeGraphStore()
+        store.seed_node(
+            "graph_x", "NHS England", labels=["Entity", "Org"], uuid="n1", summary="summary", attributes={"k": "v"}
+        )
 
         monkeypatch.setattr(er, "try_get_lists_for_entity_reader", lambda gid: None)
-        monkeypatch.setattr(er, "fetch_all_nodes", lambda _c, _g: [FakeNode()])
-        monkeypatch.setattr(er, "fetch_all_edges", lambda _c, _g: [])
 
-        reader = er.ZepEntityReader(api_key="test-key")
+        reader = er.ZepEntityReader(store=store)
         nodes = reader.get_all_nodes("graph_x")
+        assert len(nodes) == 1
         assert nodes[0]["uuid"] == "n1"
         assert nodes[0]["name"] == "NHS England"
         assert reader.get_all_edges("graph_x") == []
@@ -59,8 +67,7 @@ class TestMemoryUpdaterBump:
             "app.services.zep_graph_memory_updater.bump_mutation_generation",
             lambda gid: bumped.append(gid),
         )
-        updater = ZepGraphMemoryUpdater(graph_id="graph_x", api_key="test-key")
-        updater.client = SimpleNamespace(graph=SimpleNamespace(add=lambda **_kw: None))
+        updater = ZepGraphMemoryUpdater(graph_id="graph_x", store=SimpleNamespace(add_text=lambda *_a: None))
         return updater, bumped
 
     def test_successful_batch_bumps_generation(self, monkeypatch):
@@ -85,10 +92,10 @@ class TestMemoryUpdaterBump:
 
         updater, bumped = self._updater(monkeypatch)
 
-        def raise_error(**_kw):
+        def raise_error(*_a, **_kw):
             raise RuntimeError("zep down")
 
-        updater.client.graph.add = raise_error
+        updater.store.add_text = raise_error
         updater.MAX_RETRIES = 1
         activity = AgentActivity(
             platform="twitter",
@@ -108,7 +115,7 @@ class TestGraphDataRouteCache:
     def _get_graph_data(self, client, monkeypatch):
         import app.api.graph as graph_mod
 
-        monkeypatch.setattr(graph_mod.Config, "ZEP_API_KEY", "test-key")
+        monkeypatch.setattr(graph_mod.Config, "GRAPH_BACKEND", "fake")
         return graph_mod.get_graph_data
 
     def test_route_hit_sets_cache_headers(self, client, monkeypatch):
@@ -169,3 +176,15 @@ class TestGraphDataRouteCache:
         monkeypatch.setattr(graph_mod, "try_stale_fallback", lambda gid: CacheReadResult(None, CacheOutcome.MISS, None))
         resp = client.get("/api/graph/data/graph_x")
         assert resp.status_code == 500
+
+    @pytest.mark.parametrize(
+        "path,method", [("/api/graph/data/graph_x", "get"), ("/api/graph/delete/graph_x", "delete")]
+    )
+    def test_route_500_when_graph_store_unavailable(self, client, monkeypatch, path, method):
+        import app.api.graph as graph_mod
+
+        monkeypatch.setattr(graph_mod.Config, "GRAPH_BACKEND", "zep")
+        monkeypatch.setattr(graph_mod.Config, "ZEP_API_KEY", "")
+        resp = getattr(client, method)(path)
+        assert resp.status_code == 500
+        assert resp.get_json() == {"success": False, "error": "ZEP_API_KEY not configured"}

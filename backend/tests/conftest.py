@@ -10,6 +10,10 @@ os.environ.setdefault("ENABLE_REPORT_PAYLOAD_V1", "true")
 # environment too (not just on Config below), because some tests evict app.config from
 # sys.modules and a re-imported Config would otherwise read the developer's .env.
 os.environ["JEV_MODE"] = "off"
+# Zep is metered (free plan: 10k credits a month) and a developer env may hold a real key.
+# The in-memory store makes every graph call local. Set in the environment too, for the
+# same re-import reason as JEV_MODE.
+os.environ["GRAPH_BACKEND"] = "fake"
 
 from app import create_app
 from app import config as app_config
@@ -33,6 +37,7 @@ app_config.Config.SUPABASE_JWT_SECRET = ""
 # Jev is a paid external model; a developer .env may leave it active. The suite must never
 # make live Jev calls, so it is off here — tests that exercise a gate pin their own mode/fake.
 app_config.Config.JEV_MODE = "off"
+app_config.Config.GRAPH_BACKEND = "fake"
 get_supabase_client.cache_clear()
 
 
@@ -173,6 +178,26 @@ def _mock_supabase_http(monkeypatch):
         staticmethod(lambda: _MockSupabaseClient()),
     )
     supabase_client.get_supabase_client.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_fake_graph_store(monkeypatch):
+    """Each test starts with an empty in-memory graph store, and cannot build a real Zep client.
+
+    Tests of ZepGraphStore itself replace ``zep_store.Zep`` with a mock, so they never
+    reach the real class.
+    """
+    from zep_cloud.client import Zep
+
+    from app.services.graph_store.fake_store import FakeGraphStore
+
+    def _no_real_zep(self, *a, **k):
+        raise AssertionError("A test built a real Zep client. Use FakeGraphStore or mock zep_store.Zep.")
+
+    monkeypatch.setattr(Zep, "__init__", _no_real_zep)
+    FakeGraphStore.reset_shared()
+    yield
+    FakeGraphStore.reset_shared()
 
 
 @pytest.fixture

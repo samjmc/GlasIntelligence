@@ -1,6 +1,6 @@
 # Plan: move the knowledge graph from Zep Cloud to self-hosted Graphiti
 
-**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** (next: G1; its gates PR #11 and PR #13 both merged 2026-09-24) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** (next: G2, the Graphiti adapter) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
 
 ## Vet results (2026-09-22) — these override anything below that conflicts
 
@@ -245,6 +245,14 @@ Each phase ends green. The full backend suite's failure set must equal `main`'s 
 - **No-go** → record why. Then either try `deepseek-v4-pro` for extraction only, or stop and keep Zep with the Phase 4.0 credit guard.
 
 ### G1 — Interface + Zep adapter (no behaviour change, 0 credits)
+
+**Done 2026-09-25 (branch `feat/graph-store-g1`).** What was built, and where it differs from the design above:
+- `app/services/graph_store/`: `base.py` (protocol + `GraphNode` / `GraphEdge` / `GraphSearchResult` / `NewNode` / `AddNodesResult` / `TaskState`), `zep_store.py` (every SDK call, moved verbatim, including `set_ontology`'s model building), `fake_store.py` (in memory), and `__init__.py` (`get_graph_store`, `graph_store_available`, `graph_store_unavailable_reason`). `Config.GRAPH_BACKEND` is `zep` (default) or `fake`; an unknown value raises.
+- **Deviation: waiting stays in the callers.** The store has `add_episodes` + `is_episode_processed` and `add_nodes` + `get_task_status`, not a blocking `add_texts`. So the progress bands, timeouts and poll loops in `graph_builder`, `api/graph.py` and the enrichment service are unchanged. G2's Graphiti store ingests synchronously inside `add_episodes`, then returns `True` / `"succeeded"`, so the same loops end at once. The progress-band redesign in the vet's Medium list is still open for G2.
+- Paging stays in `utils/zep_paging.py` (used only by `ZepGraphStore`), so `test_zep_paging.py` did not move.
+- All six services keep their constructor signatures and gain `store=`. Every `Config.ZEP_API_KEY` check in routes is now `graph_store_available()`. `graph_builder.build_graph_async` / `_build_graph_worker` (no callers) are deleted.
+- Tests run on `GRAPH_BACKEND=fake`, and conftest makes the real `zep_cloud.client.Zep` raise if any test builds one. Backend suite: 519 → **543 passed**; it also runs about 4x faster (the old tests paid retry back-offs against the placeholder Zep key).
+- Not verified against live Zep: no `ZEP_API_KEY` is set locally. The SDK kwargs are copied from the old code, and `tests/test_graph_store.py` pins each mapping with a mocked client.
 - Move all 17 operations behind `GraphStore`. `ZepGraphStore` contains today's code verbatim, including the poll loops and `task.get`.
 - The callers (`graph_builder`, `graph_enrichment_service`, `zep_entity_reader`, `zep_tools`, `oasis_profile_generator`, `zep_graph_memory_updater`, `api/graph.py`) receive a store instead of constructing `Zep()`.
 - Add `FakeGraphStore`, and rewrite Zep-mocking tests to use it where that is simpler.

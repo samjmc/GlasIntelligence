@@ -23,6 +23,7 @@ from ..services.graph_snapshot_cache import (
     try_stale_fallback,
     write_snapshot,
 )
+from ..services.graph_store import graph_store_available, graph_store_unavailable_reason
 from ..services.ontology_generator import OntologyGenerator
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
@@ -363,8 +364,8 @@ def build_graph():
         logger.info("=== Starting graph build ===")
 
         errors = []
-        if not Config.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY not configured")
+        if not graph_store_available():
+            errors.append(graph_store_unavailable_reason())
         if errors:
             logger.error(f"Configuration error: {errors}")
             return jsonify({"success": False, "error": "Configuration error: " + "; ".join(errors)}), 500
@@ -439,7 +440,7 @@ def build_graph():
                     task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service..."
                 )
 
-                builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+                builder = GraphBuilderService()
 
                 task_manager.update_task(task_id, message="Chunking text...", progress=5)
                 chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
@@ -491,7 +492,7 @@ def build_graph():
 
                     try:
                         enrichment_service = GraphEnrichmentService(
-                            zep_client=builder.client,
+                            store=builder.store,
                             llm_client=LLMClient(),
                         )
                         enrichment_result = enrichment_service.enrich_graph(
@@ -610,12 +611,12 @@ def get_graph_data(graph_id: str):
     On Zep failure, serves a stale snapshot within the stale max age.
     """
     try:
-        if not Config.ZEP_API_KEY:
-            return jsonify({"success": False, "error": "ZEP_API_KEY not configured"}), 500
+        if not graph_store_available():
+            return jsonify({"success": False, "error": graph_store_unavailable_reason()}), 500
 
         refresh = request.args.get("refresh", "false").lower() in ("1", "true", "yes")
 
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        builder = GraphBuilderService()
         graph_data, outcome, age = get_graph_data_cached(
             graph_id,
             lambda: builder.get_graph_data(graph_id),
@@ -648,10 +649,10 @@ def delete_graph(graph_id: str):
     Delete Zep graph
     """
     try:
-        if not Config.ZEP_API_KEY:
-            return jsonify({"success": False, "error": "ZEP_API_KEY not configured"}), 500
+        if not graph_store_available():
+            return jsonify({"success": False, "error": graph_store_unavailable_reason()}), 500
 
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        builder = GraphBuilderService()
         builder.delete_graph(graph_id)
         invalidate(graph_id)
 

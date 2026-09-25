@@ -10,11 +10,9 @@ from datetime import datetime
 from queue import Empty, Queue
 from typing import Any
 
-from zep_cloud.client import Zep
-
-from ..config import Config
 from ..utils.logger import get_logger
 from .graph_snapshot_cache import bump_mutation_generation
+from .graph_store import GraphStore, get_graph_store
 
 logger = get_logger("glas.zep_graph_memory_updater")
 
@@ -228,21 +226,17 @@ class ZepGraphMemoryUpdater:
     MAX_RETRIES = 3
     RETRY_DELAY = 2  # seconds
 
-    def __init__(self, graph_id: str, api_key: str | None = None):
+    def __init__(self, graph_id: str, api_key: str | None = None, store: GraphStore | None = None):
         """
         Initialise the updater
 
         Args:
             graph_id: Zep graph ID
             api_key: Zep API Key (optional, defaults to config value)
+            store: Graph store (optional, defaults to get_graph_store(api_key))
         """
         self.graph_id = graph_id
-        self.api_key = api_key or Config.ZEP_API_KEY
-
-        if not self.api_key:
-            raise ValueError("ZEP_API_KEY is not configured")
-
-        self.client = Zep(api_key=self.api_key)
+        self.store = store or get_graph_store(api_key)
 
         # Activity queue
         self._activity_queue: Queue = Queue()
@@ -405,7 +399,7 @@ class ZepGraphMemoryUpdater:
         # Send with retry
         for attempt in range(self.MAX_RETRIES):
             try:
-                self.client.graph.add(graph_id=self.graph_id, type="text", data=combined_text)
+                self.store.add_text(self.graph_id, combined_text)
 
                 self._total_sent += 1
                 self._total_items_sent += len(activities)

@@ -8,12 +8,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-from zep_cloud.client import Zep
-
-from ..config import Config
 from ..utils.logger import get_logger
-from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
 from .graph_snapshot_cache import try_get_lists_for_entity_reader
+from .graph_store import GraphStore, get_graph_store
 from .jev_simulation_gates import graph_actor_filter
 
 logger = get_logger("glas.zep_entity_reader")
@@ -86,12 +83,8 @@ class ZepEntityReader:
     3. Retrieve related edges and associated node information for each entity
     """
 
-    def __init__(self, api_key: str | None = None):
-        self.api_key = api_key or Config.ZEP_API_KEY
-        if not self.api_key:
-            raise ValueError("ZEP_API_KEY not configured")
-
-        self.client = Zep(api_key=self.api_key)
+    def __init__(self, api_key: str | None = None, store: GraphStore | None = None):
+        self.store = store or get_graph_store(api_key)
 
     def _call_with_retry(
         self, func: Callable[[], T], operation_name: str, max_retries: int = 3, initial_delay: float = 2.0
@@ -149,7 +142,7 @@ class ZepEntityReader:
 
         logger.info(f"Fetching all nodes for graph {graph_id}...")
 
-        nodes = fetch_all_nodes(self.client, graph_id)
+        nodes = self.store.list_nodes(graph_id)
 
         nodes_data = []
         for node in nodes:
@@ -187,7 +180,7 @@ class ZepEntityReader:
 
         logger.info(f"Fetching all edges for graph {graph_id}...")
 
-        edges = fetch_all_edges(self.client, graph_id)
+        edges = self.store.list_edges(graph_id)
 
         edges_data = []
         for edge in edges:
@@ -217,7 +210,7 @@ class ZepEntityReader:
         """
         try:
             edges = self._call_with_retry(
-                func=lambda: self.client.graph.node.get_entity_edges(node_uuid=node_uuid),
+                func=lambda: self.store.get_node_edges(node_uuid),
                 operation_name=f"get_node_edges(node={node_uuid[:8]}...)",
             )
 
@@ -431,7 +424,7 @@ class ZepEntityReader:
         """
         try:
             node = self._call_with_retry(
-                func=lambda: self.client.graph.node.get(uuid_=entity_uuid),
+                func=lambda: self.store.get_node(entity_uuid),
                 operation_name=f"get_node_detail(uuid={entity_uuid[:8]}...)",
             )
 
