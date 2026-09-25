@@ -1,23 +1,17 @@
 """Interview, env status, follow-up suggestions, and reminder routes for simulation API."""
 
-import json
-import re
 import traceback
 
-from flask import g, jsonify, request
+from flask import jsonify, request
 
-from . import simulation_bp
-from .simulation_helpers import optimize_interview_prompt
 from ..middleware.auth import require_auth
-from ..models.project import ProjectManager
 from ..services import offline_interview
 from ..services.offline_interview import SimulationNotFoundError
-from ..services.report_agent import ReportManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
-from ..services.supabase_client import SupabaseDB
-from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+from . import simulation_bp
+from .simulation_helpers import optimize_interview_prompt
 
 logger = get_logger("glas.api.simulation")
 
