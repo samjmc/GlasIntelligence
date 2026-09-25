@@ -92,15 +92,11 @@ ignore = [
 # branches right now; lint-fixing them here would only cause merge conflicts.
 # Remove each entry once its branch has merged and the file is lint-clean.
 [tool.ruff.lint.per-file-ignores]
-"app/services/simulation_ipc.py" = ["ALL"]
-"app/services/simulation_runner.py" = ["ALL"]
 "app/api/simulation_interview_env_routes.py" = ["ALL"]
 
 [tool.ruff.format]
 # temporary: owned by parallel branch (same list and reason as per-file-ignores above).
 exclude = [
-    "app/services/simulation_ipc.py",
-    "app/services/simulation_runner.py",
     "app/api/simulation_interview_env_routes.py",
 ]
 
