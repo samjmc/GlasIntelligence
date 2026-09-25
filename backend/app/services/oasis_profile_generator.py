@@ -17,10 +17,10 @@ from datetime import datetime
 from typing import Any
 
 from openai import OpenAI
-from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
+from .graph_store import get_graph_store, graph_store_available
 from .zep_entity_reader import EntityNode
 
 logger = get_logger("glas.oasis_profile")
@@ -232,16 +232,15 @@ class OasisProfileGenerator:
 
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-        # Zep client for retrieving rich context
-        self.zep_api_key = zep_api_key or Config.ZEP_API_KEY
-        self.zep_client = None
+        # Graph store for retrieving rich context
+        self.graph_store = None
         self.graph_id = graph_id
 
-        if self.zep_api_key:
-            try:
-                self.zep_client = Zep(api_key=self.zep_api_key)
-            except Exception as e:
-                logger.warning(f"Zep client initialisation failed: {e}")
+        try:
+            if zep_api_key or graph_store_available():
+                self.graph_store = get_graph_store(zep_api_key)
+        except Exception as e:
+            logger.warning(f"Graph store initialisation failed: {e}")
 
     def generate_profile_from_entity(self, entity: EntityNode, user_id: int, use_llm: bool = True) -> OasisAgentProfile:
         """
@@ -327,7 +326,7 @@ class OasisProfileGenerator:
         """
         import concurrent.futures
 
-        if not self.zep_client:
+        if not self.graph_store:
             return {"facts": [], "node_summaries": [], "context": ""}
 
         entity_name = entity.name
@@ -348,9 +347,7 @@ class OasisProfileGenerator:
 
             for attempt in range(max_retries):
                 try:
-                    return self.zep_client.graph.search(
-                        query=comprehensive_query, graph_id=self.graph_id, limit=30, scope="edges", reranker="rrf"
-                    )
+                    return self.graph_store.search(self.graph_id, comprehensive_query, 30, "edges", "rrf")
                 except Exception as e:
                     if attempt < max_retries - 1:
                         logger.debug(f"Zep edge search attempt {attempt + 1} failed: {str(e)[:80]}, retrying...")
@@ -367,9 +364,7 @@ class OasisProfileGenerator:
 
             for attempt in range(max_retries):
                 try:
-                    return self.zep_client.graph.search(
-                        query=comprehensive_query, graph_id=self.graph_id, limit=20, scope="nodes", reranker="rrf"
-                    )
+                    return self.graph_store.search(self.graph_id, comprehensive_query, 20, "nodes", "rrf")
                 except Exception as e:
                     if attempt < max_retries - 1:
                         logger.debug(f"Zep node search attempt {attempt + 1} failed: {str(e)[:80]}, retrying...")

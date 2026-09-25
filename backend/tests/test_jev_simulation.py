@@ -11,12 +11,12 @@ import json
 import os
 import random
 import sys
-from unittest.mock import MagicMock
 
 import pytest
 
 from app import config as app_config
 from app.services import jev_simulation_gates as gates
+from app.services.graph_store.fake_store import FakeGraphStore
 from app.services.simulation_effects import EffectEngine
 from app.services.simulation_runner import SimulationRunner, SimulationRunState
 from app.services.zep_entity_reader import ZepEntityReader
@@ -514,8 +514,7 @@ def _nodes():
 
 
 def _reader(monkeypatch):
-    monkeypatch.setattr("app.services.zep_entity_reader.Zep", MagicMock())
-    reader = ZepEntityReader(api_key="k")
+    reader = ZepEntityReader(store=FakeGraphStore())
     monkeypatch.setattr(reader, "get_all_nodes", lambda graph_id: _nodes())
     monkeypatch.setattr(reader, "get_all_edges", lambda graph_id: [])
     return reader

@@ -13,13 +13,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from zep_cloud.client import Zep
-
-from ..config import Config
 from ..utils.jev_metrics import LEDGER
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
+from .graph_store import GraphStore, get_graph_store
 from .jev_report_gates import (
     INTERVIEW_FORMAT_REMINDER,
     SITE_INTERVIEW_SELECTION,
@@ -429,12 +426,10 @@ class ZepToolsService:
     MAX_RETRIES = 3
     RETRY_DELAY = 2.0
 
-    def __init__(self, api_key: str | None = None, llm_client: LLMClient | None = None):
-        self.api_key = api_key or Config.ZEP_API_KEY
-        if not self.api_key:
-            raise ValueError("ZEP_API_KEY is not configured")
-
-        self.client = Zep(api_key=self.api_key)
+    def __init__(
+        self, api_key: str | None = None, llm_client: LLMClient | None = None, store: GraphStore | None = None
+    ):
+        self.store = store or get_graph_store(api_key)
         self._llm_client = llm_client
         logger.info("ZepToolsService initialised successfully")
 
@@ -489,9 +484,7 @@ class ZepToolsService:
         # Try using the Zep Cloud Search API
         try:
             search_results = self._call_with_retry(
-                func=lambda: self.client.graph.search(
-                    graph_id=graph_id, query=query, limit=limit, scope=scope, reranker="cross_encoder"
-                ),
+                func=lambda: self.store.search(graph_id, query, limit, scope, "cross_encoder"),
                 operation_name=f"graph_search(graph={graph_id})",
             )
 
@@ -645,7 +638,7 @@ class ZepToolsService:
         """
         logger.info(f"Fetching all nodes for graph {graph_id}...")
 
-        nodes = fetch_all_nodes(self.client, graph_id)
+        nodes = self.store.list_nodes(graph_id)
 
         result = []
         for node in nodes:
@@ -676,7 +669,7 @@ class ZepToolsService:
         """
         logger.info(f"Fetching all edges for graph {graph_id}...")
 
-        edges = fetch_all_edges(self.client, graph_id)
+        edges = self.store.list_edges(graph_id)
 
         result = []
         for edge in edges:
@@ -715,7 +708,7 @@ class ZepToolsService:
 
         try:
             node = self._call_with_retry(
-                func=lambda: self.client.graph.node.get(uuid_=node_uuid),
+                func=lambda: self.store.get_node(node_uuid),
                 operation_name=f"get_node_detail(uuid={node_uuid[:8]}...)",
             )
 

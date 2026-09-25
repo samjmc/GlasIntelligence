@@ -3,20 +3,13 @@ Graph Building Service
 Interface 2: Build Standalone Graph using Zep API
 """
 
-import threading
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from zep_cloud import EntityEdgeSourceTarget, EpisodeData
-from zep_cloud.client import Zep
-
-from ..config import Config
-from ..models.task import TaskManager, TaskStatus
-from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
-from .text_processor import TextProcessor
+from .graph_store import GraphStore, get_graph_store
 
 
 @dataclass
@@ -43,219 +36,20 @@ class GraphBuilderService:
     Responsible for calling Zep API to build knowledge graphs
     """
 
-    def __init__(self, api_key: str | None = None):
-        self.api_key = api_key or Config.ZEP_API_KEY
-        if not self.api_key:
-            raise ValueError("ZEP_API_KEY is not configured")
-
-        self.client = Zep(api_key=self.api_key)
-        self.task_manager = TaskManager()
-
-    def build_graph_async(
-        self,
-        text: str,
-        ontology: dict[str, Any],
-        graph_name: str = "Glas Intelligence Graph",
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-        batch_size: int = 3,
-    ) -> str:
-        """
-        Build graph asynchronously
-
-        Args:
-            text: Input text
-            ontology: Ontology definition (from Interface 1 output)
-            graph_name: Graph name
-            chunk_size: Text chunk size
-            chunk_overlap: Chunk overlap size
-            batch_size: Number of chunks per batch
-
-        Returns:
-            Task ID
-        """
-        # Create task
-        task_id = self.task_manager.create_task(
-            task_type="graph_build",
-            metadata={
-                "graph_name": graph_name,
-                "chunk_size": chunk_size,
-                "text_length": len(text),
-            },
-        )
-
-        # Execute build in background thread
-        thread = threading.Thread(
-            target=self._build_graph_worker,
-            args=(task_id, text, ontology, graph_name, chunk_size, chunk_overlap, batch_size),
-        )
-        thread.daemon = True
-        thread.start()
-
-        return task_id
-
-    def _build_graph_worker(
-        self,
-        task_id: str,
-        text: str,
-        ontology: dict[str, Any],
-        graph_name: str,
-        chunk_size: int,
-        chunk_overlap: int,
-        batch_size: int,
-    ):
-        """Graph building worker thread"""
-        try:
-            self.task_manager.update_task(
-                task_id, status=TaskStatus.PROCESSING, progress=5, message="Starting graph construction..."
-            )
-
-            # 1. Create graph
-            graph_id = self.create_graph(graph_name)
-            self.task_manager.update_task(task_id, progress=10, message=f"Graph created: {graph_id}")
-
-            # 2. Set ontology
-            self.set_ontology(graph_id, ontology)
-            self.task_manager.update_task(task_id, progress=15, message="Ontology set")
-
-            # 3. Split text into chunks
-            chunks = TextProcessor.split_text(text, chunk_size, chunk_overlap)
-            total_chunks = len(chunks)
-            self.task_manager.update_task(task_id, progress=20, message=f"Text split into {total_chunks} chunks")
-
-            # 4. Send data in batches
-            episode_uuids = self.add_text_batches(
-                graph_id,
-                chunks,
-                batch_size,
-                lambda msg, prog: self.task_manager.update_task(
-                    task_id,
-                    progress=20 + int(prog * 0.4),  # 20-60%
-                    message=msg,
-                ),
-            )
-
-            # 5. Wait for Zep processing to complete
-            self.task_manager.update_task(task_id, progress=60, message="Waiting for Zep to process data...")
-
-            self._wait_for_episodes(
-                episode_uuids,
-                lambda msg, prog: self.task_manager.update_task(
-                    task_id,
-                    progress=60 + int(prog * 0.3),  # 60-90%
-                    message=msg,
-                ),
-            )
-
-            # 6. Get graph information
-            self.task_manager.update_task(task_id, progress=90, message="Retrieving graph information...")
-
-            graph_info = self._get_graph_info(graph_id)
-
-            # Complete
-            self.task_manager.complete_task(
-                task_id,
-                {
-                    "graph_id": graph_id,
-                    "graph_info": graph_info.to_dict(),
-                    "chunks_processed": total_chunks,
-                },
-            )
-
-        except Exception as e:
-            import traceback
-
-            error_msg = f"{str(e)}\n{traceback.format_exc()}"
-            self.task_manager.fail_task(task_id, error_msg)
+    def __init__(self, api_key: str | None = None, store: GraphStore | None = None):
+        self.store = store or get_graph_store(api_key)
 
     def create_graph(self, name: str) -> str:
         """Create a Zep graph"""
         graph_id = f"glas_{uuid.uuid4().hex[:16]}"
 
-        self.client.graph.create(graph_id=graph_id, name=name, description="Glas Intelligence Simulation Graph")
+        self.store.create_graph(graph_id=graph_id, name=name, description="Glas Intelligence Simulation Graph")
 
         return graph_id
 
     def set_ontology(self, graph_id: str, ontology: dict[str, Any]):
         """Set the graph ontology definition"""
-        import warnings
-
-        from pydantic import Field
-        from zep_cloud.external_clients.ontology import EdgeModel, EntityModel, EntityText
-
-        # Suppress Pydantic v2 warnings about Field(default=None)
-        # Required by Zep SDK usage; safe to ignore
-        warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
-
-        # Zep reserved names that cannot be used as attribute names
-        RESERVED_NAMES = {"uuid", "name", "group_id", "name_embedding", "summary", "created_at"}
-
-        def safe_attr_name(attr_name: str) -> str:
-            """Convert reserved names to safe alternatives"""
-            if attr_name.lower() in RESERVED_NAMES:
-                return f"entity_{attr_name}"
-            return attr_name
-
-        # Dynamically create entity types
-        entity_types = {}
-        for entity_def in ontology.get("entity_types", []):
-            name = entity_def["name"]
-            description = entity_def.get("description", f"A {name} entity.")
-
-            # Build attribute dict and type annotations (Pydantic v2 required)
-            attrs = {"__doc__": description}
-            annotations = {}
-
-            for attr_def in entity_def.get("attributes", []):
-                attr_name = safe_attr_name(attr_def["name"])
-                attr_desc = attr_def.get("description", attr_name)
-                attrs[attr_name] = Field(description=attr_desc, default=None)
-                # Keep typing.Optional: Zep's ontology code inspects these at runtime.
-                annotations[attr_name] = Optional[EntityText]  # noqa: UP045
-
-            attrs["__annotations__"] = annotations
-
-            entity_class = type(name, (EntityModel,), attrs)
-            entity_class.__doc__ = description
-            entity_types[name] = entity_class
-
-        # Dynamically create edge types
-        edge_definitions = {}
-        for edge_def in ontology.get("edge_types", []):
-            name = edge_def["name"]
-            description = edge_def.get("description", f"A {name} relationship.")
-
-            attrs = {"__doc__": description}
-            annotations = {}
-
-            for attr_def in edge_def.get("attributes", []):
-                attr_name = safe_attr_name(attr_def["name"])
-                attr_desc = attr_def.get("description", attr_name)
-                attrs[attr_name] = Field(description=attr_desc, default=None)
-                annotations[attr_name] = Optional[str]  # noqa: UP045 - see above
-
-            attrs["__annotations__"] = annotations
-
-            class_name = "".join(word.capitalize() for word in name.split("_"))
-            edge_class = type(class_name, (EdgeModel,), attrs)
-            edge_class.__doc__ = description
-
-            source_targets = []
-            for st in edge_def.get("source_targets", []):
-                source_targets.append(
-                    EntityEdgeSourceTarget(source=st.get("source", "Entity"), target=st.get("target", "Entity"))
-                )
-
-            if source_targets:
-                edge_definitions[name] = (edge_class, source_targets)
-
-        # Call Zep API to set ontology
-        if entity_types or edge_definitions:
-            self.client.graph.set_ontology(
-                graph_ids=[graph_id],
-                entities=entity_types if entity_types else None,
-                edges=edge_definitions if edge_definitions else None,
-            )
+        self.store.set_ontology(graph_id, ontology)
 
     def add_text_batches(
         self, graph_id: str, chunks: list[str], batch_size: int = 3, progress_callback: Callable | None = None
@@ -275,16 +69,8 @@ class GraphBuilderService:
                     f"Sending batch {batch_num}/{total_batches} ({len(batch_chunks)} chunks)...", progress
                 )
 
-            episodes = [EpisodeData(data=chunk, type="text") for chunk in batch_chunks]
-
             try:
-                batch_result = self.client.graph.add_batch(graph_id=graph_id, episodes=episodes)
-
-                if batch_result and isinstance(batch_result, list):
-                    for ep in batch_result:
-                        ep_uuid = getattr(ep, "uuid_", None) or getattr(ep, "uuid", None)
-                        if ep_uuid:
-                            episode_uuids.append(ep_uuid)
+                episode_uuids.extend(self.store.add_episodes(graph_id, batch_chunks))
 
                 time.sleep(1)
 
@@ -322,8 +108,7 @@ class GraphBuilderService:
 
             for ep_uuid in list(pending_episodes):
                 try:
-                    episode = self.client.graph.episode.get(uuid_=ep_uuid)
-                    is_processed = getattr(episode, "processed", False)
+                    is_processed = self.store.is_episode_processed(ep_uuid)
 
                     if is_processed:
                         pending_episodes.remove(ep_uuid)
@@ -347,8 +132,8 @@ class GraphBuilderService:
 
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """Get graph information"""
-        nodes = fetch_all_nodes(self.client, graph_id)
-        edges = fetch_all_edges(self.client, graph_id)
+        nodes = self.store.list_nodes(graph_id)
+        edges = self.store.list_edges(graph_id)
 
         # Collect entity types
         entity_types = set()
@@ -366,8 +151,8 @@ class GraphBuilderService:
         """
         Get full graph data including nodes, edges, timestamps, and attributes.
         """
-        nodes = fetch_all_nodes(self.client, graph_id)
-        edges = fetch_all_edges(self.client, graph_id)
+        nodes = self.store.list_nodes(graph_id)
+        edges = self.store.list_edges(graph_id)
 
         node_map = {}
         for node in nodes:
@@ -436,4 +221,4 @@ class GraphBuilderService:
 
     def delete_graph(self, graph_id: str):
         """Delete a graph"""
-        self.client.graph.delete(graph_id=graph_id)
+        self.store.delete_graph(graph_id)

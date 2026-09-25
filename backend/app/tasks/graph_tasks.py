@@ -1,7 +1,6 @@
 """Graph building Celery tasks."""
 
 from ..celery_app import celery_app
-from ..config import Config
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_builder import GraphBuilderService
@@ -35,7 +34,7 @@ def build_graph_task(
         if not ontology:
             raise ValueError("Ontology definition not found")
 
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        builder = GraphBuilderService()
 
         task_manager.update_task(task_id, message="Chunking text...", progress=5)
         chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)

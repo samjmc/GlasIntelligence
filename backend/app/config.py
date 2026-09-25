@@ -90,6 +90,10 @@ class Config:
     RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
     RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "noreply@glasinsight.com")
 
+    # Knowledge-graph backend: "zep" (default) or "fake" (in memory, tests only).
+    # See app/services/graph_store.
+    GRAPH_BACKEND = os.environ.get("GRAPH_BACKEND", "zep")
+
     # Zep config
     ZEP_API_KEY = os.environ.get("ZEP_API_KEY")
     ZEP_GRAPH_MEMORY_BATCH_SIZE = _safe_int(
