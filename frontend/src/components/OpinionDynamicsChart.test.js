@@ -47,6 +47,31 @@ describe('OpinionDynamicsChart', () => {
     ])
   })
 
+  it('shows the first 10 movers until "Show all" is clicked', async () => {
+    const mover = (i) => ({ agent: `Agent ${i}`, path: DYNAMICS.movers[0].path })
+    const many = { ...DYNAMICS, movers: Array.from({ length: 12 }, (_, i) => mover(i)) }
+    const w = mount(OpinionDynamicsChart, { props: { dynamics: many } })
+
+    expect(w.findAll('tbody tr')).toHaveLength(10)
+    const toggle = w.find('[data-test="movers-toggle"]')
+    expect(toggle.text()).toBe('Show all 12')
+    expect(w.find('h5').text()).toBe('Who moved 12')
+
+    await toggle.trigger('click')
+    expect(w.findAll('tbody tr')).toHaveLength(12)
+    expect(toggle.text()).toBe('Show fewer')
+
+    await toggle.trigger('click')
+    expect(w.findAll('tbody tr')).toHaveLength(10)
+  })
+
+  it('has no toggle when every mover fits', () => {
+    const ten = { ...DYNAMICS, movers: Array.from({ length: 10 }, (_, i) => ({ ...DYNAMICS.movers[0], agent: `A${i}` })) }
+    const w = mount(OpinionDynamicsChart, { props: { dynamics: ten } })
+    expect(w.findAll('tbody tr')).toHaveLength(10)
+    expect(w.find('[data-test="movers-toggle"]').exists()).toBe(false)
+  })
+
   it('says so when nobody moved', () => {
     const w = mount(OpinionDynamicsChart, { props: { dynamics: { ...DYNAMICS, movers: [] } } })
     expect(w.find('table').exists()).toBe(false)

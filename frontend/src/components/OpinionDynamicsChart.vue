@@ -29,14 +29,14 @@
     </div>
 
     <div class="od-movers">
-      <h5>Who moved</h5>
+      <h5>Who moved <span v-if="movers.length" class="od-meta">{{ movers.length }}</span></h5>
       <p v-if="!movers.length" class="od-none">No agent changed stance between windows.</p>
       <table v-else class="od-table">
         <thead>
           <tr><th>Agent</th><th>Stance per window</th></tr>
         </thead>
         <tbody>
-          <tr v-for="m in movers" :key="m.agent">
+          <tr v-for="m in visibleMovers" :key="m.agent">
             <td class="od-agent">{{ m.agent }}</td>
             <td class="od-path">
               <span v-for="(s, i) in m.path" :key="i" class="od-step">
@@ -47,12 +47,21 @@
           </tr>
         </tbody>
       </table>
+      <button
+        v-if="movers.length > MOVERS_SHOWN"
+        type="button"
+        class="od-more"
+        data-test="movers-toggle"
+        @click="showAllMovers = !showAllMovers"
+      >
+        {{ showAllMovers ? 'Show fewer' : `Show all ${movers.length}` }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   dynamics: { type: Object, default: null },
@@ -68,9 +77,13 @@ const PAD_L = 40
 const PAD_R = 16
 const PAD_T = 10
 const PAD_B = 32
+// A big run can move dozens of agents; keep the table short until asked.
+const MOVERS_SHOWN = 10
 
 const windows = computed(() => props.dynamics?.windows || [])
 const movers = computed(() => props.dynamics?.movers || [])
+const showAllMovers = ref(false)
+const visibleMovers = computed(() => (showAllMovers.value ? movers.value : movers.value.slice(0, MOVERS_SHOWN)))
 
 const x = (i) => {
   const n = windows.value.length
@@ -154,6 +167,20 @@ const linePoints = (p) => windows.value.map((w, i) => `${x(i)},${y(prob(w, p))}`
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 6px;
+}
+.od-movers h5 .od-meta {
+  margin-left: 4px;
+  font-weight: 400;
+}
+.od-more {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
 }
 .od-none {
   font-size: 12px;
