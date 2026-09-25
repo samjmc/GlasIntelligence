@@ -404,23 +404,7 @@ def test_system_prompt_matches_oasis_userinfo(finished_run, tmp_path, monkeypatc
     assert ours.strip() == theirs.split("# RESPONSE METHOD")[0].strip()
 
 
-# ---------- HTTP contract of the routes ----------
-
-
-@pytest.fixture
-def api(monkeypatch):
-    import zep_cloud
-
-    # A stale local lockfile ships a zep_cloud without AddNodeItem/EpisodeData, which breaks
-    # create_app() at import. Only fill the gap; with a current zep_cloud this does nothing.
-    for name in ("AddNodeItem", "EpisodeData"):
-        if not hasattr(zep_cloud, name):
-            monkeypatch.setattr(zep_cloud, name, type(name, (), {}), raising=False)
-    from app import create_app
-
-    from .conftest import TestConfig
-
-    return create_app(TestConfig).test_client()
+# ---------- HTTP contract of the routes (the ``api`` client is in conftest.py) ----------
 
 
 def test_route_batch_after_process_exit_is_answered_not_400(api, finished_run):

@@ -1,12 +1,12 @@
 """Graph building Celery tasks."""
 
 from ..celery_app import celery_app
-from ..models.task import TaskManager, TaskStatus
+from ..config import Config
 from ..models.project import ProjectManager, ProjectStatus
+from ..models.task import TaskManager, TaskStatus
 from ..services.graph_builder import GraphBuilderService
 from ..services.graph_snapshot_cache import write_snapshot
 from ..services.text_processor import TextProcessor
-from ..config import Config
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.tasks.graph")

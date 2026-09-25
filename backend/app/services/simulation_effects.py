@@ -11,6 +11,7 @@ Supported mutations (validated in spike test):
 - AgentGraph edge mutations   -> keeps in-memory graph in sync (platform-isolated)
 """
 
+import contextlib
 import json
 import os
 import threading
@@ -408,10 +409,8 @@ class EffectEngine:
 
                 agent_graph = self._agent_graphs.get(platform)
                 if agent_graph:
-                    try:
+                    with contextlib.suppress(Exception):
                         agent_graph.remove_edge(src, dst)
-                    except Exception:
-                        pass
 
                 self._follow_changes[platform] = self._follow_changes.get(platform, 0) + 1
 

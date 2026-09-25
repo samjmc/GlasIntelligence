@@ -65,7 +65,7 @@ That third one matters: **simulation artifacts are not in the database.** Any de
 
 **D. Wall-clock time.** Deep research is multi-round Tavily + LLM refinement. Graph build is a Celery task polled every 2s. Profile generation is per-agent LLM calls. The simulation is an OASIS subprocess running N rounds. Report generation is a tool-using agent streaming to `agent-log`. Realistically this is **tens of minutes**, not seconds. → *Resolved by the time-indexed replay clock (`elapsed = (now − start_ms) × DEMO_SPEEDUP`).*
 
-**E. Step 5 cannot be replayed naively.** `/api/simulation/interview` calls `SimulationRunner.check_env_alive(simulation_id)` and 400s if the OASIS environment process isn't still resident in wait-for-command mode. → *Resolved twice over: the static demo replays Step 5 from the tape like every other screen (the frontend no longer asks `env-status` in demo mode), and the live backend now answers interviews after the process has exited by rebuilding each agent from the recorded run (`backend/app/services/offline_interview.py`). The earlier canned `demo_interviews.py` was gated on a `Config.DEMO_MODE` that was never defined, so it never ran; it was removed.*
+**E. Step 5 cannot be replayed naively.** `/api/simulation/interview` calls `SimulationRunner.check_env_alive(simulation_id)` and 400s if the OASIS environment process isn't still resident in wait-for-command mode. → *Resolved for the live backend: it now answers interviews after the process has exited by rebuilding each agent from the recorded run (`backend/app/services/offline_interview.py`). **Still open in the static demo:** none of the committed tapes holds an `/interview`, `/interview/batch`, `/env-status` or `/report/chat` entry (checked 2026-09-25), so asking an agent a question in the demo returns `DEMO_NOT_RECORDED`. The frontend no longer asks `env-status` in demo mode. The backend `demo_interviews.py` (canned Q&A behind `Config.DEMO_MODE`) was removed: the static demo never reaches the backend, and nothing set `DEMO_MODE`.*
 
 **F. Two real bugs / rot in the flow:**
 - `MainView.vue` `handleNextStep` increments `currentStep` to 3, but the template only mounts `Step1GraphBuild` and `Step2EnvSetup` — `MAX_IMPLEMENTED_STEP = 2`. If Step 2 is ever reached *inside* `MainView` (rather than via `SimulationView`), advancing leaves a blank panel. → *Fixed: `handleNextStep` is capped at `MAX_IMPLEMENTED_STEP`; steps 3–5 are reached by routing, not by incrementing the local counter.*
@@ -157,7 +157,7 @@ Shipped by `a2a471a` (scenario picker, banner, watchdog, paid-UI suppression, 20
 Shipped by `e5c658c` (skip-forward controls for the replay clock, 2026-08-18) and `9849885`.
 
 - `DEMO_SPEEDUP` pacing + skip-forward controls; the replay clock is tunable per deployment.
-- **Step 5 replays from the tape.** `9849885` also added a backend `demo_interviews.py` with canned Q&A, but it was gated on a `Config.DEMO_MODE` that was never defined, so it never ran, and it was later removed (see §1.4 E).
+- **Step 5 interviews are not in the tapes** (see §1.4 E). `9849885` also added a backend `demo_interviews.py` with canned Q&A behind `Config.DEMO_MODE`; the static demo never reaches the backend and nothing set the flag, so it was later removed.
 - Items **F** and **G** from §1.4 were fixed while in here: `views/Process.vue` deleted, the `MainView` step-3 dead-end removed, and `docs/schema/supabase_schema.sql` regenerated from the migrations.
 
 ### Phase 5 — Ship it ✅

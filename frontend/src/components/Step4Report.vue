@@ -476,6 +476,9 @@
             </div>
           </div>
 
+          <!-- Opinion over time (Jev, optional: renders nothing when the payload has no key) -->
+          <OpinionDynamicsChart v-if="isComplete && opinionDynamics" :dynamics="opinionDynamics" />
+
           <!-- Monte Carlo Analysis (from MC engine) -->
           <div v-if="isComplete && mcComposite" class="mc-dashboard">
             <div class="mc-dashboard-header">
@@ -1106,6 +1109,7 @@ import {
   InterviewDisplay,
   QuickSearchDisplay,
 } from './step4/step4ReportToolDisplays.js'
+import OpinionDynamicsChart from './OpinionDynamicsChart.vue'
 
 import { getAgentLog, getConsoleLog, getReportPayload } from '../api/report'
 import { suggestFollowups, createReminder } from '../api/simulation'
@@ -1640,6 +1644,8 @@ const riskMatrixData = computed(() => quantData.value?.risks?.risk_matrix || nul
 const probabilityData = computed(() => quantData.value?.risks?.probability_assessment || null)
 const stakeholderData = computed(() => quantData.value?.stakeholder_matrix || null)
 const simulationMetrics = computed(() => quantData.value?.metrics?.simulation_metrics || null)
+
+const opinionDynamics = computed(() => reportPayload.value?.opinion_dynamics || null)
 
 const consistencyWarnings = computed(() => reportPayload.value?.consistency_warnings || [])
 const historicalComparison = computed(() => reportPayload.value?.historical_comparison || null)

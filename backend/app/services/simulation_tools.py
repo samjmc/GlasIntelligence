@@ -8,6 +8,7 @@ SocialAgent(tools=...) parameter. Handles:
 - Role-based tool assignment per agent
 """
 
+import contextlib
 import contextvars
 import inspect
 import json
@@ -18,12 +19,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from openai import OpenAI
-
 from ..config import Config
 from ..utils.jev_client import JevAnswer, JevClient
 from ..utils.jev_gate import gated
 from ..utils.jev_metrics import LEDGER
+from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.simulation_tools")
@@ -110,10 +110,8 @@ class ToolCallLogger:
                 for line in f:
                     line = line.strip()
                     if line:
-                        try:
+                        with contextlib.suppress(json.JSONDecodeError):
                             entries.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
                 self._readers[reader_id] = f.tell()
         return entries
 
@@ -330,14 +328,13 @@ def generate_scenario_tool_definitions(
     )
 
     try:
-        client = OpenAI(api_key=Config.LLM_API_KEY, base_url=Config.LLM_BASE_URL)
-        response = client.chat.completions.create(
-            model=Config.LLM_MODEL_NAME,
+        # LLMClient disables DeepSeek thinking; with it on, hidden reasoning used the
+        # whole 2,500-token budget and this returned no tools (measured 2026-09-24).
+        raw = LLMClient().chat(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=2500,
         )
-        raw = response.choices[0].message.content.strip()
 
         json_match = re.search(r"\[.*\]", raw, re.DOTALL)
         if not json_match:
@@ -575,14 +572,12 @@ def _assign_tool_roles_llm(
     )
 
     try:
-        client = OpenAI(api_key=Config.LLM_API_KEY, base_url=Config.LLM_BASE_URL)
-        response = client.chat.completions.create(
-            model=Config.LLM_MODEL_NAME,
+        # LLMClient disables DeepSeek thinking (see generate_scenario_tool_definitions).
+        raw = LLMClient().chat(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=1000,
         )
-        raw = response.choices[0].message.content.strip()
         LEDGER.record_llm_call(SITE_TOOL_ROLES, prompt_chars=len(prompt), completion_chars=len(raw))
 
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)

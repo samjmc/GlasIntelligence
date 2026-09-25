@@ -38,6 +38,7 @@ def _get_signing_key(token: str):
             last_err = e
             if attempt < 2:
                 import time
+
                 time.sleep(0.5 * (attempt + 1))
     raise last_err if last_err is not None else RuntimeError("JWKS signing key fetch failed")
 
@@ -62,11 +63,16 @@ def _decode_supabase_jwt(token: str) -> dict:
     return jwt.decode(token, signing_key.key, algorithms=[alg], audience="authenticated")
 
 
+def auth_enabled() -> bool:
+    """False when Supabase is not configured: every request then runs as ANONYMOUS_USER_ID."""
+    return bool(Config.SUPABASE_URL and Config.SUPABASE_JWT_SECRET)
+
+
 def extract_user_from_request():
     """Extract user_id from Authorization header. Sets g.user_id and g.user_email."""
     auth_header = request.headers.get("Authorization", "")
 
-    if not Config.SUPABASE_URL or not Config.SUPABASE_JWT_SECRET:
+    if not auth_enabled():
         g.user_id = ANONYMOUS_USER_ID
         g.user_email = ""
         return
@@ -92,7 +98,7 @@ def require_auth(f):
 
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        if not Config.SUPABASE_URL or not Config.SUPABASE_JWT_SECRET:
+        if not auth_enabled():
             g.user_id = ANONYMOUS_USER_ID
             g.user_email = ""
             return f(*args, **kwargs)

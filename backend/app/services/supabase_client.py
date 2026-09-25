@@ -2,9 +2,11 @@
 
 import json
 import uuid
+from datetime import UTC, datetime
 from functools import lru_cache
-from datetime import datetime, UTC
-from supabase import create_client, Client
+
+from supabase import Client, create_client
+
 from ..config import Config
 from ..utils.logger import get_logger
 
