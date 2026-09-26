@@ -1,13 +1,16 @@
 """
-Owner check for the simulation, graph and report APIs.
+Owner check for every API that names a simulation, project, report, graph or task.
 
 Ownership lives on disk: ``ProjectManager.create_project`` stamps the creating user's id
 into ``project.json``, and simulations, reports and graphs belong to their project's owner.
 (The Supabase ``projects`` / ``simulations`` tables are never written, so they cannot answer
-this.) A run whose project has no recorded owner is refused while auth is on.
+this.) A task belongs to the user ``TaskManager.create_task`` recorded, or else to the owner
+of the run, project or report in its metadata. Anything with no recorded owner is refused
+while auth is on.
 
-``require_owner`` runs before every route of the three blueprints and checks each id the
-request names (path, query string or JSON body, singly or as a ``<field>s`` list). List
+``require_owner`` runs before every route of the simulation, graph, report, session, bundle
+and source blueprints and checks each id the request names (path, query string or JSON
+body, singly or as a ``<field>s`` list). List
 routes filter their rows with ``caller_may_see``. Not-found and not-yours get the same 404,
 so the check does not reveal which ids exist. With auth off (no Supabase configured, one
 local user) nothing is checked, like ``require_auth``.
@@ -21,9 +24,13 @@ from flask import g, jsonify, request
 
 from ..middleware.auth import auth_enabled
 from ..models.project import ProjectManager
+from ..models.task import TaskManager
 from ..services.report_agent import ReportManager
 from ..services.simulation_manager import SimulationManager
 from . import graph_bp, report_bp, simulation_bp
+from .bundle import bundle_bp
+from .session import session_bp
+from .source_agent import source_agent_bp
 
 
 def _safe_id(value) -> bool:
@@ -57,6 +64,17 @@ def graph_owners(graph_id: str) -> set[str]:
     return {p.user_id for p in ProjectManager.list_projects(limit=None) if p.graph_id == graph_id and p.user_id}
 
 
+def task_owners(task_id: str) -> set[str]:
+    task = TaskManager().get_task(task_id)
+    metadata = (task.metadata or {}) if task else {}
+    if metadata.get("user_id"):
+        return {metadata["user_id"]}
+    for field in ("simulation_id", "project_id", "report_id"):  # tasks created outside a request
+        if _safe_id(metadata.get(field)):
+            return OWNED_FIELDS[field][1](metadata[field])
+    return set()
+
+
 def caller_may_see(owner: str | None) -> bool:
     """For list routes: keep a row only if it belongs to the caller (everything when auth is off)."""
     return not auth_enabled() or (owner is not None and owner == g.user_id)
@@ -68,6 +86,7 @@ OWNED_FIELDS: dict[str, tuple[str, Callable[[str], set]]] = {
     "project_id": ("Project", lambda i: {project_owner(i)}),
     "report_id": ("Report", lambda i: {report_owner(i)}),
     "graph_id": ("Graph", graph_owners),
+    "task_id": ("Task", task_owners),
 }
 
 
@@ -100,5 +119,5 @@ def require_owner():
     return None
 
 
-for _bp in (simulation_bp, graph_bp, report_bp):
+for _bp in (simulation_bp, graph_bp, report_bp, session_bp, bundle_bp, source_agent_bp):
     _bp.before_request(require_owner)

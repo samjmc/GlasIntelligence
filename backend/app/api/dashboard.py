@@ -4,11 +4,43 @@ from flask import Blueprint, g, jsonify
 
 from ..config import Config
 from ..middleware.auth import require_auth
+from ..models.project import ProjectManager
+from ..services.simulation_manager import SimulationManager
 from ..services.supabase_client import SupabaseDB
 from ..utils.logger import get_logger
+from .simulation_access import caller_may_see, simulation_owner
 
 dashboard_bp = Blueprint("dashboard", __name__)
 logger = get_logger("glas.api.dashboard")
+
+RECENT_LIMIT = 10
+
+
+def _recent_projects() -> list[dict]:
+    # From disk, like the owner check: the Supabase projects table is never written.
+    projects = [p for p in ProjectManager.list_projects(limit=None) if caller_may_see(p.user_id)]
+    return [
+        {"id": p.project_id, "name": p.name, "status": getattr(p.status, "value", p.status), "created_at": p.created_at}
+        for p in projects[:RECENT_LIMIT]
+    ]
+
+
+def _recent_simulations() -> list[dict]:
+    sims = [s for s in SimulationManager().list_simulations() if caller_may_see(simulation_owner(s.simulation_id))]
+    sims.sort(key=lambda s: s.created_at or "", reverse=True)
+    rows = []
+    for s in sims[:RECENT_LIMIT]:
+        project = ProjectManager.get_project(s.project_id) if s.project_id else None
+        rows.append(
+            {
+                "id": s.simulation_id,
+                "project_id": s.project_id,
+                "title": project.name if project else None,
+                "status": s.status.value,
+                "created_at": s.created_at,
+            }
+        )
+    return rows
 
 
 @dashboard_bp.route("/overview", methods=["GET"])
@@ -18,8 +50,8 @@ def dashboard_overview():
     user_id = g.user_id
 
     profile = SupabaseDB.get_profile(user_id) or {}
-    projects = SupabaseDB.list_projects(user_id, limit=10)
-    simulations = SupabaseDB.list_simulations(user_id, limit=10)
+    projects = _recent_projects()
+    simulations = _recent_simulations()
 
     credit_resp = (
         SupabaseDB.client()
