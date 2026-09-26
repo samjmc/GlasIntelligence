@@ -67,6 +67,40 @@ except ImportError as e:
     sys.exit(1)
 
 
+def _opening_actions(agent_graph, initial_posts):
+    """Group the opening posts by poster: ({agent: [ManualAction, ...]}, [(agent_id, content), ...]).
+
+    One agent can open with several posts (the pharmacy-first-caps tape gives all 8 to
+    agent 0), so each agent maps to a list. A plain {agent: action} kept only the last
+    one: twitter published 1 of 8 opening posts while logging all 8.
+    """
+    actions = {}
+    accepted = []
+    for post in initial_posts:
+        agent_id = post.get("poster_agent_id", 0)
+        content = post.get("content", "")
+        try:
+            agent = agent_graph.get_agent(agent_id)
+        except Exception:
+            continue
+        actions.setdefault(agent, []).append(
+            ManualAction(action_type=ActionType.CREATE_POST, action_args={"content": content})
+        )
+        accepted.append((agent_id, content))
+    return actions, accepted
+
+
+async def _publish_opening_posts(env, initial_actions, db_path, agent_names):
+    """Publish the opening posts and return the trace rowid they reached.
+
+    Round 1 reads the trace from this rowid. Starting it at 0 made round 1 read the
+    opening posts back and log them a second time, as round-1 actions.
+    """
+    await env.step(initial_actions)
+    _, last_rowid = fetch_new_actions_from_db(db_path, 0, agent_names)
+    return last_rowid
+
+
 # Global variables for signal handling
 _shutdown_event = None
 _cleanup_done = False
@@ -199,33 +233,22 @@ async def run_twitter_simulation(
     
     initial_action_count = 0
     if initial_posts:
-        initial_actions = {}
-        for post in initial_posts:
-            agent_id = post.get("poster_agent_id", 0)
-            content = post.get("content", "")
-            try:
-                agent = result.env.agent_graph.get_agent(agent_id)
-                initial_actions[agent] = ManualAction(
-                    action_type=ActionType.CREATE_POST,
+        initial_actions, accepted = _opening_actions(result.env.agent_graph, initial_posts)
+        if action_logger:
+            for agent_id, content in accepted:
+                action_logger.log_action(
+                    round_num=0,
+                    agent_id=agent_id,
+                    agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
+                    action_type="CREATE_POST",
                     action_args={"content": content}
                 )
-                
-                if action_logger:
-                    action_logger.log_action(
-                        round_num=0,
-                        agent_id=agent_id,
-                        agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                        action_type="CREATE_POST",
-                        action_args={"content": content}
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
-            except Exception:
-                pass
-        
+                total_actions += 1
+                initial_action_count += 1
+
         if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(f"Published {len(initial_actions)} initial posts")
+            last_rowid = await _publish_opening_posts(result.env, initial_actions, db_path, agent_names)
+            log_info(f"Published {len(accepted)} initial posts")
             if jev_feed is not None:
                 jev_feed.push_actions([
                     {
@@ -445,41 +468,22 @@ async def run_reddit_simulation(
     
     initial_action_count = 0
     if initial_posts:
-        initial_actions = {}
-        for post in initial_posts:
-            agent_id = post.get("poster_agent_id", 0)
-            content = post.get("content", "")
-            try:
-                agent = result.env.agent_graph.get_agent(agent_id)
-                if agent in initial_actions:
-                    if not isinstance(initial_actions[agent], list):
-                        initial_actions[agent] = [initial_actions[agent]]
-                    initial_actions[agent].append(ManualAction(
-                        action_type=ActionType.CREATE_POST,
-                        action_args={"content": content}
-                    ))
-                else:
-                    initial_actions[agent] = ManualAction(
-                        action_type=ActionType.CREATE_POST,
-                        action_args={"content": content}
-                    )
-                
-                if action_logger:
-                    action_logger.log_action(
-                        round_num=0,
-                        agent_id=agent_id,
-                        agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                        action_type="CREATE_POST",
-                        action_args={"content": content}
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
-            except Exception:
-                pass
-        
+        initial_actions, accepted = _opening_actions(result.env.agent_graph, initial_posts)
+        if action_logger:
+            for agent_id, content in accepted:
+                action_logger.log_action(
+                    round_num=0,
+                    agent_id=agent_id,
+                    agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
+                    action_type="CREATE_POST",
+                    action_args={"content": content}
+                )
+                total_actions += 1
+                initial_action_count += 1
+
         if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(f"Published {len(initial_actions)} initial posts")
+            last_rowid = await _publish_opening_posts(result.env, initial_actions, db_path, agent_names)
+            log_info(f"Published {len(accepted)} initial posts")
             if jev_feed is not None:
                 jev_feed.push_actions([
                     {
