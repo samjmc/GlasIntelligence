@@ -10,6 +10,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from flask import g, has_request_context
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -67,13 +69,18 @@ class TaskManager:
         task_id = str(uuid.uuid4())
         now = datetime.now()
 
+        metadata = dict(metadata or {})
+        # Owner for api/simulation_access.py: the signed-in user whose request created the task.
+        if has_request_context() and getattr(g, "user_id", None):
+            metadata.setdefault("user_id", g.user_id)
+
         task = Task(
             task_id=task_id,
             task_type=task_type,
             status=TaskStatus.PENDING,
             created_at=now,
             updated_at=now,
-            metadata=metadata or {},
+            metadata=metadata,
         )
 
         with self._task_lock:
