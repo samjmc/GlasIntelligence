@@ -1,8 +1,13 @@
 """Time-label and agent-scheduling helpers for the parallel simulation runner."""
 
 import contextlib
+import os
 import random
 from typing import Any, Dict, List  # noqa: UP035
+
+# Set by the Jev A/B harness (scripts/jev_live_ab.py) to seed agent activation.
+SEED_ENV = "OASIS_SEED"
+_PLATFORM_SEED_OFFSET = {"twitter": 0, "reddit": 1}
 
 # Jev activation gate (app.services.jev_simulation_gates). scripts/lib runs inside the
 # OASIS subprocess with backend/ on sys.path (db_utils puts it there); if the import
@@ -56,6 +61,16 @@ def compute_time_label(round_num: int, time_scale: Dict[str, Any]) -> Dict[str, 
             pass
 
     return {"label": relative, "relative": relative, "anchor": anchor}
+
+
+def platform_rng(platform: str) -> Any:
+    """Activation RNG for one platform: its own seeded stream when ``OASIS_SEED`` is set,
+    so one platform's draws cannot shift the other's; otherwise the shared module RNG,
+    exactly as before."""
+    seed = os.environ.get(SEED_ENV)
+    if not seed:
+        return random
+    return random.Random(int(seed) * 10 + _PLATFORM_SEED_OFFSET[platform])
 
 
 def get_phase_multiplier(round_num: int, phases: List[Dict[str, Any]]) -> float:
