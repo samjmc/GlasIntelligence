@@ -14,7 +14,7 @@ from agent_graphs import (
 from config_utils import get_agent_names_from_config
 from db_utils import fetch_new_actions_from_db, fetch_new_tool_calls
 from model_factory import create_model
-from time_utils import compute_time_label, get_active_agents_for_round
+from time_utils import compute_time_label, get_active_agents_for_round, platform_rng
 
 # Jev runtime gates (activation feed window + post validity monitor). Optional: if the
 # app package is not importable the round loop runs exactly as before.
@@ -241,6 +241,7 @@ async def run_platform_simulation(
         effect_engine.set_env(result.env, result.agent_graph, platform)
 
     jev_feed, jev_validity = _init_jev_gates(config, simulation_dir, log_info)
+    activation_rng = platform_rng(platform)
 
     if action_logger:
         action_logger.log_simulation_start(config)
@@ -321,6 +322,7 @@ async def run_platform_simulation(
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num,
             recent_feed=jev_feed.items() if jev_feed is not None else None,
+            rng=activation_rng,
         )
 
         if action_logger:
