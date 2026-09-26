@@ -496,15 +496,15 @@ class SimulationManager:
             "scripts_dir": scripts_dir,
             "config_file": config_path,
             "commands": {
-                "twitter": f"python {scripts_dir}/run_twitter_simulation.py --config {config_path}",
-                "reddit": f"python {scripts_dir}/run_reddit_simulation.py --config {config_path}",
+                "twitter": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path} --twitter-only",
+                "reddit": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path} --reddit-only",
                 "parallel": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
             },
             "instructions": (
                 f"1. Activate conda env: conda activate glas\n"
                 f"2. Run simulation (scripts in {scripts_dir}):\n"
-                f"   - Twitter only: python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
-                f"   - Reddit only: python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"
+                f"   - Twitter only: python {scripts_dir}/run_parallel_simulation.py --config {config_path} --twitter-only\n"
+                f"   - Reddit only: python {scripts_dir}/run_parallel_simulation.py --config {config_path} --reddit-only\n"
                 f"   - Both platforms in parallel: python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
             ),
         }
