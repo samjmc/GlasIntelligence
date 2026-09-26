@@ -137,6 +137,29 @@ Read with care: this is **one run per arm**, and agent LLM output is not determi
 
 A real bug surfaced on the first attempt and is fixed: V4.1-Flash reasons by default and rejects follow-up turns that do not echo `reasoning_content`, which CAMEL agents never do, so agent calls failed with HTTP 400 and those agents silently skipped their turn. `scripts/lib/model_factory.py` now disables thinking for DeepSeek endpoints (the app's own `llm_client.py` already did). The errors print to stderr, not `simulation.log`.
 
+### 5.1 Repeated A/B (2026-09-26): no measurable effect, 26% slower
+
+The single run above could not tell signal from noise. The harness now runs each arm **5 times** (alternating off/active, 8 rounds, same tape, `deepseek-flash`), each run in its own process, with **agent tools off in both arms** (removing confound 1) and the same activation seed per repeat. Arms are compared with an exact permutation test over the 5 + 5 runs. The opening posts are excluded from every metric: they are identical in both arms, and the runner logs them a second time as round 1 (a runner bug, tracked separately). Validity is scored in **both** arms after each run with the live monitor's own questions.
+
+| Per run (mean of 5) | Jev off | Jev active | p |
+|---|---|---|---|
+| Actions | 117 | 110 | 0.65 |
+| Posts and comments with text | 36.6 | 37.2 | 0.94 |
+| Quote share of posts | 32.5% | 33.2% | 0.82 |
+| Distinct speakers per round | 4.45 | 4.10 | 0.38 |
+| Voice evenness (Gini of actions, 0 = even) | 0.22 | 0.24 | 0.63 |
+| Posts on-persona (validity, 0–1) | 0.737 | 0.745 | 0.68 |
+| Posts judged off-persona (<0.3) | 0% | 0.5% | 1.0 |
+| Agent prompt tokens | 273k | 230k | 0.28 |
+| Agent cache-miss prompt tokens | 74.9k | 63.3k | 0.33 |
+| Wall time | 89 s | 112 s | **0.016** |
+| Jev cost | — | $0.0089 | |
+| DeepSeek errors | 0 | 0 | |
+
+Twitter and Reddit, read separately, show the same picture: no metric moves beyond run-to-run noise. The DeepSeek balance fell by **$0.15 for all 10 runs** (about $0.015 per run); the earlier price-list estimate was about 5× too high because it ignored DeepSeek's cache discount, and the harness no longer prints a dollar estimate for the agents.
+
+What this says: with 5 runs per arm, **active Jev does not change the conversation in any way this harness can detect**, and it costs about 23 seconds more per 8-round run (the live validity monitor and activation scoring sit on the round's critical path) plus under a cent of Jev. The +13–23% gains in the single run above were noise. It does not say activation weighting is useless: the effect could be smaller than 5 runs can resolve, or show up in things these metrics do not measure (who speaks, not how many). Recommendation: keep `JEV_MODE` off by default; keep the post-validity monitor as an optional health signal; take the monitor off the round's critical path before any wider use.
+
 ## 6. Reproduce
 
 ```powershell
@@ -145,6 +168,13 @@ $env:UV_PROJECT_ENVIRONMENT='C:\...\backend\.venv-win'; $env:JEV_MAX_WORKERS='4'
 uv run --frozen python scripts/jev_eval_tape.py `
   --tape ../frontend/public/demo/pharmacy-first-caps/tape.json `
   --tape ../frontend/public/demo/energy-price-cap/tape.json --out ../docs/jev-eval
+```
+
+Live A/B (section 5.1; needs `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL_NAME` too; about $0.15 of DeepSeek and $0.05 of Jev):
+
+```powershell
+uv run --frozen python scripts/jev_live_ab.py `
+  --tape ../frontend/public/demo/pharmacy-first-caps/tape.json --rounds 8 --repeats 5 --out <dir>
 ```
 
 Requires `JEV_MODE=active` (or `JEV_ENABLED=true`), `JEV_PROVIDER`, `JEV_API_KEY` and, for Cloudflare, `CLOUDFLARE_ACCOUNT_ID` in the environment. Hand labels for the actor filter live in `ACTOR_LABELS` at the top of the script; extend them when a new tape is added.
