@@ -90,9 +90,28 @@ class Config:
     RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
     RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "noreply@glasinsight.com")
 
-    # Knowledge-graph backend: "zep" (default) or "fake" (in memory, tests only).
-    # See app/services/graph_store.
+    # Knowledge-graph backend: "zep" (default), "graphiti" (self-hosted on Neo4j) or
+    # "fake" (in memory, tests only). See app/services/graph_store.
     GRAPH_BACKEND = os.environ.get("GRAPH_BACKEND", "zep")
+
+    # Graphiti backend. NEO4J_PASSWORD belongs in a user-level env var, never a file.
+    NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
+    NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD")
+    GRAPHITI_LLM_MODEL = os.environ.get("GRAPHITI_LLM_MODEL", "")  # empty: LLM_MODEL_NAME
+    GRAPHITI_EMBED_MODEL = os.environ.get("GRAPHITI_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+    GRAPHITI_EMBED_DIM = _safe_int(os.environ.get("GRAPHITI_EMBED_DIM", "384"), 384, env_key="GRAPHITI_EMBED_DIM")
+    # Parallel LLM calls inside one episode; Graphiti's default (20) draws DeepSeek 429s.
+    GRAPHITI_MAX_COROUTINES = _safe_int(
+        os.environ.get("GRAPHITI_MAX_COROUTINES", "5"), 5, env_key="GRAPHITI_MAX_COROUTINES"
+    )
+    GRAPHITI_CHUNK_SIZE = _safe_int(os.environ.get("GRAPHITI_CHUNK_SIZE", "2000"), 2000, env_key="GRAPHITI_CHUNK_SIZE")
+    GRAPHITI_CHUNK_OVERLAP = _safe_int(
+        os.environ.get("GRAPHITI_CHUNK_OVERLAP", "100"), 100, env_key="GRAPHITI_CHUNK_OVERLAP"
+    )
+    GRAPHITI_EPISODE_TIMEOUT_SEC = _safe_int(
+        os.environ.get("GRAPHITI_EPISODE_TIMEOUT_SEC", "300"), 300, env_key="GRAPHITI_EPISODE_TIMEOUT_SEC"
+    )
 
     # Zep config
     ZEP_API_KEY = os.environ.get("ZEP_API_KEY")
@@ -427,8 +446,11 @@ class Config:
         warnings = []
         if not cls.LLM_API_KEY:
             warnings.append("LLM_API_KEY not set — LLM features disabled")
-        if not cls.ZEP_API_KEY:
+        backend = (cls.GRAPH_BACKEND or "zep").strip().lower()
+        if backend == "zep" and not cls.ZEP_API_KEY:
             warnings.append("ZEP_API_KEY not set — graph/simulation features disabled")
+        if backend == "graphiti" and not cls.NEO4J_PASSWORD:
+            warnings.append("NEO4J_PASSWORD not set — GRAPH_BACKEND=graphiti cannot connect to Neo4j")
         return errors, warnings
 
 

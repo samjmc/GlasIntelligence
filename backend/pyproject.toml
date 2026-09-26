@@ -24,7 +24,12 @@ dependencies = [
     # OASIS social simulation
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",
-    
+
+    # Knowledge graph, self-hosted (GRAPH_BACKEND=graphiti): Graphiti on Neo4j, with a
+    # local embedder. sentence-transformers is pinned to 3.0.0 by camel-oasis already.
+    "graphiti-core==0.30.2",
+    "sentence-transformers>=3.0.0,<4",
+
     # File processing
     "PyMuPDF>=1.24.0",
     "charset-normalizer>=3.0.0",
@@ -71,6 +76,12 @@ dev = [
     "mypy>=1.15.0",
     "pip-audit>=2.7.0",
 ]
+
+[tool.uv]
+# camel-oasis 0.2.5 pins neo4j==5.23.0 exactly; graphiti-core needs >=5.26. OASIS only
+# imports neo4j for its optional backend="neo4j" agent graph, which we never enable.
+# Measured 2026-09-24 (G0.5): full suite and an 8-round OASIS smoke pass on 5.28.6.
+override-dependencies = ["neo4j>=5.26,<6"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

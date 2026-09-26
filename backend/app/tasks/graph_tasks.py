@@ -37,6 +37,8 @@ def build_graph_task(
         builder = GraphBuilderService()
 
         task_manager.update_task(task_id, message="Chunking text...", progress=5)
+        # Same store-preferred chunking as api/graph.py's build path.
+        chunk_size, chunk_overlap = builder.store.preferred_chunking() or (chunk_size, chunk_overlap)
         chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
         total_chunks = len(chunks)
 
