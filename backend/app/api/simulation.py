@@ -1838,7 +1838,37 @@ def get_simulation_comments(simulation_id: str):
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
 
 
-# ============== Interview Endpoints ==============
+# ============== Follow-Up Suggestions ==============
+
+FOLLOWUP_SYSTEM_PROMPT = """\
+You generate structured follow-up simulation scenarios for a business decision analysis tool.
+Given a completed simulation and its results, suggest 4 follow-up scenarios the user should test next.
+
+Each follow-up must vary a specific, concrete parameter. You MUST include:
+1. One cost or price variation (e.g. "+20% costs", "price cut to $X")
+2. One timing or horizon variation (e.g. "6-month horizon instead of 12", "delayed by 1 year")
+3. One external factor variation (e.g. regulatory change, competitor entry, macro shock)
+4. One scale or geography variation (e.g. "expand to EU market", "double capacity")
+
+Return ONLY valid JSON array:
+[
+  {
+    "title": "Short descriptive title",
+    "scenario": "Full scenario text for re-simulation",
+    "change_summary": "What differs from the original",
+    "variation_type": "cost",
+    "parameter": "the specific variable changed",
+    "magnitude": "+20%"
+  }
+]
+
+variation_type must be exactly one of these four strings: "cost", "timing", "external", "scale".
+
+Rules:
+- Be specific — include concrete numbers, percentages, timeframes, or named changes.
+- scenario must be a complete, standalone prompt suitable for re-simulation.
+- variation_type must be exactly one of: cost, timing, external, scale.
+"""
 
 
 @simulation_bp.route("/suggest-followups", methods=["POST"])
@@ -1893,10 +1923,7 @@ def suggest_followups():
         llm = LLMClient()
         raw = llm.chat(
             messages=[
-                # KNOWN BUG: FOLLOWUP_SYSTEM_PROMPT is defined nowhere (it arrived in
-                # 9849885 without a definition), so this endpoint always returns 500.
-                # Needs a real prompt, which is a product decision, not a lint fix.
-                {"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT},  # noqa: F821
+                {"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT},
                 {"role": "user", "content": user_msg},
             ],
             temperature=0.8,
