@@ -159,6 +159,72 @@ def test_task_list_route_is_gone(api, owned):
     assert api.get("/api/graph/tasks", headers=_as(OWNER)).status_code == 404
 
 
+# ---------- tasks, sessions, bundles, deep research, dashboard ----------
+
+
+def test_a_task_records_the_user_whose_request_created_it(api):
+    from flask import g
+
+    from app.models.task import TaskManager
+
+    with api.application.test_request_context():
+        g.user_id = OWNER
+        in_request = TaskManager().create_task("t")
+    outside = TaskManager().create_task("t", {"simulation_id": "sim_a"})
+    assert TaskManager().get_task(in_request).metadata == {"user_id": OWNER}
+    assert TaskManager().get_task(outside).metadata == {"simulation_id": "sim_a"}
+
+
+def test_task_owner_is_recorded_or_derived(access, owned):
+    from app.models.task import TaskManager
+
+    tm = TaskManager()
+    assert access.task_owners(tm.create_task("t", {"user_id": OWNER})) == {OWNER}
+    assert access.task_owners(tm.create_task("t", {"simulation_id": "sim_a", "project_id": "x"})) == {OWNER}
+    assert access.task_owners(tm.create_task("t", {})) == set()
+    assert access.task_owners("no-such-task") == set()
+
+
+@pytest.mark.parametrize("method,path_for,body_for,label", [
+    ("get", lambda t: f"/api/graph/task/{t}", lambda t: None, "Task"),
+    ("post", lambda t: "/api/simulation/prepare/status", lambda t: {"task_id": t}, "Task"),
+    ("post", lambda t: "/api/report/generate/status", lambda t: {"task_id": t}, "Task"),
+    ("get", lambda t: f"/api/source/deep-research/status/{t}", lambda t: None, "Task"),
+    ("get", lambda t: f"/api/source/deep-research/result/{t}", lambda t: None, "Task"),
+])
+def test_other_users_task_is_404(api, owned, method, path_for, body_for, label):
+    from app.models.task import TaskManager
+
+    task_id = TaskManager().create_task("t", {"user_id": OWNER})
+    body = body_for(task_id)
+    res = getattr(api, method)(path_for(task_id), headers=_as(OTHER), **({"json": body} if body else {}))
+    assert res.status_code == 404
+    assert res.get_json()["error"] == f"{label} not found: {task_id}"
+    assert api.get(f"/api/graph/task/{task_id}", headers=_as(OWNER)).status_code == 200
+
+
+def test_session_patch_cannot_point_at_another_users_run(api, owned):
+    res = api.patch("/api/session/some-session", json={"project_id": owned.project_id}, headers=_as(OTHER))
+    assert res.status_code == 404 and res.get_json()["error"].startswith("Project not found: ")
+    res = api.patch("/api/session/some-session", json={"simulation_id": "sim_a"}, headers=_as(OTHER))
+    assert res.status_code == 404 and res.get_json()["error"] == "Simulation not found: sim_a"
+
+
+def test_bundle_cannot_take_in_another_users_run(api, owned):
+    res = api.post("/api/bundle/b1/complete-scenario", json={"simulation_id": "sim_a"}, headers=_as(OTHER))
+    assert res.status_code == 404 and res.get_json()["error"] == "Simulation not found: sim_a"
+
+
+def test_dashboard_lists_the_callers_projects_and_runs(api, owned):
+    data = api.get("/api/dashboard/overview", headers=_as(OWNER)).get_json()["data"]
+    assert [s["id"] for s in data["recent_simulations"]] == ["sim_a"]
+    assert data["recent_simulations"][0]["title"] == "owned"
+    assert data["recent_simulations"][0]["status"] == "completed"
+    assert [p["id"] for p in data["recent_projects"]] == [owned.project_id]
+    other = api.get("/api/dashboard/overview", headers=_as(OTHER)).get_json()["data"]
+    assert [s["id"] for s in other["recent_simulations"]] == ["sim_b"]
+
+
 def test_auth_off_checks_and_filters_nothing(api, owned, monkeypatch):
     monkeypatch.setattr(auth.Config, "SUPABASE_JWT_SECRET", "")
     assert api.get("/api/simulation/sim_b").status_code == 200
