@@ -394,19 +394,19 @@ class SimulationRunner:
         else:
             cls._graph_memory_enabled[simulation_id] = False
 
-        # Determine which script to run (scripts located in backend/scripts/ directory)
+        # One runner script for every platform choice (backend/scripts/); a single platform is a flag
+        platform_flags = []
         if platform == "twitter":
-            script_name = "run_twitter_simulation.py"
+            platform_flags = ["--twitter-only"]
             state.twitter_running = True
         elif platform == "reddit":
-            script_name = "run_reddit_simulation.py"
+            platform_flags = ["--reddit-only"]
             state.reddit_running = True
         else:
-            script_name = "run_parallel_simulation.py"
             state.twitter_running = True
             state.reddit_running = True
 
-        script_path = os.path.join(cls.SCRIPTS_DIR, script_name)
+        script_path = os.path.join(cls.SCRIPTS_DIR, "run_parallel_simulation.py")
 
         if not os.path.exists(script_path):
             raise ValueError(f"Script does not exist: {script_path}")
@@ -428,6 +428,7 @@ class SimulationRunner:
                 script_path,
                 "--config",
                 config_path,  # Use full config file path
+                *platform_flags,
             ]
 
             # If max rounds specified, add to command-line arguments

@@ -117,7 +117,7 @@ import platform_runners
 
 from config_utils import get_agent_names_from_config, load_config
 from ipc import ParallelIPCHandler
-from platform_runners import PlatformSimulation, run_reddit_simulation, run_twitter_simulation
+from platform_runners import PlatformSimulation, run_platform_simulation
 
 
 async def main():
@@ -258,17 +258,17 @@ async def main():
     run_sequential = os.environ.get("OASIS_SEQUENTIAL_PLATFORMS", "1") == "1"
 
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
+        twitter_result = await run_platform_simulation("twitter", config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
+        reddit_result = await run_platform_simulation("reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
     elif run_sequential:
         log_manager.info("Running platforms sequentially to stay within API rate limits")
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
+        twitter_result = await run_platform_simulation("twitter", config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
+        reddit_result = await run_platform_simulation("reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
     else:
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
+            run_platform_simulation("twitter", config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
+            run_platform_simulation("reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
         )
         twitter_result, reddit_result = results
     
