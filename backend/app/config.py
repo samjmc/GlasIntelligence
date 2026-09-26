@@ -401,13 +401,15 @@ class Config:
     # the pure-LLM path while the rest stay on JEV_MODE.
     JEV_DISABLED_SITES = frozenset(s.strip() for s in os.environ.get("JEV_DISABLED_SITES", "").split(",") if s.strip())
     # Reference prices (USD per million tokens) used ONLY to estimate spend in the
-    # Jev metrics ledger.  LLM defaults are DeepSeek chat list prices; Jev is the
-    # published input price with free output.
+    # Jev metrics ledger.  LLM defaults are deepseek-flash cache-MISS peak prices
+    # (api-docs.deepseek.com, read 2026-09-26): an upper bound, because the ledger
+    # counts characters, not cache hits.  Off-peak is half; cache hits are $0.006.
+    # Jev is the published input price with free output.
     JEV_LLM_PRICE_IN_PER_MTOK = _safe_float(
-        os.environ.get("JEV_LLM_PRICE_IN_PER_MTOK", "0.27"), 0.27, env_key="JEV_LLM_PRICE_IN_PER_MTOK"
+        os.environ.get("JEV_LLM_PRICE_IN_PER_MTOK", "0.30"), 0.30, env_key="JEV_LLM_PRICE_IN_PER_MTOK"
     )
     JEV_LLM_PRICE_OUT_PER_MTOK = _safe_float(
-        os.environ.get("JEV_LLM_PRICE_OUT_PER_MTOK", "1.10"), 1.10, env_key="JEV_LLM_PRICE_OUT_PER_MTOK"
+        os.environ.get("JEV_LLM_PRICE_OUT_PER_MTOK", "1.20"), 1.20, env_key="JEV_LLM_PRICE_OUT_PER_MTOK"
     )
     JEV_PRICE_IN_PER_MTOK = _safe_float(
         os.environ.get("JEV_PRICE_IN_PER_MTOK", "0.042"), 0.042, env_key="JEV_PRICE_IN_PER_MTOK"
