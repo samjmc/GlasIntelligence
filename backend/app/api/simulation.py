@@ -1380,7 +1380,14 @@ def start_simulation():
 
             logger.info(f"Graph memory update enabled: simulation_id={simulation_id}, graph_id={graph_id}")
 
-        if not SupabaseDB.deduct_credit(g.user_id, "Simulation run"):
+        # One session = one credit, and that credit covers the session's first run
+        # (migrations/004). Any other run costs one credit.
+        session_id = data.get("session_id")
+        session_row = SupabaseDB.get_session(session_id, user_id=g.user_id) if session_id else None
+        session_runs = session_row.get("simulation_count", 0) if session_row else 0
+        credit_covered = session_row is not None and session_runs == 0
+
+        if not credit_covered and not SupabaseDB.deduct_credit(g.user_id, "Simulation run"):
             profile = SupabaseDB.get_profile(g.user_id)
             return jsonify(
                 {
@@ -1403,6 +1410,12 @@ def start_simulation():
             user_plan=user_plan,
         )
 
+        # Counted only once the run has started, so a failed start does not use up the covered run.
+        if session_row is not None:
+            SupabaseDB.update_session(
+                session_id, simulation_id=simulation_id, status="simulating", simulation_count=session_runs + 1
+            )
+
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
 
@@ -1411,6 +1424,7 @@ def start_simulation():
             response_data["max_rounds_applied"] = max_rounds
         response_data["graph_memory_update_enabled"] = enable_graph_memory_update
         response_data["force_restarted"] = force_restarted
+        response_data["credit_covered_by_session"] = credit_covered
         if enable_graph_memory_update:
             response_data["graph_id"] = graph_id
 
@@ -1520,11 +1534,32 @@ def get_run_status(simulation_id: str):
                 }
             )
 
+        if run_state.runner_status.value in ("completed", "failed"):
+            _mark_session_finished(simulation_id, run_state.runner_status.value)
+
         return jsonify({"success": True, "data": run_state.to_dict()})
 
     except Exception as e:
         logger.error(f"Failed to get run status: {str(e)}")
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+def _mark_session_finished(simulation_id: str, runner_status: str) -> None:
+    """Move the session running this simulation from 'simulating' to 'completed' or 'sim_failed' (idempotent)."""
+    session_status = "completed" if runner_status == "completed" else "sim_failed"
+    try:
+        resp = (
+            SupabaseDB.client()
+            .table("scenario_sessions")
+            .update({"status": session_status})
+            .eq("simulation_id", simulation_id)
+            .eq("status", "simulating")
+            .execute()
+        )
+        if resp.data:
+            logger.info(f"Session marked {session_status} for simulation {simulation_id}")
+    except Exception:
+        logger.warning(f"Failed to mark session {session_status} for simulation {simulation_id}", exc_info=True)
 
 
 @simulation_bp.route("/<simulation_id>/run-status/detail", methods=["GET"])
