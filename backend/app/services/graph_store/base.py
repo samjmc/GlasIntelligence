@@ -86,6 +86,10 @@ class TaskState:
 class GraphStore(Protocol):
     backend: str
 
+    def preferred_chunking(self) -> tuple[int, int] | None:
+        """(chunk_size, overlap) in characters this backend builds best with, or None for the caller's own."""
+        ...
+
     def create_graph(self, graph_id: str, name: str, description: str) -> None: ...
 
     def set_ontology(self, graph_id: str, ontology: dict[str, Any]) -> None: ...

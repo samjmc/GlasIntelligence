@@ -360,6 +360,7 @@ class ZepGraphMemoryUpdater:
 
                     # Add activity to the corresponding platform buffer
                     platform = activity.platform.lower()
+                    batch = None
                     with self._buffer_lock:
                         if platform not in self._platform_buffers:
                             self._platform_buffers[platform] = []
@@ -369,10 +370,12 @@ class ZepGraphMemoryUpdater:
                         if len(self._platform_buffers[platform]) >= self.BATCH_SIZE:
                             batch = self._platform_buffers[platform][: self.BATCH_SIZE]
                             self._platform_buffers[platform] = self._platform_buffers[platform][self.BATCH_SIZE :]
-                            # Send after releasing lock
-                            self._send_batch_activities(batch, platform)
-                            # Send interval to avoid sending too fast
-                            time.sleep(self.SEND_INTERVAL)
+                    if batch:
+                        # Send after releasing the lock: a Graphiti store ingests synchronously
+                        # (seconds per batch), and holding the lock would block add_activity.
+                        self._send_batch_activities(batch, platform)
+                        # Send interval to avoid sending too fast
+                        time.sleep(self.SEND_INTERVAL)
 
                 except Empty:
                     pass
@@ -435,14 +438,15 @@ class ZepGraphMemoryUpdater:
 
         # Then send remaining activities in each platform buffer (even if less than BATCH_SIZE)
         with self._buffer_lock:
-            for platform, buffer in self._platform_buffers.items():
-                if buffer:
-                    display_name = self._get_platform_display_name(platform)
-                    logger.info(f"Sending remaining {len(buffer)} activities for {display_name} platform")
-                    self._send_batch_activities(buffer, platform)
+            pending = [(p, b) for p, b in self._platform_buffers.items() if b]
             # Clear all buffers
             for platform in self._platform_buffers:
                 self._platform_buffers[platform] = []
+        # Send outside the lock (see _worker_loop).
+        for platform, buffer in pending:
+            display_name = self._get_platform_display_name(platform)
+            logger.info(f"Sending remaining {len(buffer)} activities for {display_name} platform")
+            self._send_batch_activities(buffer, platform)
 
     def get_stats(self) -> dict[str, Any]:
         """Get statistics"""

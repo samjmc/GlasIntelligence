@@ -444,7 +444,10 @@ def build_graph():
                 builder = GraphBuilderService()
 
                 task_manager.update_task(task_id, message="Chunking text...", progress=5)
-                chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+                # A store may build better with its own chunking (Graphiti: cost follows
+                # LLM calls per chunk, so larger chunks). Zep keeps the project's value.
+                size, overlap = builder.store.preferred_chunking() or (chunk_size, chunk_overlap)
+                chunks = TextProcessor.split_text(text, chunk_size=size, overlap=overlap)
                 total_chunks = len(chunks)
 
                 task_manager.update_task(task_id, message="Creating Zep graph...", progress=10)

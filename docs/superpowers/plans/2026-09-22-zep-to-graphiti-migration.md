@@ -1,6 +1,6 @@
 # Plan: move the knowledge graph from Zep Cloud to self-hosted Graphiti
 
-**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** (next: G2, the Graphiti adapter) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** · **G2 done 2026-09-26** (next: G3, one head-to-head build: needs Sam's OK for ~215 Zep credits) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
 
 ## Vet results (2026-09-22) — these override anything below that conflicts
 
@@ -260,6 +260,35 @@ Each phase ends green. The full backend suite's failure set must equal `main`'s 
 - **Sequencing:** `zep_tools.py` is shared with the offline-interviews PR. Rebase after it merges, and do not touch `interview_agents`.
 
 ### G2 — Graphiti adapter (0 credits)
+
+**Done 2026-09-26 (branch `feat/graph-store-g2`).** `GRAPH_BACKEND=graphiti` works end to end through the app's own services. What was built, and where it differs from the list below:
+- `graph_store/graphiti_store.py` (`GraphitiGraphStore`, one shared instance per process), `graphiti_clients.py`, `async_bridge.py`, `ontology.py`.
+  - The LLM client carries G0's schema check: validate, unwrap a schema-shaped reply, keep only the model's fields, retry 3 times, then fail loud. It also turns off DeepSeek thinking and counts tokens.
+  - The embedder is local sentence-transformers, run with `asyncio.to_thread`.
+  - The reranker raises if it is ever called.
+- **Reranker: RRF only.** `GRAPHITI_RERANKER` was not built. `zep_tools`' `cross_encoder` searches are served by RRF, because the local BGE reranker is a 2.2 GB download (decision 5's fallback). Add a reranker later if G3 shows that search quality needs it.
+- **Dependencies: one override, not two** (G0.5): `graphiti-core==0.30.2`, `sentence-transformers>=3.0,<4` (declared because we import it; OASIS pins it to 3.0.0), and `[tool.uv] override-dependencies = ["neo4j>=5.26,<6"]`.
+- **Ontology** is kept on a `GlasGraph {graph_id, ontology_json}` node and passed on every add, so enrichment and live memory still extract typed entities after a restart. The embedding model and dimension are on a `GlasStoreMeta` node. A different model on the same database fails at start-up.
+- **Ingestion:** `add_episodes` runs Graphiti's `add_episode` once per text (not `add_episode_bulk`, so facts can still be invalidated). Each episode gets one retry, then a loud `RuntimeError`. Token use and repaired replies are logged per call. `is_episode_processed` / `get_task_status` return done, so G1's caller loops end at once.
+- **Chunking:** `store.preferred_chunking()` is `None` for Zep (the project's 300/30, unchanged) and `(GRAPHITI_CHUNK_SIZE, GRAPHITI_CHUNK_OVERLAP)` = 2000/100 for Graphiti. `api/graph.py` and `tasks/graph_tasks.py` apply it.
+- **Timestamps** are converted to ISO strings, as Zep returns them, because callers put them straight into JSON.
+- **Memory updater:** it now sends outside `_buffer_lock` (the vet's High item). The same applies to the final flush.
+- **Tests:**
+  - `test_graphiti_store_unit.py`: 18 tests, no Neo4j and no LLM.
+  - `test_graph_store_contract.py`: runs against the fake store always, and against Graphiti only with `RUN_GRAPHITI_IT=1`. NEO4J_URI alone does not trigger it: it is set on dev machines.
+  - No marker or `addopts` change was needed.
+  - Live run: 9/9 passed against local Neo4j + DeepSeek.
+- **App-path smoke** (`GRAPH_BACKEND=graphiti`, 2.5k chars of the pharmacy dossier) passed on every path:
+  - build: 2 episodes, 5 nodes, 4 edges, 9 LLM calls
+  - enrichment `add_nodes`
+  - the entity reader's filter and context
+  - `zep_tools` search and listings
+  - profile grounding: 4 facts, 11 node summaries
+  - delete: 0 nodes left
+- **Start-up cost:** the first graph call in a process loads torch and the embedder, and builds the indices, which takes about a minute. Later calls reuse the shared instance.
+- **Still open (not G2):** snapshot-cache `graph_backend` and the project-record backend field (the vet's Medium items) go to G4, and the progress-band redesign goes to G4. A graph built on one backend cannot be read on the other.
+
+**Run it locally:** start Neo4j (`C:\Users\samuel.mcdonnell\tools\neo4j-start.ps1`). Set `GRAPH_BACKEND=graphiti` and `NEO4J_PASSWORD` as user env vars, with the LLM_* settings as today. To run the live tests: `RUN_GRAPHITI_IT=1 python -m pytest tests/test_graph_store_contract.py`.
 - Implement `GraphitiGraphStore`, `async_bridge.py` and `ontology.py`, following the mapping table.
 - Add dependencies (`graphiti-core[sentence-transformers]` pinned, `neo4j`) **after the CI session's lockfile PR merges**, using `uv add`. Then `uv lock`, commit, and check that `uv sync --frozen` works on a clean clone.
 - **Contract tests:** one test module runs the same scenarios against `FakeGraphStore` always, and against `GraphitiGraphStore` when `NEO4J_URI` is set (integration marker, skipped in CI). The scenarios: create → ontology → add_texts → list → search → get_node → get_node_edges → add_nodes → delete (and the group is empty afterwards).
