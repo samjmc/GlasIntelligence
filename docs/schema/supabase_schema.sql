@@ -1,5 +1,5 @@
 -- Glas Intelligence - Supabase Schema
--- Consolidated: base schema + migrations 002-009 (retention engine, atomic credits,
+-- Consolidated: base schema + migrations 002-010 (retention engine, atomic credits,
 -- scenario sessions, research credits, bundle synthesis). Run this in the Supabase
 -- SQL Editor to provision a fresh project. Source of truth: backend/migrations/.
 --
@@ -141,12 +141,13 @@ create table if not exists simulation_reminders (
 alter table simulation_reminders enable row level security;
 create policy "Users can manage own reminders" on simulation_reminders for all using (auth.uid() = user_id);
 
--- Scenario sessions (migrations 004 + 008 + 009: graph_id and project_id denormalized for resilience)
+-- Scenario sessions (migrations 004 + 008 + 009: graph_id and project_id denormalized for resilience;
+-- 010 adds the 'sim_failed' status)
 create table if not exists scenario_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   status text not null default 'active'
-    check (status in ('active', 'researching', 'research_complete', 'simulating', 'completed', 'abandoned')),
+    check (status in ('active', 'researching', 'research_complete', 'simulating', 'completed', 'abandoned', 'sim_failed')),
   prompt text not null,
   decision_context jsonb default '{}',
 
