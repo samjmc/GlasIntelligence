@@ -13,6 +13,7 @@ from typing import Any, Optional
 from zep_cloud import AddNodeItem, EntityEdgeSourceTarget, EpisodeData
 from zep_cloud.client import Zep
 
+from ...config import Config
 from ...utils.zep_paging import fetch_all_edges, fetch_all_nodes
 from .base import (
     AddNodesResult,
@@ -64,6 +65,9 @@ class ZepGraphStore:
     backend = "zep"
 
     def __init__(self, api_key: str | None):
+        if (Config.GRAPH_BACKEND or "").strip().lower() == "graphiti":
+            # Zep is metered. Nothing may build a Zep client when the app runs on Graphiti.
+            raise RuntimeError("ZepGraphStore was built while GRAPH_BACKEND=graphiti; that would spend Zep credits")
         if not api_key:
             raise ValueError("ZEP_API_KEY is not configured")
         self.client = Zep(api_key=api_key)

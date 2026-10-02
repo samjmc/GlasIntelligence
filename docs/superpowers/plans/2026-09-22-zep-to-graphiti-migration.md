@@ -1,6 +1,6 @@
 # Plan: move the knowledge graph from Zep Cloud to self-hosted Graphiti
 
-**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** · **G2 done 2026-09-26** (next: G3, one head-to-head build: needs Sam's OK for ~215 Zep credits) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** · **G2 done 2026-09-26** · **G3 skipped by Sam 2026-09-26** (Zep side would cost 287 credits) · **G4 done 2026-10-02** (next: G5, switch the default) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
 
 ## Vet results (2026-09-22) — these override anything below that conflicts
 
@@ -295,11 +295,42 @@ Each phase ends green. The full backend suite's failure set must equal `main`'s 
 - Config: `GRAPH_BACKEND`, `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` (a user-level env var, never a file), `GRAPHITI_SEMAPHORE_LIMIT`, `GRAPHITI_EMBED_MODEL`, `GRAPHITI_EMBED_DIM`, `GRAPHITI_RERANKER` (`bge` | `rrf`). Add them to `.env.example`.
 
 ### G3 — Head-to-head on one dossier (**one Zep build ≈100–135 credits: Sam's OK required**)
+
+**Skipped 2026-09-26 (Sam's decision).**
+- The exact cost of the Zep side was **287 credits**, not 135. That is 287 episodes at the app's 300/30 chunking, each ≤ 350 bytes, so 1 credit each. There was also no `ZEP_API_KEY` on the dev machine.
+- The Graphiti side was built and measured anyway on the full 58k-character pharmacy dossier, through the app's own builder:
+  - 34 episodes, 419 s, 607 LLM calls (208 repaired, 1 retried)
+  - 98 nodes, 248 edges, 87 typed
+  - Persona-grounding hit rate: **0.95** (19 of 20 top typed actors got a relevant fact from the profile generator's own query). That meets the ≥ 90% bar.
+- The script `2026-09-26-graphiti-g3-compare.py` can still run the Zep side and the comparison, if Sam ever wants the head-to-head.
 - Build the same dossier on both backends with the same ontology. Zep receives its 5 capped types.
 - Compare node and edge counts, stakeholder names found by both or by only one, actor share (Jev actor filter), the persona-grounding search hit rate (at least one relevant fact per agent), build time, and cost.
 - **Accept if:** the Graphiti actor count is within 20% of Zep's; Graphiti finds every stakeholder Zep finds among the top 10 by degree; the search hit rate is ≥ 90%; and the build costs ≤ $1.
 
 ### G4 — End-to-end on Graphiti (0 Zep credits)
+
+**Done 2026-10-02 (branch `feat/graph-store-g4`).** Driver: `2026-10-02-graphiti-g4-e2e.py`. It calls the real HTTP routes through Flask's test client in one process, with `GRAPH_BACKEND=graphiti` and no `ZEP_API_KEY`. Supabase is stubbed in that process only (see the billing finding below).
+
+| Step | Result | Time |
+|---|---|---|
+| `ontology/generate` (58k-char dossier) | project created, 10 entity types, 36 inventory entities | 22 s |
+| `graph/build` (+ enrichment) | 34 chunks → 90 nodes, 246 edges | 9 min |
+| `simulation/create` + `prepare` | **50 agents**, profiles grounded on the Graphiti graph | 10 min |
+| `simulation/start`, 8 rounds, **live graph memory ON** | memory updater: 4 batches / 20 activities to Graphiti, **0 failed**; graph edges 246 → 260 | 2 min |
+| `report/generate` | 18,661 chars; 16 tool log entries; **25 graph node names cited** (NHS England, CPE, NPA, Healthwatch England, Wes Streeting, Boots, Tesco …); 6 live agent interviews | 2.5 min |
+| **Zep client construction attempts** | **0** | — |
+
+- Total time: 24 min. The Graphiti store's own LLM use was 613 calls (2.07 M prompt tokens, 0.42 M of them cache hits; 70 k completion), about the G0 cost (~$0.15). The ontology, profile, simulation and report calls are extra, as they are on Zep.
+- **Code changes in G4:**
+  - **Zero-Zep guard:** `ZepGraphStore` refuses to start when `GRAPH_BACKEND=graphiti`.
+  - **Unknown graphs fail loud:** reading or writing a graph that this Neo4j never created (e.g. one built on Zep) raises `GraphNotFoundError`. Before, it returned empty lists, so a simulation prepared from it would have got 0 agents with no error.
+  - **Snapshot cache:** a snapshot records `graph_backend` and serves only that backend. A snapshot with no backend field counts as `zep` (every pre-existing snapshot came from Zep), so there is no format bump and no paid re-fetch.
+- **Finding, not graph-related: the simulated clock starts at 00:00.** The run's 8 rounds covered 00:00–07:00, and almost every generated agent is active only in work hours. So the round loop ran in 0.0 s with **zero agent actions**: only the 10 opening posts per platform. The report was still written, from the graph and the interviews, so the failure was silent. It is in `scripts/lib/platform_runners.py` (`simulated_hour = round * minutes_per_round // 60 % 24`), it is unrelated to the backend, and it is filed as a separate fix.
+- **Finding, billing:** with no Supabase configured, `/api/simulation/start` cannot take a credit. `SupabaseDB.deduct_credit` falls back to `get_profile`, which raises. So a self-hosted install without Supabase cannot start a simulation. This decision belongs to the product or billing work, not here.
+- **Driver artefact:** the "Simulation failed … exit code 1" line at the very end is the driver process exiting. On shutdown the app force-kills the OASIS process that is waiting for interview commands. It is not a run failure.
+- **Still open for G5:**
+  - The progress-band redesign: the bands work, but Graphiti's "wait" phase is instant.
+  - Static "Zep" copy in the UI (`Step1GraphBuild.vue`) and in the build route's task messages.
 - Run graph → prepare → simulate (8 rounds, `jev_live_ab.py`-style) → report with `GRAPH_BACKEND=graphiti`.
 - Assert zero Zep calls: `ZepGraphStore` raises if constructed while the backend is `graphiti`.
 - Read the report and compare it with a Zep-era report. Its grounding section must cite graph facts.

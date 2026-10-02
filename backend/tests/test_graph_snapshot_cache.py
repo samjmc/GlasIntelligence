@@ -44,6 +44,38 @@ def test_write_read_hit(cache_dir):
     assert r.data["nodes"][0]["name"] == "A"
 
 
+def test_snapshot_serves_only_the_backend_that_wrote_it(cache_dir, monkeypatch):
+    gid = "testgraph_backend"
+    payload = {"graph_id": gid, "nodes": [], "edges": [], "node_count": 0, "edge_count": 0}
+    monkeypatch.setattr(Config, "GRAPH_BACKEND", "zep")
+    assert gsc.write_snapshot(gid, payload) is True
+    assert gsc.try_read_snapshot(gid).outcome == gsc.CacheOutcome.HIT
+    monkeypatch.setattr(Config, "GRAPH_BACKEND", "graphiti")
+    assert gsc.try_read_snapshot(gid).outcome == gsc.CacheOutcome.MISS
+    assert gsc.try_read_snapshot(gid, for_stale_fallback=True).outcome == gsc.CacheOutcome.MISS
+
+
+def test_snapshot_without_backend_field_counts_as_zep(cache_dir, monkeypatch):
+    # Snapshots written before the field existed all came from Zep: keep serving them there.
+    gid = "testgraph_legacy"
+    payload = {"graph_id": gid, "nodes": [], "edges": [], "node_count": 0, "edge_count": 0}
+    monkeypatch.setattr(Config, "GRAPH_BACKEND", "zep")
+    gsc.write_snapshot(gid, payload)
+    path = os.path.join(cache_dir, "graph_cache", gid, "snapshot.json")
+    if not os.path.isfile(path):  # locate it whatever the layout
+        path = next(
+            os.path.join(r, f) for r, _d, fs in os.walk(cache_dir) for f in fs if f.endswith(".json") and gid in r
+        )
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    doc["_glas_cache_meta"].pop("graph_backend")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(doc, f)
+    assert gsc.try_read_snapshot(gid).outcome == gsc.CacheOutcome.HIT
+    monkeypatch.setattr(Config, "GRAPH_BACKEND", "graphiti")
+    assert gsc.try_read_snapshot(gid).outcome == gsc.CacheOutcome.MISS
+
+
 def test_bump_invalidates(cache_dir):
     gid = "testgraph_02"
     payload = {

@@ -23,6 +23,7 @@ from typing import Any
 
 from ..config import Config
 from ..utils.logger import get_logger
+from .graph_store import current_backend
 
 logger = get_logger("glas.graph_snapshot_cache")
 
@@ -189,6 +190,10 @@ def _validate_payload(doc: dict[str, Any], graph_id: str, snapshot_path: str) ->
         return None
     if doc.get("graph_id") != graph_id:
         return None
+    # A snapshot serves only the backend that wrote it. Snapshots written before the field
+    # existed all came from Zep, so a missing value means "zep" (no format bump, no refetch).
+    if meta.get("graph_backend", "zep") != current_backend():
+        return None
     nodes = doc.get("nodes")
     edges = doc.get("edges")
     if not isinstance(nodes, list) or not isinstance(edges, list):
@@ -354,6 +359,7 @@ def write_snapshot(graph_id: str, data: dict[str, Any]) -> bool:
             "format_version": SNAPSHOT_FORMAT_VERSION,
             "written_at_unix": time.time(),
             "mutation_generation": gen,
+            "graph_backend": current_backend(),
             "content_sha256": _sha256_of_payload(doc),
         }
         path = _snapshot_path(sid)
