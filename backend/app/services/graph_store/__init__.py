@@ -16,6 +16,7 @@ from .base import (
     AddNodesResult,
     GraphEdge,
     GraphNode,
+    GraphNotFoundError,
     GraphSearchResult,
     GraphStore,
     NewNode,
@@ -26,10 +27,12 @@ __all__ = [
     "AddNodesResult",
     "GraphEdge",
     "GraphNode",
+    "GraphNotFoundError",
     "GraphSearchResult",
     "GraphStore",
     "NewNode",
     "TaskState",
+    "current_backend",
     "get_graph_store",
     "graph_store_available",
     "graph_store_unavailable_reason",
@@ -43,6 +46,11 @@ def _backend() -> str:
     if backend not in _BACKENDS:
         raise ValueError(f"Unknown GRAPH_BACKEND {backend!r}; expected one of {', '.join(_BACKENDS)}")
     return backend
+
+
+def current_backend() -> str:
+    """The configured backend name, normalised ("zep", "graphiti" or "fake"). Unknown values raise."""
+    return _backend()
 
 
 def _missing_settings() -> list[str]:

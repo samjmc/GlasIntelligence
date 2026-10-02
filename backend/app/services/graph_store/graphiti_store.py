@@ -40,6 +40,7 @@ from .base import (  # noqa: E402
     AddNodesResult,
     GraphEdge,
     GraphNode,
+    GraphNotFoundError,
     GraphSearchResult,
     NewNode,
     Reranker,
@@ -158,6 +159,25 @@ class GraphitiGraphStore:
         # Cost scales with LLM calls per episode, not bytes: larger chunks are cheaper.
         return Config.GRAPHITI_CHUNK_SIZE, Config.GRAPHITI_CHUNK_OVERLAP
 
+    # ---- graph identity ----
+    def _require_graph(self, graph_id: str) -> None:
+        """Fail loud on a graph this database never created (e.g. one built on Zep).
+
+        Without this, reads of an unknown graph return empty lists, and a simulation
+        prepared from it silently gets zero agents.
+        """
+        with self._types_lock:
+            if graph_id in self._types:
+                return
+        records, _, _ = self._run(
+            self._driver.execute_query("MATCH (g:GlasGraph {graph_id: $gid}) RETURN count(g) AS c", gid=graph_id)
+        )
+        if not records or not records[0]["c"]:
+            raise GraphNotFoundError(
+                f"Graph {graph_id} is not in this Neo4j database. It may have been built with "
+                "GRAPH_BACKEND=zep; rebuild it with GRAPH_BACKEND=graphiti."
+            )
+
     # ---- ontology ----
     def _types_for(self, graph_id: str) -> tuple[Any, Any, Any]:
         with self._types_lock:
@@ -167,6 +187,8 @@ class GraphitiGraphStore:
         records, _, _ = self._run(
             self._driver.execute_query("MATCH (g:GlasGraph {graph_id: $gid}) RETURN g.ontology_json AS o", gid=graph_id)
         )
+        if not records:
+            self._require_graph(graph_id)  # raises GraphNotFoundError
         raw = records[0]["o"] if records and records[0]["o"] else None
         types = build_graphiti_types(json.loads(raw) if raw else None)
         with self._types_lock:
@@ -250,6 +272,8 @@ class GraphitiGraphStore:
         return True  # add_episodes returns only after extraction finished
 
     def add_nodes(self, graph_id: str, nodes: list[NewNode]) -> AddNodesResult:
+        self._require_graph(graph_id)
+
         async def _save_all() -> int:
             saved = 0
             for n in nodes:
@@ -276,10 +300,12 @@ class GraphitiGraphStore:
 
     # ---- GraphStore: reads ----
     def list_nodes(self, graph_id: str, max_items: int = 2000) -> list[GraphNode]:
+        self._require_graph(graph_id)
         nodes = self._run(EntityNode.get_by_group_ids(self._driver, [graph_id], limit=max_items))
         return [_node(n) for n in nodes]
 
     def list_edges(self, graph_id: str) -> list[GraphEdge]:
+        self._require_graph(graph_id)
         try:
             edges = self._run(EntityEdge.get_by_group_ids(self._driver, [graph_id]))
         except GroupsEdgesNotFoundError:
@@ -299,6 +325,7 @@ class GraphitiGraphStore:
         self, graph_id: str, query: str, limit: int, scope: SearchScope, reranker: Reranker
     ) -> GraphSearchResult:
         # "cross_encoder" is served by RRF too: the local BGE reranker is a 2.2 GB download.
+        self._require_graph(graph_id)
         recipe = NODE_HYBRID_SEARCH_RRF if scope == "nodes" else EDGE_HYBRID_SEARCH_RRF
         res = self._run(
             self.graphiti.search_(query, config=recipe.model_copy(update={"limit": limit}), group_ids=[graph_id])

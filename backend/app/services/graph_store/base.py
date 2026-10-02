@@ -15,6 +15,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
+
+class GraphNotFoundError(LookupError):
+    """The graph id is not in this backend (for example, it was built on another backend)."""
+
+
 SearchScope = Literal["edges", "nodes"]
 Reranker = Literal["rrf", "cross_encoder"]
 

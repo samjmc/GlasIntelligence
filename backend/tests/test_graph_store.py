@@ -278,6 +278,13 @@ def test_fake_store_round_trip():
     assert store.list_nodes("g") == [] and store.list_edges("g") == []
 
 
+def test_zep_store_refuses_to_start_on_graphiti(monkeypatch):
+    monkeypatch.setattr(app_config.Config, "GRAPH_BACKEND", "graphiti")
+    monkeypatch.setattr(zep_store, "Zep", MagicMock())
+    with pytest.raises(RuntimeError, match="would spend Zep credits"):
+        zep_store.ZepGraphStore("zep-key")
+
+
 def test_conftest_blocks_a_real_zep_client():
     from zep_cloud.client import Zep
 

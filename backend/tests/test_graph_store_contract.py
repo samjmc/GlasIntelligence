@@ -105,8 +105,28 @@ def test_delete_graph_empties_it(store, graph_id):
     store.add_nodes(graph_id, [NewNode(name="Temporary Org", label="Organization")])
     assert store.list_nodes(graph_id)
     store.delete_graph(graph_id)
+    # Graphiti refuses to read a graph that no longer exists, so recreate it first; the
+    # recreated graph must hold nothing from before. Teardown deletes it again.
+    store.create_graph(graph_id, "recreated", "")
     assert store.list_nodes(graph_id) == []
-    store.create_graph(graph_id, "recreated for teardown", "")  # teardown deletes it again
+    assert store.list_edges(graph_id) == []
+
+
+@pytest.mark.skipif(not RUN_IT, reason="needs the real Graphiti backend")
+def test_graphiti_unknown_graph_fails_loud(monkeypatch):
+    from app.services.graph_store import GraphNotFoundError
+
+    store = _graphiti_store(monkeypatch)
+    missing = f"never_built_{uuid.uuid4().hex[:8]}"
+    for call in (
+        lambda: store.list_nodes(missing),
+        lambda: store.list_edges(missing),
+        lambda: store.search(missing, "q", 5, "edges", "rrf"),
+        lambda: store.add_nodes(missing, [NewNode(name="X", label="Organization")]),
+        lambda: store.add_text(missing, "an agent posted something"),
+    ):
+        with pytest.raises(GraphNotFoundError, match="not in this Neo4j database"):
+            call()
 
 
 def test_episodes_are_processed_when_add_returns(store, graph_id):
@@ -141,4 +161,7 @@ def test_graphiti_extracts_typed_entities_and_facts(monkeypatch):
         assert len(store.list_nodes(gid)) >= len(nodes)
     finally:
         store.delete_graph(gid)
-    assert store.list_nodes(gid) == []
+    from app.services.graph_store import GraphNotFoundError
+
+    with pytest.raises(GraphNotFoundError):  # a deleted graph is gone, not silently empty
+        store.list_nodes(gid)
