@@ -18,8 +18,45 @@ except Exception:  # pragma: no cover - only when app/ is not importable
     _jev_activation_gate = None  # type: ignore[assignment]
 
 
-def compute_time_label(round_num: int, time_scale: Dict[str, Any]) -> Dict[str, str]:
+DEFAULT_START_HOUR = 9
+
+
+def resolve_start_hour(time_config: dict[str, Any]) -> int:
+    """Hour of day (0-23) that round 0 represents.
+
+    The clock used to start at 00:00, so a short or truncated run (FREE plan caps at 15
+    rounds, the A/B harness at 8) spent every round at night, when almost no agent is in
+    its active_hours, and produced zero agent actions. Order: an explicit ``start_hour``;
+    the time of day of an hour-unit ``time_scale.start_date``; the first work hour; the
+    first peak hour; 9. Phase-based configs (unit != "hour") do not filter by hour, so
+    they keep 0 and behave exactly as before.
+    """
+    time_scale = time_config.get("time_scale") or {}
+    if time_scale.get("unit", "hour") != "hour":
+        return 0
+    explicit = time_config.get("start_hour")
+    if isinstance(explicit, int) and not isinstance(explicit, bool) and 0 <= explicit <= 23:
+        return explicit
+    start_date = time_scale.get("start_date") or ""
+    if "T" in start_date:
+        try:
+            from datetime import datetime as _dt
+
+            return _dt.fromisoformat(start_date).hour
+        except ValueError:
+            pass
+    for key in ("work_hours", "peak_hours"):
+        hours = [h for h in time_config.get(key) or [] if isinstance(h, int) and 0 <= h <= 23]
+        if hours:
+            return min(hours)
+    return DEFAULT_START_HOUR
+
+
+def compute_time_label(round_num: int, time_scale: Dict[str, Any], start_hour: int = 0) -> Dict[str, str]:
     """Build a human-readable time label for the current round.
+
+    For the hour unit the anchor clock starts at ``start_hour`` on the start date, so it
+    matches the simulated hour the round loop schedules agents by.
 
     Returns a dict with 'label' (combined), 'relative', and 'anchor' keys.
     """
@@ -38,6 +75,8 @@ def compute_time_label(round_num: int, time_scale: Dict[str, Any]) -> Dict[str, 
     if start_date_str:
         try:
             base = _dt.fromisoformat(start_date_str)
+            if unit == "hour":
+                base = base.replace(hour=start_hour, minute=0, second=0, microsecond=0)
             delta_map = {
                 "hour": {"hours": elapsed},
                 "day": {"days": elapsed},

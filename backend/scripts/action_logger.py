@@ -106,8 +106,8 @@ class PlatformActionLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
     
-    def log_simulation_end(self, total_rounds: int, total_actions: int):
-        """Record simulation end."""
+    def log_simulation_end(self, total_rounds: int, total_actions: int, agent_actions: int | None = None):
+        """Record simulation end. agent_actions excludes the round-0 opening posts."""
         entry = {
             "timestamp": datetime.now().isoformat(),
             "event_type": "simulation_end",
@@ -115,6 +115,8 @@ class PlatformActionLogger:
             "total_rounds": total_rounds,
             "total_actions": total_actions,
         }
+        if agent_actions is not None:
+            entry["agent_actions"] = agent_actions
         
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
