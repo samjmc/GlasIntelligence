@@ -7,11 +7,11 @@ Multi-agent AI scenario simulation engine for predictive business intelligence. 
 - **Frontend**: Vue 3 + Vite (`frontend/`)
 - **Backend**: Python / Flask (`backend/`)
 - **Simulation**: OASIS (camel-ai) multi-agent framework
-- **Knowledge graph**: Zep Cloud
+- **Knowledge graph**: Graphiti on self-hosted Neo4j (default, `GRAPH_BACKEND=graphiti`); Zep Cloud optional (`GRAPH_BACKEND=zep`, metered). All graph access goes through `backend/app/services/graph_store/`: `zep_cloud` and `graphiti_core` are imported only there (and in `utils/zep_paging.py`, which only the Zep store uses). `tests/test_graph_store.py` enforces this. Setup: `docs/graphiti-setup.md`
 - **Auth & DB**: Supabase (PostgreSQL + Auth)
 - **Billing**: Stripe
 - **Task queue**: Celery + Redis
-- **Deploy**: Vite frontend on Cloudflare Pages; Docker for production API
+- **Deploy**: static demo on GitHub Pages; the backend is not deployed anywhere at present (Hetzner pipeline retired 2026-08-10)
 
 ## Local development
 
@@ -35,6 +35,8 @@ make lint              # ruff + mypy + eslint
 ```
 
 Pre-commit: `make setup-hooks` (ruff, mypy, eslint, gitleaks).
+
+Tests run on the in-memory graph store (`GRAPH_BACKEND=fake`, set in `backend/tests/conftest.py`), and conftest makes any real Zep client raise. So the suite never spends Zep credits or needs Neo4j. The live Graphiti contract tests are opt-in: `RUN_GRAPHITI_IT=1 python -m pytest tests/test_graph_store_contract.py` (needs Neo4j and `LLM_*`; a few cents of tokens).
 
 ## Project layout
 

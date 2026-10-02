@@ -90,9 +90,10 @@ class Config:
     RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
     RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "noreply@glasinsight.com")
 
-    # Knowledge-graph backend: "zep" (default), "graphiti" (self-hosted on Neo4j) or
-    # "fake" (in memory, tests only). See app/services/graph_store.
-    GRAPH_BACKEND = os.environ.get("GRAPH_BACKEND", "zep")
+    # Knowledge-graph backend: "graphiti" (default: self-hosted on Neo4j, no metered
+    # service), "zep" (Zep Cloud, metered) or "fake" (in memory, tests only).
+    # Setup: docs/graphiti-setup.md. See app/services/graph_store.
+    GRAPH_BACKEND = os.environ.get("GRAPH_BACKEND", "graphiti")
 
     # Graphiti backend. NEO4J_PASSWORD belongs in a user-level env var, never a file.
     NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
@@ -448,7 +449,7 @@ class Config:
         warnings = []
         if not cls.LLM_API_KEY:
             warnings.append("LLM_API_KEY not set — LLM features disabled")
-        backend = (cls.GRAPH_BACKEND or "zep").strip().lower()
+        backend = (cls.GRAPH_BACKEND or "graphiti").strip().lower()
         if backend == "zep" and not cls.ZEP_API_KEY:
             warnings.append("ZEP_API_KEY not set — graph/simulation features disabled")
         if backend == "graphiti" and not cls.NEO4J_PASSWORD:

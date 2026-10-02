@@ -122,7 +122,7 @@
         <div class="card-content">
           <p class="api-note">POST /api/graph/build</p>
           <p class="description">
-            Build knowledge graph from ontology via Zep, extracting entities and relations
+            Build knowledge graph from ontology, extracting entities and relations
           </p>
           
           <!-- Stats Cards -->

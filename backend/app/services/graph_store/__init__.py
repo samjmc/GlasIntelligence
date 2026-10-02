@@ -42,7 +42,7 @@ _BACKENDS = ("zep", "graphiti", "fake")
 
 
 def _backend() -> str:
-    backend = (Config.GRAPH_BACKEND or "zep").strip().lower()
+    backend = (Config.GRAPH_BACKEND or "graphiti").strip().lower()
     if backend not in _BACKENDS:
         raise ValueError(f"Unknown GRAPH_BACKEND {backend!r}; expected one of {', '.join(_BACKENDS)}")
     return backend
@@ -71,7 +71,10 @@ def graph_store_unavailable_reason() -> str:
     missing = _missing_settings()
     if missing == ["ZEP_API_KEY"]:
         return "ZEP_API_KEY not configured"  # the historical API error text
-    return f"{', '.join(missing)} not configured for GRAPH_BACKEND={_backend()}"
+    return (
+        f"{', '.join(missing)} not configured for GRAPH_BACKEND={_backend()} "
+        "(see docs/graphiti-setup.md, or set GRAPH_BACKEND=zep to use Zep Cloud)"
+    )
 
 
 def get_graph_store(api_key: str | None = None) -> GraphStore:

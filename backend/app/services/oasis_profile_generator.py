@@ -491,11 +491,13 @@ class OasisProfileGenerator:
             # Deduplicate: exclude already existing facts
             new_facts = [f for f in zep_results["facts"] if f not in existing_facts]
             if new_facts:
-                context_parts.append("### Facts Retrieved from Zep\n" + "\n".join(f"- {f}" for f in new_facts[:15]))
+                context_parts.append(
+                    "### Facts Retrieved from the Knowledge Graph\n" + "\n".join(f"- {f}" for f in new_facts[:15])
+                )
 
         if zep_results.get("node_summaries"):
             context_parts.append(
-                "### Related Nodes Retrieved from Zep\n"
+                "### Related Nodes Retrieved from the Knowledge Graph\n"
                 + "\n".join(f"- {s}" for s in zep_results["node_summaries"][:10])
             )
 

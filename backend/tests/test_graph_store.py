@@ -285,6 +285,25 @@ def test_zep_store_refuses_to_start_on_graphiti(monkeypatch):
         zep_store.ZepGraphStore("zep-key")
 
 
+def test_graph_sdks_are_imported_only_inside_graph_store():
+    # Every graph call must go through graph_store, so a backend switch reaches all of them.
+    import pathlib
+    import re
+
+    app_dir = pathlib.Path(gs.__file__).resolve().parents[2]  # backend/app
+    allowed = {app_dir / "services" / "graph_store", app_dir / "utils" / "zep_paging.py"}
+    pattern = re.compile(r"^\s*(from|import)\s+(zep_cloud|graphiti_core)\b", re.MULTILINE)
+    scanned, offenders = 0, []
+    for path in app_dir.rglob("*.py"):
+        scanned += 1
+        if any(path == a or a in path.parents for a in allowed):
+            continue
+        if pattern.search(path.read_text(encoding="utf-8")):
+            offenders.append(str(path.relative_to(app_dir)))
+    assert scanned > 50, f"scanned only {scanned} files; is app_dir right? {app_dir}"
+    assert offenders == []
+
+
 def test_conftest_blocks_a_real_zep_client():
     from zep_cloud.client import Zep
 
