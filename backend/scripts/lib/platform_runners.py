@@ -15,7 +15,7 @@ from agent_graphs import generate_reddit_agent_graph_with_tools
 from config_utils import get_agent_names_from_config
 from db_utils import fetch_new_actions_from_db, fetch_new_tool_calls
 from model_factory import create_model
-from time_utils import compute_time_label, get_active_agents_for_round, platform_rng
+from time_utils import compute_time_label, get_active_agents_for_round, platform_rng, resolve_start_hour
 
 # Jev runtime gates (activation feed window + post validity monitor). Optional: if the
 # app package is not importable the round loop runs exactly as before.
@@ -292,6 +292,9 @@ async def run_platform_simulation(
             log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
 
     minutes_per_round = time_config.get("minutes_per_round", 30)
+    start_hour = resolve_start_hour(time_config)
+    if ts_unit == "hour":
+        log_info(f"Simulated clock starts at {start_hour:02d}:00")
     start_time = datetime.now()
 
     for round_num in range(total_rounds):
@@ -301,10 +304,11 @@ async def run_platform_simulation(
             break
 
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
-        simulated_day = simulated_minutes // (60 * 24) + 1
+        clock_minutes = start_hour * 60 + simulated_minutes
+        simulated_hour = (clock_minutes // 60) % 24
+        simulated_day = clock_minutes // (60 * 24) + 1
 
-        time_label = compute_time_label(round_num, time_scale)
+        time_label = compute_time_label(round_num, time_scale, start_hour)
 
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num,
@@ -377,11 +381,21 @@ async def run_platform_simulation(
             else:
                 log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
 
+    agent_actions = total_actions - initial_action_count
     if action_logger:
-        action_logger.log_simulation_end(total_rounds, total_actions)
+        action_logger.log_simulation_end(total_rounds, total_actions, agent_actions=agent_actions)
 
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"Simulation loop complete! Elapsed: {elapsed:.1f}s, total actions: {total_actions}")
+    if total_rounds > 0 and agent_actions == 0:
+        message = (
+            f"[{spec.label}] Zero agent actions in {total_rounds} rounds: only the "
+            f"{initial_action_count} opening posts exist. Check the model/API key and the "
+            f"schedule (start_hour {start_hour:02d}:00 vs agents' active_hours)."
+        )
+        if main_logger:
+            main_logger.warning(message)
+        print(f"WARNING: {message}")
 
     return result

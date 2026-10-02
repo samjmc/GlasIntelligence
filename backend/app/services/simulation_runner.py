@@ -31,6 +31,11 @@ _cleanup_registered = False
 
 # Error message when a run completes with zero actions across all enabled platforms
 ZERO_ACTIONS_ERROR = "Simulation completed with zero actions across all platforms — check model/API key configuration."
+# Error message when the only actions are the round-0 opening posts: no agent acted in any round
+ZERO_AGENT_ACTIONS_ERROR = (
+    "Simulation completed with zero agent actions — only the opening posts were published. "
+    "Check model/API key configuration and the schedule (time_config start_hour vs agents' active_hours)."
+)
 
 # Platform detection
 IS_WINDOWS = sys.platform == "win32"
@@ -128,6 +133,9 @@ class SimulationRunState:
     reddit_running: bool = False
     twitter_actions_count: int = 0
     reddit_actions_count: int = 0
+    # Actions after round 0 (opening posts excluded), summed from simulation_end events;
+    # None until a runner that reports it has finished a platform
+    agent_actions_count: int | None = None
 
     # Platform completion status (detected via simulation_end events in actions.jsonl)
     twitter_completed: bool = False
@@ -188,6 +196,7 @@ class SimulationRunState:
             "twitter_actions_count": self.twitter_actions_count,
             "reddit_actions_count": self.reddit_actions_count,
             "total_actions_count": self.twitter_actions_count + self.reddit_actions_count,
+            "agent_actions_count": self.agent_actions_count,
             "started_at": self.started_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
@@ -273,6 +282,7 @@ class SimulationRunner:
                 reddit_completed=data.get("reddit_completed", False),
                 twitter_actions_count=data.get("twitter_actions_count", 0),
                 reddit_actions_count=data.get("reddit_actions_count", 0),
+                agent_actions_count=data.get("agent_actions_count"),
                 started_at=data.get("started_at"),
                 updated_at=data.get("updated_at", datetime.now().isoformat()),
                 completed_at=data.get("completed_at"),
@@ -516,7 +526,11 @@ class SimulationRunner:
             # Process ended
             exit_code = process.returncode
 
-            if exit_code == 0:
+            if exit_code == 0 and state.error in (ZERO_ACTIONS_ERROR, ZERO_AGENT_ACTIONS_ERROR):
+                # A clean exit does not undo the zero-action verdict from simulation_end.
+                state.runner_status = RunnerStatus.FAILED
+                logger.warning(f"Simulation process exited cleanly but stays failed: {state.error}")
+            elif exit_code == 0:
                 state.runner_status = RunnerStatus.COMPLETED
                 state.completed_at = datetime.now().isoformat()
                 logger.info(f"Simulation completed: {simulation_id}")
@@ -613,6 +627,10 @@ class SimulationRunner:
 
                                 # Detect simulation_end event, mark platform as completed
                                 if event_type == "simulation_end":
+                                    if isinstance(action_data.get("agent_actions"), int):
+                                        state.agent_actions_count = (state.agent_actions_count or 0) + action_data[
+                                            "agent_actions"
+                                        ]
                                     if platform == "twitter":
                                         state.twitter_completed = True
                                         state.twitter_running = False
@@ -637,6 +655,12 @@ class SimulationRunner:
                                             state.error = ZERO_ACTIONS_ERROR
                                             logger.warning(
                                                 f"Simulation completed with zero actions across all platforms: {state.simulation_id}"
+                                            )
+                                        elif state.agent_actions_count == 0:
+                                            state.runner_status = RunnerStatus.FAILED
+                                            state.error = ZERO_AGENT_ACTIONS_ERROR
+                                            logger.warning(
+                                                f"Simulation completed with zero agent actions (opening posts only): {state.simulation_id}"
                                             )
                                         else:
                                             state.runner_status = RunnerStatus.COMPLETED

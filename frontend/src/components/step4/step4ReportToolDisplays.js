@@ -1,5 +1,6 @@
 import { ref, computed, reactive, h } from 'vue'
 import { renderMarkdown } from './step4ReportMarkdown.js'
+import { NO_RESPONSE_TEXT } from './step4ReportParsers.js'
 
 // ========== Sub Components ==========
 
@@ -42,7 +43,7 @@ export const InsightDisplay = {
               h('span', { class: 'stat-value' }, props.result.stats.relationships || props.result.relations.length),
               h('span', { class: 'stat-label' }, 'Relations')
             ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, 'Â·'),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
             props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
@@ -100,7 +101,7 @@ export const InsightDisplay = {
           props.result.facts.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedFacts.value = !expandedFacts.value }
-          }, expandedFacts.value ? `Collapse â–²` : `Expand all ${props.result.facts.length} â–¼`)
+          }, expandedFacts.value ? `Collapse ▲` : `Expand all ${props.result.facts.length} ▼`)
         ]),
         
         // Entities Tab
@@ -121,7 +122,7 @@ export const InsightDisplay = {
           props.result.entities.length > 12 && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedEntities.value = !expandedEntities.value }
-          }, expandedEntities.value ? `Collapse â–²` : `Expand all ${props.result.entities.length} â–¼`)
+          }, expandedEntities.value ? `Collapse ▲` : `Expand all ${props.result.entities.length} ▼`)
         ]),
         
         // Relations Tab
@@ -146,7 +147,7 @@ export const InsightDisplay = {
           props.result.relations.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedRelations.value = !expandedRelations.value }
-          }, expandedRelations.value ? `Collapse â–²` : `Expand all ${props.result.relations.length} â–¼`)
+          }, expandedRelations.value ? `Collapse ▲` : `Expand all ${props.result.relations.length} ▼`)
         ]),
         
         // Sub-queries Tab
@@ -208,7 +209,7 @@ export const PanoramaDisplay = {
               h('span', { class: 'stat-value' }, props.result.stats.edges),
               h('span', { class: 'stat-label' }, 'Edges')
             ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, 'Â·'),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
             props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
@@ -256,7 +257,7 @@ export const PanoramaDisplay = {
           props.result.activeFacts.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedActive.value = !expandedActive.value }
-          }, expandedActive.value ? `Collapse â–²` : `Expand all ${props.result.activeFacts.length} â–¼`)
+          }, expandedActive.value ? `Collapse ▲` : `Expand all ${props.result.activeFacts.length} ▼`)
         ]),
         
         // Historical Facts Tab
@@ -288,7 +289,7 @@ export const PanoramaDisplay = {
           props.result.historicalFacts.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedHistorical.value = !expandedHistorical.value }
-          }, expandedHistorical.value ? `Collapse â–²` : `Expand all ${props.result.historicalFacts.length} â–¼`)
+          }, expandedHistorical.value ? `Collapse ▲` : `Expand all ${props.result.historicalFacts.length} ▼`)
         ]),
         
         // Entities Tab
@@ -308,7 +309,7 @@ export const PanoramaDisplay = {
           props.result.entities.length > 8 && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedEntities.value = !expandedEntities.value }
-          }, expandedEntities.value ? `Collapse â–²` : `Expand all ${props.result.entities.length} â–¼`)
+          }, expandedEntities.value ? `Collapse ▲` : `Expand all ${props.result.entities.length} ▼`)
         ])
       ])
     ])
@@ -331,8 +332,8 @@ export const InterviewDisplay = {
     // Clean quote text - remove leading list numbers to avoid double numbering
     const cleanQuoteText = (text) => {
       if (!text) return ''
-      // Remove leading patterns like "1. ", "2. ", "1ã€", "ï¼ˆ1ï¼‰", "(1)" etc.
-      return text.replace(/^\s*\d+[.ã€)ï¼‰]\s*/, '').trim()
+      // Remove leading patterns like "1. ", "2. ", "1、", "（1）", "(1)" etc.
+      return text.replace(/^\s*\d+[.、)）]\s*/, '').trim()
     }
     
     const activeIndex = ref(0)
@@ -372,7 +373,7 @@ export const InterviewDisplay = {
     const isPlaceholderText = (text) => {
       if (!text) return true
       const t = text.trim()
-      return t === 'ï¼ˆè¯¥å¹³å°æœªèŽ·å¾—å›žå¤ï¼‰' || t === '(è¯¥å¹³å°æœªèŽ·å¾—å›žå¤)' || t === '[æ— å›žå¤]'
+      return t === NO_RESPONSE_TEXT
     }
 
     // Try split answer by question number
@@ -381,14 +382,14 @@ export const InterviewDisplay = {
       if (isPlaceholderText(answerText)) return ['']
 
       // Support two formats:
-      // 1. "Question X:" (Chinese format, backend new format)
-      // 2. "1. " or "\n1. " (number+dot, old format compat)
+      // 1. "Question X:" (the interview prompt in zep_tools.py asks agents to start each answer so)
+      // 2. "1. " or "\n1. " (number+dot)
       let matches = []
       let match
 
       // Prefer "Question X:" format
-      const cnPattern = /(?:^|[\r\n]+)é—®é¢˜(\d+)[ï¼š:]\s*/g
-      while ((match = cnPattern.exec(answerText)) !== null) {
+      const questionPattern = /(?:^|[\r\n]+)Question\s*(\d+)\s*:\s*/g
+      while ((match = questionPattern.exec(answerText)) !== null) {
         matches.push({
           num: parseInt(match[1]),
           index: match.index,
@@ -408,10 +409,10 @@ export const InterviewDisplay = {
         }
       }
 
-      // å¦‚æžœæ²¡æœ‰æ‰¾åˆ°ç¼–å·æˆ–åªæ‰¾åˆ°ä¸€ä¸ªï¼Œè¿”å›žæ•´ä½“
+      // No numbering found, or only one: return the whole answer
       if (matches.length <= 1) {
         const cleaned = answerText
-          .replace(/^é—®é¢˜\d+[ï¼š:]\s*/, '')
+          .replace(/^Question\s*\d+\s*:\s*/, '')
           .replace(/^\d+\.\s+/, '')
           .trim()
         return [cleaned || answerText]
@@ -479,7 +480,7 @@ export const InterviewDisplay = {
               h('span', { class: 'stat-value' }, props.result.totalCount),
               h('span', { class: 'stat-label' }, 'Total')
             ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, 'Â·'),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
             props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
@@ -650,7 +651,7 @@ export const QuickSearchDisplay = {
               h('span', { class: 'stat-value' }, props.result.count || props.result.facts.length),
               h('span', { class: 'stat-label' }, 'Results')
             ]),
-            props.resultLength && h('span', { class: 'stat-divider' }, 'Â·'),
+            props.resultLength && h('span', { class: 'stat-divider' }, '·'),
             props.resultLength && h('span', { class: 'stat-size' }, formatSize(props.resultLength))
           ])
         ]),
@@ -701,7 +702,7 @@ export const QuickSearchDisplay = {
           props.result.facts.length > INITIAL_SHOW_COUNT && h('button', {
             class: 'expand-btn',
             onClick: () => { expandedFacts.value = !expandedFacts.value }
-          }, expandedFacts.value ? `Collapse â–²` : `Expand all ${props.result.facts.length} â–¼`)
+          }, expandedFacts.value ? `Collapse ▲` : `Expand all ${props.result.facts.length} ▼`)
         ]),
         
         // Edges Tab
