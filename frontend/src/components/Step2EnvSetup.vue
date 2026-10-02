@@ -978,7 +978,7 @@ const fetchConfigRealtime = async () => {
           addLog(`  ├─ Duration: ${data.summary.simulation_hours} hours`)
           addLog(`  ├─ Initial posts: ${data.summary.initial_posts_count}`)
           addLog(`  ├─ Hot topics: ${data.summary.hot_topics_count}`)
-          addLog(`  └─ Platforms: Twitter ${data.summary.has_twitter_config ? '✓' : '✗'}, Reddit ${data.summary.has_reddit_config ? '✓' : '✗'}`)
+          addLog(`  └─ Platforms: ${[data.summary.has_twitter_config && 'Twitter', data.summary.has_reddit_config && 'Reddit'].filter(Boolean).join(', ') || 'none'}`)
         }
         
         if (data.config.time_config) {

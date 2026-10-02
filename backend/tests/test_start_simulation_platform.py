@@ -1,19 +1,23 @@
-"""Every platform choice starts run_parallel_simulation.py; one platform is a flag.
+"""Twitter was dropped: every run is reddit only.
 
-The per-platform scripts (run_twitter_simulation.py / run_reddit_simulation.py) were an
-older copy of the round loop that wrote no actions.jsonl, so a single-platform run showed
-nothing downstream. They are gone; this pins the replacement argv.
+start_simulation starts run_parallel_simulation.py with no platform flag, the runner knows
+only reddit, and a new simulation is created with twitter off (so prepare writes no
+twitter_profiles.csv and the config has no twitter_config).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 
 import pytest
 
 from app.services import simulation_runner as sr
+from app.services.simulation_manager import SimulationManager
 from app.services.simulation_runner import SimulationRunner
+
+_SCRIPTS = os.path.join(os.path.dirname(__file__), "..", "scripts")
 
 
 class _FakeProc:
@@ -50,21 +54,29 @@ def launches(tmp_path, monkeypatch):
         registry.pop("sim_x", None)
 
 
-@pytest.mark.parametrize(
-    ("platform", "flags", "twitter", "reddit"),
-    [
-        ("twitter", ["--twitter-only"], True, False),
-        ("reddit", ["--reddit-only"], False, True),
-        ("parallel", [], True, True),
-    ],
-)
-def test_platform_choice_runs_the_parallel_script(launches, platform, flags, twitter, reddit):
-    state = SimulationRunner.start_simulation("sim_x", platform=platform, max_rounds=1)
+def test_start_runs_reddit_only(launches):
+    state = SimulationRunner.start_simulation("sim_x", max_rounds=1)
 
     assert len(launches) == 1
     cmd = launches[0]
     assert os.path.basename(cmd[1]) == "run_parallel_simulation.py"
     assert os.path.exists(cmd[1])
-    assert cmd[2] == "--config" and cmd[3].endswith("simulation_config.json")
-    assert [a for a in cmd if a.endswith("-only")] == flags
-    assert (state.twitter_running, state.reddit_running) == (twitter, reddit)
+    assert cmd[2:4] == ["--config", os.path.join(SimulationRunner.RUN_STATE_DIR, "sim_x", "simulation_config.json")]
+    assert not [a for a in cmd if "twitter" in a or a.endswith("-only")]
+    assert (state.twitter_running, state.reddit_running) == (False, True)
+
+
+def test_runner_knows_only_reddit():
+    for p in (_SCRIPTS, os.path.join(_SCRIPTS, "lib")):  # the paths run_parallel_simulation.py sets up
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import platform_runners
+
+    assert set(platform_runners.PLATFORMS) == {"reddit"}
+    assert not hasattr(platform_runners, "TWITTER_ACTIONS")
+
+
+def test_new_simulation_has_twitter_off(tmp_path, monkeypatch):
+    monkeypatch.setattr(SimulationManager, "SIMULATION_DATA_DIR", str(tmp_path))
+    state = SimulationManager().create_simulation(project_id="proj_x", graph_id="g_x")
+    assert (state.enable_twitter, state.enable_reddit) == (False, True)

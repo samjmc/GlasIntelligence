@@ -219,9 +219,7 @@ const handleEnterEnvSetup = async () => {
   try {
     const res = await createSimulation({
       project_id: props.projectData.project_id,
-      graph_id: props.projectData.graph_id,
-      enable_twitter: true,
-      enable_reddit: true
+      graph_id: props.projectData.graph_id
     })
     
     if (res.success && res.data?.simulation_id) {

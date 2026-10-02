@@ -95,7 +95,7 @@
                 </div>
                 <div class="step-info">
                   <div class="step-title">Run Simulation</div>
-                  <div class="step-desc">Dual-platform parallel simulation with dynamic temporal memory</div>
+                  <div class="step-desc">Community forum simulation with dynamic temporal memory</div>
                 </div>
               </div>
               <div class="workflow-item">
