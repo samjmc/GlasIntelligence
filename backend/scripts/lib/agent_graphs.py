@@ -19,53 +19,6 @@ except ImportError as e:
     print("Please install first: pip install oasis-ai camel-ai")
     sys.exit(1)
 
-async def generate_twitter_agent_graph_with_tools(
-    profile_path: str,
-    model,
-    available_actions,
-    tool_registry=None,
-):
-    """Build a Twitter agent graph with optional per-agent tools.
-
-    When tool_registry is None (or ToolRegistry not available), this
-    behaves identically to OASIS's generate_twitter_agent_graph.
-    """
-    import pandas as pd
-
-    agent_info = pd.read_csv(profile_path)
-    agent_graph = AgentGraph()
-
-    for agent_id in range(len(agent_info)):
-        profile = {"nodes": [], "edges": [], "other_info": {}}
-        profile["other_info"]["user_profile"] = agent_info["user_char"][agent_id]
-
-        user_info = UserInfo(
-            name=agent_info["username"][agent_id],
-            description=agent_info["description"][agent_id],
-            profile=profile,
-            recsys_type="twitter",
-        )
-
-        agent_kwargs = dict(
-            agent_id=agent_id,
-            user_info=user_info,
-            model=model,
-            agent_graph=agent_graph,
-            available_actions=available_actions,
-        )
-
-        if tool_registry is not None:
-            agent_tools = tool_registry.get_tools_for_agent(agent_id, platform="twitter")
-            if agent_tools:
-                agent_kwargs["tools"] = agent_tools
-                agent_kwargs["max_iteration"] = tool_registry.get_max_iterations(agent_id)
-
-        agent = SocialAgent(**agent_kwargs)
-        agent_graph.add_agent(agent)
-
-    return agent_graph
-
-
 async def generate_reddit_agent_graph_with_tools(
     profile_path: str,
     model,

@@ -104,11 +104,20 @@ class SimulationMetrics:
         }
 
     def to_text(self) -> str:
+        # Only platforms that ran: new runs are reddit only, and a "Twitter: 0" line would
+        # invite the report to comment on an absent platform.
+        platform_lines = [
+            f"  {name}: {count} ({self.platform_ratio.get(key, 0):.1f}%)"
+            for key, name, count in (
+                ("twitter", "Twitter", self.twitter_actions),
+                ("reddit", "Reddit", self.reddit_actions),
+            )
+            if count
+        ]
         lines = [
             "=== Simulation Activity Metrics ===",
             f"Total actions: {self.total_actions}",
-            f"  Twitter: {self.twitter_actions} ({self.platform_ratio.get('twitter', 0):.1f}%)",
-            f"  Reddit:  {self.reddit_actions} ({self.platform_ratio.get('reddit', 0):.1f}%)",
+            *platform_lines,
             f"Active agents: {self.total_agents}",
             f"Simulation rounds: {self.total_rounds}",
             f"Engagement rate: {self.engagement_rate:.1f}% (interactive actions / total)",
@@ -123,11 +132,14 @@ class SimulationMetrics:
         if self.most_active_agents:
             lines.append("")
             lines.append("Most Active Agents (top 5):")
+            two_platforms = self.twitter_actions and self.reddit_actions
             for agent in self.most_active_agents[:5]:
-                lines.append(
-                    f"  {agent['agent_name']}: {agent['total_actions']} actions "
-                    f"(Twitter: {agent.get('twitter_actions', 0)}, Reddit: {agent.get('reddit_actions', 0)})"
+                split = (
+                    f" (Twitter: {agent.get('twitter_actions', 0)}, Reddit: {agent.get('reddit_actions', 0)})"
+                    if two_platforms
+                    else ""
                 )
+                lines.append(f"  {agent['agent_name']}: {agent['total_actions']} actions{split}")
 
         if self.agent_type_activity:
             lines.append("")

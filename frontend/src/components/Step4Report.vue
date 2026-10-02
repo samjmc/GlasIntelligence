@@ -462,7 +462,8 @@
                     <span class="activity-stat-label">Engagement</span>
                   </div>
                 </div>
-                <div v-if="simulationMetrics.platform_ratio" class="platform-split">
+                <!-- Split only for runs from before twitter was dropped; a reddit-only run would read "Reddit 100%" -->
+                <div v-if="simulationMetrics.platform_ratio && simulationMetrics.platform_ratio.twitter && simulationMetrics.platform_ratio.reddit" class="platform-split">
                   <div class="platform-bar">
                     <div class="platform-segment platform-twitter" :style="{ width: (simulationMetrics.platform_ratio.twitter || 0) + '%' }"></div>
                     <div class="platform-segment platform-reddit" :style="{ width: (simulationMetrics.platform_ratio.reddit || 0) + '%' }"></div>

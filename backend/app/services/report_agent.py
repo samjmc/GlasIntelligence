@@ -489,16 +489,16 @@ A lightweight quick retrieval tool suited for simple, direct information queries
 - List of facts most relevant to the query"""
 
 TOOL_DESC_INTERVIEW_AGENTS = """\
-[Deep Interview - Real Agent Interviews (Dual Platform)]
+[Deep Interview - Real Agent Interviews]
 Calls the OASIS simulation environment's interview API to conduct real interviews with running simulation agents!
 This is not LLM simulation -- it calls the actual interview interface to get simulation agents' original responses.
-By default interviews are conducted on both Twitter and Reddit platforms simultaneously for more comprehensive viewpoints.
+Interviews run on every platform the simulation used (Reddit; older runs also Twitter).
 
 Workflow:
 1. Automatically reads persona files to understand all simulation agents
 2. Intelligently selects agents most relevant to the interview topic (e.g. pharmacists, officials, patients)
 3. Automatically generates interview questions
-4. Calls /api/simulation/interview/batch interface for dual-platform real interviews
+4. Calls /api/simulation/interview/batch interface for real interviews
 5. Integrates all interview results, providing multi-perspective analysis
 
 [Use Cases]
@@ -509,7 +509,7 @@ Workflow:
 
 [Returns]
 - Identity information of interviewed agents
-- Each agent's interview responses across Twitter and Reddit platforms
+- Each agent's interview responses, per platform that answered
 - Key quotes (can be directly cited)
 - Interview summary and viewpoint comparison
 
@@ -697,13 +697,13 @@ This section analyses the trajectory of public discourse around the policy. Thro
 
 **Initial Reaction Phase**
 
-Twitter served as the primary venue for initial reactions, carrying the core information-sharing function:
+Opening posts drew the first wave of reactions, carrying the core information-sharing function:
 
-> "Twitter contributed 68% of initial discourse volume..."
+> "Opening posts drew 68% of first-round discourse volume..."
 
 **Sentiment Amplification Phase**
 
-Reddit further amplified the event's impact:
+Comment threads further amplified the event's impact:
 
 - Strong visual impact through detailed threads
 - High emotional resonance in community discussions

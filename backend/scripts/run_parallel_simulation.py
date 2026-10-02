@@ -1,10 +1,12 @@
 """
-OASIS dual-platform parallel simulation preset script
-Runs Twitter and Reddit simulations concurrently, reading the same config file
+OASIS simulation script (reddit only)
+
+Twitter was dropped to halve the LLM cost of a run. The file name is kept because the
+backend, the A/B harness and the docs start the simulation by this name.
 
 Features:
-- Dual-platform (Twitter + Reddit) parallel simulation
-- Does not close environments immediately after simulation; enters command-wait mode
+- Reddit simulation from simulation_config.json
+- Does not close the environment immediately after simulation; enters command-wait mode
 - Supports receiving Interview commands via IPC
 - Supports single-agent and batch interviews
 - Supports remote environment shutdown commands
@@ -12,13 +14,9 @@ Features:
 Usage:
     python run_parallel_simulation.py --config simulation_config.json
     python run_parallel_simulation.py --config simulation_config.json --no-wait  # close immediately after completion
-    python run_parallel_simulation.py --config simulation_config.json --twitter-only
-    python run_parallel_simulation.py --config simulation_config.json --reddit-only
 
 Log structure:
     sim_xxx/
-    ├── twitter/
-    │   └── actions.jsonl    # Twitter platform action log
     ├── reddit/
     │   └── actions.jsonl    # Reddit platform action log
     ├── simulation.log       # main simulation process log
@@ -71,7 +69,6 @@ import multiprocessing
 import signal
 import warnings
 from datetime import datetime
-from typing import Optional
 
 
 # Add the lib directory to the path (shared bootstrap — see scripts/lib/paths.py)
@@ -121,22 +118,12 @@ from platform_runners import PlatformSimulation, run_platform_simulation
 
 
 async def main():
-    parser = argparse.ArgumentParser(description='OASIS dual-platform parallel simulation')
+    parser = argparse.ArgumentParser(description='OASIS simulation (reddit)')
     parser.add_argument(
-        '--config', 
-        type=str, 
+        '--config',
+        type=str,
         required=True,
         help='Path to the config file (simulation_config.json)'
-    )
-    parser.add_argument(
-        '--twitter-only',
-        action='store_true',
-        help='Run only the Twitter simulation'
-    )
-    parser.add_argument(
-        '--reddit-only',
-        action='store_true',
-        help='Run only the Reddit simulation'
     )
     parser.add_argument(
         '--max-rounds',
@@ -169,11 +156,10 @@ async def main():
     
     # Create the log manager
     log_manager = SimulationLogManager(simulation_dir)
-    twitter_logger = log_manager.get_twitter_logger()
     reddit_logger = log_manager.get_reddit_logger()
-    
+
     log_manager.info("=" * 60)
-    log_manager.info("OASIS dual-platform parallel simulation")
+    log_manager.info("OASIS simulation (reddit)")
     log_manager.info(f"Config file: {args.config}")
     log_manager.info(f"Simulation ID: {config.get('simulation_id', 'unknown')}")
     log_manager.info(f"Wait-for-command mode: {'enabled' if wait_for_commands else 'disabled'}")
@@ -210,7 +196,6 @@ async def main():
     
     log_manager.info("Log structure:")
     log_manager.info(f"  - Main log: simulation.log")
-    log_manager.info(f"  - Twitter actions: twitter/actions.jsonl")
     log_manager.info(f"  - Reddit actions: reddit/actions.jsonl")
     log_manager.info("=" * 60)
     
@@ -251,27 +236,11 @@ async def main():
     
     start_time = datetime.now()
     
-    # Store the simulation results for both platforms
-    twitter_result: Optional[PlatformSimulation] = None
-    reddit_result: Optional[PlatformSimulation] = None
-    
-    run_sequential = os.environ.get("OASIS_SEQUENTIAL_PLATFORMS", "1") == "1"
+    reddit_result: PlatformSimulation = await run_platform_simulation(
+        "reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds,
+        tool_registry=tool_reg, effect_engine=effect_eng,
+    )
 
-    if args.twitter_only:
-        twitter_result = await run_platform_simulation("twitter", config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
-    elif args.reddit_only:
-        reddit_result = await run_platform_simulation("reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
-    elif run_sequential:
-        log_manager.info("Running platforms sequentially to stay within API rate limits")
-        twitter_result = await run_platform_simulation("twitter", config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
-        reddit_result = await run_platform_simulation("reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng)
-    else:
-        results = await asyncio.gather(
-            run_platform_simulation("twitter", config, simulation_dir, twitter_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
-            run_platform_simulation("reddit", config, simulation_dir, reddit_logger, log_manager, args.max_rounds, tool_registry=tool_reg, effect_engine=effect_eng),
-        )
-        twitter_result, reddit_result = results
-    
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"Simulation loop complete! Total elapsed: {total_elapsed:.1f}s")
@@ -280,17 +249,17 @@ async def main():
     if wait_for_commands:
         log_manager.info("")
         log_manager.info("=" * 60)
-        log_manager.info("Entering command-wait mode - environments remain running")
+        log_manager.info("Entering command-wait mode - the environment remains running")
         log_manager.info("Supported commands: interview, batch_interview, close_env")
         log_manager.info("=" * 60)
         
         # Create the IPC handler
         ipc_handler = ParallelIPCHandler(
             simulation_dir=simulation_dir,
-            twitter_env=twitter_result.env if twitter_result else None,
-            twitter_agent_graph=twitter_result.agent_graph if twitter_result else None,
-            reddit_env=reddit_result.env if reddit_result else None,
-            reddit_agent_graph=reddit_result.agent_graph if reddit_result else None
+            twitter_env=None,
+            twitter_agent_graph=None,
+            reddit_env=reddit_result.env,
+            reddit_agent_graph=reddit_result.agent_graph,
         )
         ipc_handler.update_status("alive")
         
@@ -313,15 +282,11 @@ async def main():
         except Exception as e:
             print(f"\nCommand processing error: {e}")
         
-        log_manager.info("\nClosing environments...")
+        log_manager.info("\nClosing environment...")
         ipc_handler.update_status("stopped")
-    
-    # Close the environments
-    if twitter_result and twitter_result.env:
-        await twitter_result.env.close()
-        log_manager.info("[Twitter] Environment closed")
-    
-    if reddit_result and reddit_result.env:
+
+    # Close the environment
+    if reddit_result.env:
         await reddit_result.env.close()
         log_manager.info("[Reddit] Environment closed")
     
@@ -329,7 +294,6 @@ async def main():
     log_manager.info(f"All done!")
     log_manager.info(f"Log files:")
     log_manager.info(f"  - {os.path.join(simulation_dir, 'simulation.log')}")
-    log_manager.info(f"  - {os.path.join(simulation_dir, 'twitter', 'actions.jsonl')}")
     log_manager.info(f"  - {os.path.join(simulation_dir, 'reddit', 'actions.jsonl')}")
     log_manager.info("=" * 60)
 

@@ -44,13 +44,13 @@ def prepare_simulation_task(self, simulation_id: str, task_id: str, graph_id: st
 
 
 @celery_app.task(bind=True, name="glas.run_simulation", soft_time_limit=3600, time_limit=3900)
-def run_simulation_task(self, simulation_id: str, platform: str = "all", max_rounds: int = 40, user_plan: str = "pro"):
-    """Run the OASIS simulation."""
-    logger.info(f"Running simulation {simulation_id} on {platform} for {max_rounds} rounds (plan={user_plan})")
+def run_simulation_task(self, simulation_id: str, max_rounds: int = 40, user_plan: str = "pro"):
+    """Run the OASIS simulation (reddit only)."""
+    logger.info(f"Running simulation {simulation_id} for {max_rounds} rounds (plan={user_plan})")
 
     from ..services.simulation_runner import SimulationRunner
 
     runner = SimulationRunner()
 
-    result = runner.start_simulation(simulation_id, platform=platform, max_rounds=max_rounds, user_plan=user_plan)
+    result = runner.start_simulation(simulation_id, max_rounds=max_rounds, user_plan=user_plan)
     return result
