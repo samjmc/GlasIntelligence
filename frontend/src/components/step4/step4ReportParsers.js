@@ -1,3 +1,11 @@
+// Parsers for the report agent's tool results (the `details.result` text in the agent log).
+// Every marker below must match the backend's to_text() output in
+// backend/app/services/zep_tools.py: InsightForgeResult, PanoramaResult, InterviewResult /
+// AgentInterview and SearchResult. They used to be Chinese markers that had been
+// double-encoded (mojibake), so nothing matched and Step 4 showed no parsed details.
+
+export const NO_RESPONSE_TEXT = '(No response received from this platform)'
+
 export const parseInsightForge = (text) => {
   const result = {
     query: '',
@@ -8,33 +16,33 @@ export const parseInsightForge = (text) => {
     entities: [],
     relations: []
   }
-  
+
   try {
-    // æå–åˆ†æžé—®é¢˜
-    const queryMatch = text.match(/åˆ†æžé—®é¢˜:\s*(.+?)(?:\n|$)/)
+    // Extract analysis question
+    const queryMatch = text.match(/Analysis question:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
-    
+
     // Extract prediction scenario
-    const reqMatch = text.match(/é¢„æµ‹åœºæ™¯:\s*(.+?)(?:\n|$)/)
+    const reqMatch = text.match(/Prediction scenario:\s*(.+?)(?:\n|$)/)
     if (reqMatch) result.simulationRequirement = reqMatch[1].trim()
-    
-    // Extract statistics - match "related prediction facts: X" format
-    const factMatch = text.match(/ç›¸å…³é¢„æµ‹äº‹å®ž:\s*(\d+)/)
-    const entityMatch = text.match(/æ¶‰åŠå®žä½“:\s*(\d+)/)
-    const relMatch = text.match(/å…³ç³»é“¾:\s*(\d+)/)
+
+    // Extract statistics - "- Related prediction facts: X" format
+    const factMatch = text.match(/Related prediction facts:\s*(\d+)/)
+    const entityMatch = text.match(/Entities involved:\s*(\d+)/)
+    const relMatch = text.match(/Relationship chains:\s*(\d+)/)
     if (factMatch) result.stats.facts = parseInt(factMatch[1])
     if (entityMatch) result.stats.entities = parseInt(entityMatch[1])
     if (relMatch) result.stats.relationships = parseInt(relMatch[1])
-    
+
     // Extract sub-questions - full extract, no limit
-    const subQSection = text.match(/### åˆ†æžçš„å­é—®é¢˜\n([\s\S]*?)(?=\n###|$)/)
+    const subQSection = text.match(/### Analysed Sub-queries\n([\s\S]*?)(?=\n###|$)/)
     if (subQSection) {
       const lines = subQSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.subQueries = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
     }
-    
+
     // Extract key facts - full extract, no limit
-    const factsSection = text.match(/### ã€å…³é”®äº‹å®žã€‘[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
+    const factsSection = text.match(/### \[Key Facts\][^\n]*\n([\s\S]*?)(?=\n###|$)/)
     if (factsSection) {
       const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.facts = lines.map(l => {
@@ -42,17 +50,17 @@ export const parseInsightForge = (text) => {
         return match ? match[1].replace(/^"|"$/g, '').trim() : l.replace(/^\d+\.\s*/, '').trim()
       }).filter(Boolean)
     }
-    
+
     // Extract core entities - full extract, includes summary and related fact count
-    const entitySection = null  // disabled: original Chinese regex was mojibake'd
+    const entitySection = text.match(/### \[Core Entities\]\n([\s\S]*?)(?=\n###|$)/)
     if (entitySection) {
       const entityText = entitySection[1]
       // Split entity blocks by "- **"
       const entityBlocks = entityText.split(/\n(?=- \*\*)/).filter(b => b.trim().startsWith('- **'))
       result.entities = entityBlocks.map(block => {
         const nameMatch = block.match(/^-\s*\*\*(.+?)\*\*\s*\((.+?)\)/)
-        const summaryMatch = block.match(/æ‘˜è¦:\s*"?(.+?)"?(?:\n|$)/)
-        const relatedMatch = block.match(/ç›¸å…³äº‹å®ž:\s*(\d+)/)
+        const summaryMatch = block.match(/Summary:\s*"?(.+?)"?(?:\n|$)/)
+        const relatedMatch = block.match(/Related facts:\s*(\d+)/)
         return {
           name: nameMatch ? nameMatch[1].trim() : '',
           type: nameMatch ? nameMatch[2].trim() : '',
@@ -61,9 +69,9 @@ export const parseInsightForge = (text) => {
         }
       }).filter(e => e.name)
     }
-    
+
     // Extract relation chains - full extract, no limit
-    const relSection = text.match(/### ã€å…³ç³»é“¾ã€‘\n([\s\S]*?)(?=\n###|$)/)
+    const relSection = text.match(/### \[Relationship Chains\]\n([\s\S]*?)(?=\n###|$)/)
     if (relSection) {
       const lines = relSection[1].split('\n').filter(l => l.trim().startsWith('-'))
       result.relations = lines.map(l => {
@@ -77,7 +85,7 @@ export const parseInsightForge = (text) => {
   } catch (e) {
     console.warn('Parse insight_forge failed:', e)
   }
-  
+
   return result
 }
 
@@ -89,24 +97,24 @@ export const parsePanorama = (text) => {
     historicalFacts: [],
     entities: []
   }
-  
+
   try {
     // Extract query
-    const queryMatch = text.match(/æŸ¥è¯¢:\s*(.+?)(?:\n|$)/)
+    const queryMatch = text.match(/^Query:\s*(.+?)(?:\n|$)/m)
     if (queryMatch) result.query = queryMatch[1].trim()
-    
+
     // Extract statistics
-    const nodesMatch = text.match(/æ€»èŠ‚ç‚¹æ•°:\s*(\d+)/)
-    const edgesMatch = text.match(/æ€»è¾¹æ•°:\s*(\d+)/)
-    const activeMatch = text.match(/å½“å‰æœ‰æ•ˆäº‹å®ž:\s*(\d+)/)
-    const histMatch = text.match(/åŽ†å²\/è¿‡æœŸäº‹å®ž:\s*(\d+)/)
+    const nodesMatch = text.match(/Total nodes:\s*(\d+)/)
+    const edgesMatch = text.match(/Total edges:\s*(\d+)/)
+    const activeMatch = text.match(/Currently active facts:\s*(\d+)/)
+    const histMatch = text.match(/Historical \/ expired facts:\s*(\d+)/)
     if (nodesMatch) result.stats.nodes = parseInt(nodesMatch[1])
     if (edgesMatch) result.stats.edges = parseInt(edgesMatch[1])
     if (activeMatch) result.stats.activeFacts = parseInt(activeMatch[1])
     if (histMatch) result.stats.historicalFacts = parseInt(histMatch[1])
-    
+
     // Extract current valid facts - full extract, no limit
-    const activeSection = text.match(/### ã€å½“å‰æœ‰æ•ˆäº‹å®žã€‘[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
+    const activeSection = text.match(/### \[Currently Active Facts\][^\n]*\n([\s\S]*?)(?=\n###|$)/)
     if (activeSection) {
       const lines = activeSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.activeFacts = lines.map(l => {
@@ -115,9 +123,9 @@ export const parsePanorama = (text) => {
         return factText
       }).filter(Boolean)
     }
-    
+
     // Extract historical/expired facts - full extract, no limit
-    const histSection = text.match(/### ã€åŽ†å²\/è¿‡æœŸäº‹å®žã€‘[\s\S]*?\n([\s\S]*?)(?=\n###|$)/)
+    const histSection = text.match(/### \[Historical \/ Expired Facts\][^\n]*\n([\s\S]*?)(?=\n###|$)/)
     if (histSection) {
       const lines = histSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.historicalFacts = lines.map(l => {
@@ -125,9 +133,9 @@ export const parsePanorama = (text) => {
         return factText
       }).filter(Boolean)
     }
-    
+
     // Extract involved entities - full extract, no limit
-    const entitySection = text.match(/### ã€æ¶‰åŠå®žä½“ã€‘\n([\s\S]*?)(?=\n###|$)/)
+    const entitySection = text.match(/### \[Entities Involved\]\n([\s\S]*?)(?=\n###|$)/)
     if (entitySection) {
       const lines = entitySection[1].split('\n').filter(l => l.trim().startsWith('-'))
       result.entities = lines.map(l => {
@@ -139,7 +147,7 @@ export const parsePanorama = (text) => {
   } catch (e) {
     console.warn('Parse panorama failed:', e)
   }
-  
+
   return result
 }
 
@@ -153,95 +161,71 @@ export const parseInterview = (text) => {
     interviews: [],
     summary: ''
   }
-  
+
   try {
     // Extract interview topic
-    const topicMatch = text.match(/\*\*é‡‡è®¿ä¸»é¢˜:\*\*\s*(.+?)(?:\n|$)/)
+    const topicMatch = text.match(/\*\*Interview topic:\*\*\s*(.+?)(?:\n|$)/)
     if (topicMatch) result.topic = topicMatch[1].trim()
-    
-    // Extract interview count (e.g. "5 / 9 simulation agents")
-    const countMatch = text.match(/\*\*é‡‡è®¿äººæ•°:\*\*\s*(\d+)\s*\/\s*(\d+)/)
+
+    // Extract interview count (e.g. "**Interviewees:** 5 / 9 simulated agents")
+    const countMatch = text.match(/\*\*Interviewees:\*\*\s*(\d+)\s*\/\s*(\d+)/)
     if (countMatch) {
       result.successCount = parseInt(countMatch[1])
       result.totalCount = parseInt(countMatch[2])
       result.agentCount = `${countMatch[1]} / ${countMatch[2]}`
     }
-    
+
     // Extract interviewee selection reasons
-    const reasonMatch = text.match(/### é‡‡è®¿å¯¹è±¡é€‰æ‹©ç†ç”±\n([\s\S]*?)(?=\n---\n|\n### é‡‡è®¿å®žå½•)/)
+    const reasonMatch = text.match(/### Interviewee Selection Rationale\n([\s\S]*?)(?=\n---\n|\n### Interview Transcripts)/)
     if (reasonMatch) {
       result.selectionReason = reasonMatch[1].trim()
     }
-    
-    // Parse each person's selection reason
+
+    // Parse each person's selection reason. The rationale is free LLM prose, so this only
+    // finds per-person reasons when the model happens to list them in one of these forms.
     const parseIndividualReasons = (reasonText) => {
       const reasons = {}
       if (!reasonText) return reasons
-      
+
       const lines = reasonText.split(/\n+/)
       let currentName = null
       let currentReason = []
-      
+
       for (const line of lines) {
-        let headerMatch = null
-        let name = null
-        let reasonStart = null
-        
-        // Format 1: num. **name (index=X)**: reason
-        // e.g. 1. **alumni_345 (index=1)**: As alumni...
-        headerMatch = line.match(/^\d+\.\s*\*\*([^*ï¼ˆ(]+)(?:[ï¼ˆ(]index\s*=?\s*\d+[)ï¼‰])?\*\*[ï¼š:]\s*(.*)/)
+        // Format 1: "1. **name (index=X)**: reason"
+        // Format 2: "- **name (index X)**: reason"
+        const headerMatch =
+          line.match(/^\d+\.\s*\*\*([^*(]+)(?:\(index\s*=?\s*\d+\))?\*\*:\s*(.*)/) ||
+          line.match(/^-\s*\*\*([^*(]+)(?:\(index\s*=?\s*\d+\))?\*\*:\s*(.*)/)
+
         if (headerMatch) {
-          name = headerMatch[1].trim()
-          reasonStart = headerMatch[2]
-        }
-        
-        // Format 2: - select name (index X): reason
-        // e.g. - select parent_601 (index 0): As parent representative...
-        if (!headerMatch) {
-          headerMatch = line.match(/^-\s*é€‰æ‹©([^ï¼ˆ(]+)(?:[ï¼ˆ(]index\s*=?\s*\d+[)ï¼‰])?[ï¼š:]\s*(.*)/)
-          if (headerMatch) {
-            name = headerMatch[1].trim()
-            reasonStart = headerMatch[2]
-          }
-        }
-        
-        // Format 3: - **name (index X)**: reason
-        // e.g. - **parent_601 (index 0)**: As parent representative...
-        if (!headerMatch) {
-          headerMatch = line.match(/^-\s*\*\*([^*ï¼ˆ(]+)(?:[ï¼ˆ(]index\s*=?\s*\d+[)ï¼‰])?\*\*[ï¼š:]\s*(.*)/)
-          if (headerMatch) {
-            name = headerMatch[1].trim()
-            reasonStart = headerMatch[2]
-          }
-        }
-        
-        if (name) {
           // Save previous person's reason
           if (currentName && currentReason.length > 0) {
             reasons[currentName] = currentReason.join(' ').trim()
           }
-          // å¼€å§‹æ–°çš„äºº
-          currentName = name
-          currentReason = reasonStart ? [reasonStart.trim()] : []
-        } else if (currentName && line.trim() && !line.match(/^æœªé€‰|^ç»¼ä¸Š|^æœ€ç»ˆé€‰æ‹©/)) {
-          // Reason continuation (exclude final summary paragraphs)
+          // Start the next person
+          currentName = headerMatch[1].trim()
+          currentReason = headerMatch[2] ? [headerMatch[2].trim()] : []
+        } else if (currentName && line.trim()) {
+          // Reason continuation
           currentReason.push(line.trim())
         }
       }
-      
+
       // Save last person's reason
       if (currentName && currentReason.length > 0) {
         reasons[currentName] = currentReason.join(' ').trim()
       }
-      
+
       return reasons
     }
-    
+
     const individualReasons = parseIndividualReasons(result.selectionReason)
-    
-    // Extract each interview record
-    const interviewBlocks = text.split(/#### é‡‡è®¿ #\d+:/).slice(1)
-    
+
+    // Extract each interview record. Each block ends at its "---" separator; the last one
+    // would otherwise run on into the summary section.
+    const interviewBlocks = text.split(/#### Interview #\d+:/).slice(1).map(b => b.split(/\n---\n/)[0])
+
     interviewBlocks.forEach((block, index) => {
       const interview = {
         num: index + 1,
@@ -255,11 +239,11 @@ export const parseInterview = (text) => {
         redditAnswer: '',
         quotes: []
       }
-      
-      // Extract title (e.g. "student", "educator")
+
+      // Extract title (the agent name after "#### Interview #N:")
       const titleMatch = block.match(/^(.+?)\n/)
       if (titleMatch) interview.title = titleMatch[1].trim()
-      
+
       // Extract name and role
       const nameRoleMatch = block.match(/\*\*(.+?)\*\*\s*\((.+?)\)/)
       if (nameRoleMatch) {
@@ -268,13 +252,13 @@ export const parseInterview = (text) => {
         // Set this person's selection reason
         interview.selectionReason = individualReasons[interview.name] || ''
       }
-      
+
       // Extract bio
-      const bioMatch = block.match(/_ç®€ä»‹:\s*([\s\S]*?)_\n/)
+      const bioMatch = block.match(/_Bio:\s*([\s\S]*?)_\n/)
       if (bioMatch) {
-        interview.bio = bioMatch[1].trim().replace(/\.\.\.$/, '...')
+        interview.bio = bioMatch[1].trim()
       }
-      
+
       // Extract question list
       const qMatch = block.match(/\*\*Q:\*\*\s*([\s\S]*?)(?=\n\n\*\*A:\*\*|\*\*A:\*\*)/)
       if (qMatch) {
@@ -291,70 +275,69 @@ export const parseInterview = (text) => {
           }
         }
       }
-      
-      // Extract answer - split Twitter and Reddit
-      const answerMatch = block.match(/\*\*A:\*\*\s*([\s\S]*?)(?=\*\*å…³é”®å¼•è¨€|$)/)
+
+      // Extract answer - one section per platform that answered (new runs are reddit only)
+      const answerMatch = block.match(/\*\*A:\*\*\s*([\s\S]*?)(?=\n\*\*Key quotes:\*\*|$)/)
       if (answerMatch) {
         const answerText = answerMatch[1].trim()
-        
-        // Split Twitter and Reddit answers
-        const twitterMatch = answerText.match(/ã€Twitterå¹³å°å›žç­”ã€‘\n?([\s\S]*?)(?=ã€Redditå¹³å°å›žç­”ã€‘|$)/)
-        const redditMatch = answerText.match(/ã€Redditå¹³å°å›žç­”ã€‘\n?([\s\S]*?)$/)
-        
+
+        const twitterMatch = answerText.match(/\[Twitter Platform Response\]\n?([\s\S]*?)(?=\n*\[Reddit Platform Response\]|$)/)
+        const redditMatch = answerText.match(/\[Reddit Platform Response\]\n?([\s\S]*?)$/)
+
         if (twitterMatch) {
           interview.twitterAnswer = twitterMatch[1].trim()
         }
         if (redditMatch) {
           interview.redditAnswer = redditMatch[1].trim()
         }
-        
-        // Platform fallback (compat old format: single platform marker)
+
+        // Platform fallback (single platform marker)
         if (!twitterMatch && redditMatch) {
           // Reddit only: copy as default when non-placeholder
-          if (interview.redditAnswer && interview.redditAnswer !== 'ï¼ˆè¯¥å¹³å°æœªèŽ·å¾—å›žå¤ï¼‰') {
+          if (interview.redditAnswer && interview.redditAnswer !== NO_RESPONSE_TEXT) {
             interview.twitterAnswer = interview.redditAnswer
           }
         } else if (twitterMatch && !redditMatch) {
-          if (interview.twitterAnswer && interview.twitterAnswer !== 'ï¼ˆè¯¥å¹³å°æœªèŽ·å¾—å›žå¤ï¼‰') {
+          if (interview.twitterAnswer && interview.twitterAnswer !== NO_RESPONSE_TEXT) {
             interview.redditAnswer = interview.twitterAnswer
           }
         } else if (!twitterMatch && !redditMatch) {
-          // No platform marker (very old format), use whole as answer
+          // No platform marker, use whole as answer
           interview.twitterAnswer = answerText
         }
       }
-      
-      // Extract key quotes (compat multiple quote formats)
-      const quotesMatch = block.match(/\*\*å…³é”®å¼•è¨€:\*\*\n([\s\S]*?)(?=\n---|\n####|$)/)
+
+      // Extract key quotes
+      const quotesMatch = block.match(/\*\*Key quotes:\*\*\n([\s\S]*?)(?=\n---|\n####|$)/)
       if (quotesMatch) {
         const quotesText = quotesMatch[1]
         // Prefer > "text" format
         let quoteMatches = quotesText.match(/> "([^"]+)"/g)
-        // Fallback: match > "text" or > \u201Ctext\u201D (Chinese quotes)
+        // Fallback: > \u201Ctext\u201D (curly quotes)
         if (!quoteMatches) {
-          quoteMatches = quotesText.match(/> [\u201C""]([^\u201D""]+)[\u201D""]/g)
+          quoteMatches = quotesText.match(/> [\u201C"]([^\u201D"]+)[\u201D"]/g)
         }
         if (quoteMatches) {
           interview.quotes = quoteMatches
-            .map(q => q.replace(/^> [\u201C""]|[\u201D""]$/g, '').trim())
+            .map(q => q.replace(/^> [\u201C"]|[\u201D"]$/g, '').trim())
             .filter(q => q)
         }
       }
-      
+
       if (interview.name || interview.title) {
         result.interviews.push(interview)
       }
     })
-    
+
     // Extract interview summary
-    const summaryMatch = null  // disabled: original Chinese regex was mojibake'd
+    const summaryMatch = text.match(/### Interview Summary and Key Insights\n([\s\S]*)$/)
     if (summaryMatch) {
       result.summary = summaryMatch[1].trim()
     }
   } catch (e) {
     console.warn('Parse interview failed:', e)
   }
-  
+
   return result
 }
 
@@ -366,25 +349,25 @@ export const parseQuickSearch = (text) => {
     edges: [],
     nodes: []
   }
-  
+
   try {
     // Extract search query
-    const queryMatch = text.match(/æœç´¢æŸ¥è¯¢:\s*(.+?)(?:\n|$)/)
+    const queryMatch = text.match(/Search query:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
-    
-    // Extract result count
-    const countMatch = text.match(/æ‰¾åˆ°\s*(\d+)\s*æ¡/)
+
+    // Extract result count ("Found N relevant items")
+    const countMatch = text.match(/Found\s*(\d+)\s*relevant/)
     if (countMatch) result.count = parseInt(countMatch[1])
-    
+
     // Extract related facts - full extract, no limit
-    const factsSection = text.match(/### ç›¸å…³äº‹å®ž:\n([\s\S]*)$/)
+    const factsSection = text.match(/### Related facts:\n([\s\S]*?)(?=\n###|$)/)
     if (factsSection) {
       const lines = factsSection[1].split('\n').filter(l => l.match(/^\d+\./))
       result.facts = lines.map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
     }
-    
+
     // Try extract edge info (if any)
-    const edgesSection = text.match(/### ç›¸å…³è¾¹:\n([\s\S]*?)(?=\n###|$)/)
+    const edgesSection = text.match(/### Related edges:\n([\s\S]*?)(?=\n###|$)/)
     if (edgesSection) {
       const lines = edgesSection[1].split('\n').filter(l => l.trim().startsWith('-'))
       result.edges = lines.map(l => {
@@ -395,9 +378,9 @@ export const parseQuickSearch = (text) => {
         return null
       }).filter(Boolean)
     }
-    
+
     // Try extract node info (if any)
-    const nodesSection = text.match(/### ç›¸å…³èŠ‚ç‚¹:\n([\s\S]*?)(?=\n###|$)/)
+    const nodesSection = text.match(/### Related nodes:\n([\s\S]*?)(?=\n###|$)/)
     if (nodesSection) {
       const lines = nodesSection[1].split('\n').filter(l => l.trim().startsWith('-'))
       result.nodes = lines.map(l => {
@@ -411,7 +394,6 @@ export const parseQuickSearch = (text) => {
   } catch (e) {
     console.warn('Parse quick_search failed:', e)
   }
-  
+
   return result
 }
-

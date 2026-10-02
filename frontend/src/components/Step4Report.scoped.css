@@ -3050,7 +3050,7 @@
 .causal-conf.conf-moderate { background: rgba(253,203,110,0.12); color: #fdcb6e; }
 .causal-conf.conf-low { background: rgba(225,112,85,0.12); color: #e17055; }
 
-/* â•â•â• Historical Comparison Dashboard â•â•â• */
+/* ═══ Historical Comparison Dashboard ═══ */
 .historical-dashboard {
   margin: 24px 0;
   padding: 0 0 24px 0;
@@ -3161,7 +3161,7 @@
 }
 .precedent-source-link:hover { text-decoration: underline; }
 
-/* â•â•â• Monte Carlo Dashboard â•â•â• */
+/* ═══ Monte Carlo Dashboard ═══ */
 .mc-dashboard {
   margin: 24px 0;
   padding: 0 0 24px 0;
@@ -3728,7 +3728,7 @@
   margin-top: 10px; font-size: 12px; color: #00c853; padding: 6px 0;
 }
 
-/* â•â•â• Simulation Analytics Dashboard â•â•â• */
+/* ═══ Simulation Analytics Dashboard ═══ */
 .quant-dashboard {
   margin: 24px 0;
   padding: 0 0 24px 0;
