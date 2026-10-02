@@ -1,5 +1,7 @@
 # Low-Zep footprint (client + graph memory)
 
+> **Applies to `GRAPH_BACKEND=zep` only.** Since 2026-10-02 the default backend is Graphiti on a self-hosted Neo4j ([graphiti-setup.md](./graphiti-setup.md)), which has no per-call credits. The polling and batching settings below still reduce load on either backend. The `VITE_ZEP_*` names are kept so existing builds keep working.
+
 This complements [graph-cache.md](./graph-cache.md) (server snapshot cache). It covers **browser polling**, **when `refresh=true` is sent**, **simulation graph memory**, and **backend batch tuning**.
 
 ## Frontend (`VITE_ZEP_*`)

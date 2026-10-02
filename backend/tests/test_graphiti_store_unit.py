@@ -195,9 +195,22 @@ def test_graphiti_backend_reports_missing_settings(monkeypatch):
     monkeypatch.setattr(app_config.Config, "NEO4J_PASSWORD", None)
     monkeypatch.setattr(app_config.Config, "LLM_API_KEY", "x")
     assert gs.graph_store_available() is False
-    assert gs.graph_store_unavailable_reason() == "NEO4J_PASSWORD not configured for GRAPH_BACKEND=graphiti"
+    reason = gs.graph_store_unavailable_reason()
+    assert reason.startswith("NEO4J_PASSWORD not configured for GRAPH_BACKEND=graphiti")
+    assert "docs/graphiti-setup.md" in reason and "GRAPH_BACKEND=zep" in reason
     with pytest.raises(ValueError, match="NEO4J_PASSWORD"):
         gs.get_graph_store()
+
+
+def test_graphiti_is_the_default_backend(monkeypatch):
+    # G5: self-hosted Graphiti is the default; Zep must be chosen explicitly.
+    import pathlib
+    import re
+
+    src = pathlib.Path(app_config.__file__).read_text(encoding="utf-8")
+    assert re.search(r'GRAPH_BACKEND = os\.environ\.get\("GRAPH_BACKEND", "graphiti"\)', src)
+    monkeypatch.setattr(app_config.Config, "GRAPH_BACKEND", "")
+    assert gs.current_backend() == "graphiti"
 
 
 def test_zep_and_fake_keep_the_callers_chunking():

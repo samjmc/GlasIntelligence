@@ -120,7 +120,7 @@ class GraphBuilderService:
             elapsed = int(time.time() - start_time)
             if progress_callback:
                 progress_callback(
-                    f"Zep processing... {completed_count}/{total_episodes} done, {len(pending_episodes)} pending ({elapsed}s)",
+                    f"Graph processing... {completed_count}/{total_episodes} done, {len(pending_episodes)} pending ({elapsed}s)",
                     completed_count / total_episodes if total_episodes > 0 else 0,
                 )
 

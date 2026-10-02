@@ -272,7 +272,7 @@ class SimulationManager:
 
             # ========== Phase 1: Read and filter entities ==========
             if progress_callback:
-                progress_callback("reading", 0, "Connecting to Zep graph...")
+                progress_callback("reading", 0, "Connecting to knowledge graph...")
 
             reader = ZepEntityReader()
 

@@ -11,18 +11,20 @@ Glas Intelligence uses large language models and multi-agent social simulation (
 - **Frontend**: Vue 3 + Vite
 - **Backend**: Python / Flask
 - **Simulation**: OASIS (camel-ai) multi-agent framework
-- **Knowledge Graph**: Zep Cloud (GraphRAG)
+- **Knowledge Graph**: Graphiti on a self-hosted Neo4j (default; see [docs/graphiti-setup.md](docs/graphiti-setup.md)); Zep Cloud optional (`GRAPH_BACKEND=zep`)
 - **Auth & DB**: Supabase (PostgreSQL + Auth)
 - **Billing**: Stripe
 - **Task Queue**: Celery + Redis
-- **Deployment**: Docker Compose + Nginx + GitHub Actions CI/CD
+- **Deployment**: the static demo deploys to GitHub Pages; the backend is not deployed anywhere at present (see [Deployment](#deployment))
 
 ## Local Development
+
+The knowledge graph needs a running **Neo4j 5.26** (with Java 21) and `NEO4J_PASSWORD` set as a user environment variable. Follow [docs/graphiti-setup.md](docs/graphiti-setup.md) once; it covers Windows without admin rights, and Docker.
 
 ```bash
 # Copy environment variables
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (keep NEO4J_PASSWORD in a user-level env var instead)
 
 # Install everything
 make setup
@@ -101,30 +103,23 @@ All checks must pass before a PR can be merged to `main`:
 | **build-and-e2e** | Docker build + Playwright E2E tests |
 | **docker-scan** | Trivy vulnerability scan on production Docker image |
 
-### Continuous Deployment (on merge to main)
+### Other workflows
 
-```
-merge to main
-  → build Docker image + push to GHCR
-  → run database migrations (Supabase CLI)
-  → deploy to staging (staging.glasinsight.com)
-  → smoke test staging
-  → deploy to production (glasinsight.com)
-  → health check with auto-rollback
-```
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `deploy-pages.yml` | push to `main` | Builds the static demo and deploys it to GitHub Pages |
+| `demo-e2e.yml` | PRs, push to `main` | End-to-end tests of the static demo |
+| `docker-image.yml` | tags, manual | Builds and pushes the Docker image |
 
-If the production health check fails within 60 seconds, the system automatically rolls back to the previous working image.
+## Deployment
 
-### Environments
+The backend is **not deployed anywhere** at present. The Hetzner server pipeline (staging and production, `deploy.yml`, `deploy.sh`, `docker-compose.prod.yml` / `.staging.yml`) was retired on 2026-08-10. Only the static demo is live, on GitHub Pages.
 
-| Environment | URL | Trigger |
-|-------------|-----|---------|
-| **Production** | https://glasinsight.com | Merge to `main` (after staging passes) |
-| **Staging** | https://staging.glasinsight.com | Merge to `main` (before production) |
+Hosting the backend again is an open decision. It now also needs a home for Neo4j (see the end of [docs/graphiti-setup.md](docs/graphiti-setup.md)).
 
 ## Monitoring & Observability
 
-The monitoring stack runs on the same server as separate Docker services:
+The monitoring configs are kept for a self-hosted server. None is running at present (see [Deployment](#deployment)). They run as separate Docker services:
 
 ```bash
 # Start the monitoring stack
@@ -153,44 +148,26 @@ make monitoring-down
 - **Warning**: CPU > 80%, Redis memory > 80%, error rate > 5%, latency p95 > 5s
 - **Info**: SSL cert expiring < 14 days
 
-## Production Deployment
-
-Automated via GitHub Actions on merge to `main`. Manual fallback:
-
-```bash
-# Build and deploy
-make deploy-prod
-
-# Or using the deploy script on the server
-./deploy.sh start
-```
-
 ## Environment Variables
 
-See `.env.example` for all required configuration. Key additions for CI/CD:
+See `.env.example` for all configuration. Notable ones:
 
 | Variable | Purpose |
 |----------|---------|
+| `GRAPH_BACKEND` | `graphiti` (default) or `zep`; see [docs/graphiti-setup.md](docs/graphiti-setup.md) |
+| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | The Neo4j database for the Graphiti backend (password as a user-level env var) |
 | `SENTRY_DSN` | Sentry error tracking |
 | `ENABLE_PROMETHEUS` | Enable `/api/metrics` endpoint |
 | `SENTRY_ENVIRONMENT` | Sentry environment tag |
 
-## GitHub Secrets Required
-
-| Secret | Purpose |
-|--------|---------|
-| `DEPLOY_SSH_KEY` | SSH private key for deploying to the server |
-| `VITE_SUPABASE_URL` | Supabase URL for frontend build |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon key for frontend build |
-| `SUPABASE_ACCESS_TOKEN` | Supabase CLI access token for migrations |
-| `SUPABASE_PROJECT_REF` | Supabase project reference for migrations |
-
 ## Project Structure
 
 ```
-├── .github/workflows/     # CI/CD pipeline
+├── .github/workflows/     # CI and the static-demo deploy
 │   ├── ci.yml             # PR checks (lint, test, security, E2E)
-│   └── deploy.yml         # Automated deployment
+│   ├── demo-e2e.yml       # Static demo end-to-end tests
+│   ├── deploy-pages.yml   # Static demo to GitHub Pages
+│   └── docker-image.yml   # Docker image build (tags / manual)
 ├── backend/               # Flask API
 │   ├── app/               # Application code
 │   ├── tests/             # Unit + integration tests
@@ -205,8 +182,6 @@ See `.env.example` for all required configuration. Key additions for CI/CD:
 │   ├── promtail-config.yml
 │   └── grafana/           # Dashboards + datasources
 ├── docker-compose.yml         # Local dev
-├── docker-compose.prod.yml    # Production
-├── docker-compose.staging.yml # Staging
 ├── docker-compose.monitoring.yml  # Observability stack
 ├── docker-compose.ci.yml     # CI E2E testing
 ├── Makefile               # Developer commands

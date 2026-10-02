@@ -802,7 +802,7 @@ const startPrepareSimulation = async () => {
       
       if (res.data.expected_entities_count) {
         expectedTotal.value = res.data.expected_entities_count
-        addLog(`Read ${res.data.expected_entities_count} entities from Zep graph`)
+        addLog(`Read ${res.data.expected_entities_count} entities from knowledge graph`)
         if (res.data.entity_types && res.data.entity_types.length > 0) {
           addLog(`  └─ Entity types: ${res.data.entity_types.join(', ')}`)
         }

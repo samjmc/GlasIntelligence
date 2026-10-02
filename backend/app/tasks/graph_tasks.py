@@ -42,7 +42,7 @@ def build_graph_task(
         chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
         total_chunks = len(chunks)
 
-        task_manager.update_task(task_id, message="Creating Zep graph...", progress=10)
+        task_manager.update_task(task_id, message="Creating knowledge graph...", progress=10)
         graph_id = builder.create_graph(name=graph_name)
 
         project.graph_id = graph_id
@@ -66,7 +66,7 @@ def build_graph_task(
             graph_id, chunks, batch_size=3, progress_callback=add_progress_callback
         )
 
-        task_manager.update_task(task_id, message="Waiting for Zep processing...", progress=55)
+        task_manager.update_task(task_id, message="Waiting for the graph to finish processing...", progress=55)
 
         def wait_progress_callback(msg, progress_ratio):
             progress = 55 + int(progress_ratio * 35)

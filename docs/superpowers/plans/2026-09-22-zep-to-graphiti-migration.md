@@ -1,6 +1,6 @@
 # Plan: move the knowledge graph from Zep Cloud to self-hosted Graphiti
 
-**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** · **G2 done 2026-09-26** · **G3 skipped by Sam 2026-09-26** (Zep side would cost 287 credits) · **G4 done 2026-10-02** (next: G5, switch the default) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
+**Date:** 2026-09-22 · **Status:** proposed, **vetted 2026-09-22 (verdict: needs rework → reworked below)** · **G0.5 + G0 done 2026-09-24: GO** · **G1 done 2026-09-25** · **G2 done 2026-09-26** · **G3 skipped by Sam 2026-09-26** (Zep side would cost 287 credits) · **G4 done 2026-10-02** · **G5 done 2026-10-02: Graphiti is the default** (open: production hosting, Sam's decision) · **Parent plan:** `2026-09-22-jev-evidence-and-zep-independence.md` (Phase 4)
 
 ## Vet results (2026-09-22) — these override anything below that conflicts
 
@@ -336,6 +336,19 @@ Each phase ends green. The full backend suite's failure set must equal `main`'s 
 - Read the report and compare it with a Zep-era report. Its grounding section must cite graph facts.
 
 ### G5 — Switch the default and document (0 credits)
+
+**Done 2026-10-02 (branch `feat/graph-store-g5`).**
+- **The default is now Graphiti:** `GRAPH_BACKEND` defaults to `graphiti` in `config.py` and in `.env.example`, and an empty value also means `graphiti`. Zep needs `GRAPH_BACKEND=zep`. With no Neo4j settings, the graph routes return "NEO4J_PASSWORD not configured for GRAPH_BACKEND=graphiti", and the message points to the setup guide and to the Zep option.
+- **Setup guide:** a new `docs/graphiti-setup.md` covers Windows without admin rights, Docker, every setting, how to verify, what to expect, switching to Zep, and production options.
+- **README:**
+  - The architecture and local-setup sections now describe Graphiti and Neo4j.
+  - The deployment sections described the Hetzner pipeline retired on 2026-08-10 (`deploy.yml`, `deploy.sh`, the prod and staging compose files are all gone). They now describe what exists: CI, the static demo on GitHub Pages, the Docker image workflow, and "backend not deployed".
+  - The GitHub-secrets table listed secrets that no workflow reads (only `GITHUB_TOKEN` is used), so it is removed.
+- **AGENTS.md:** the stack line now names Graphiti. It adds the rule that only `graph_store/` (plus `utils/zep_paging.py`) may import `zep_cloud` / `graphiti_core`, and notes how the tests avoid Zep and Neo4j.
+- **Enforced:** `test_graph_sdks_are_imported_only_inside_graph_store` scans `backend/app`. I checked that it goes red on a probe file.
+- **UI and progress text no longer says "Zep":** `Step1GraphBuild.vue`, `Step2EnvSetup.vue`, the build-task messages, the simulation-prep message, and the two persona-prompt headings ("Facts Retrieved from the Knowledge Graph"). Module names (`zep_tools`, `zep_entity_reader`, …), `VITE_ZEP_*` settings and log lines are unchanged; renaming them is churn with no user-visible effect.
+- **`docs/zep-footprint.md`:** a note says it applies to the Zep backend only.
+- **Still open (Sam's decision): production hosting.** No backend is deployed. The options are in `docs/graphiti-setup.md` § Production: a Neo4j container next to the API; AuraDB Free (pauses after 3 idle days); or Zep in production.
 - Make `GRAPH_BACKEND=graphiti` the development default. Update `README.md`, `AGENTS.md` and `docs/zep-footprint.md` with a Neo4j setup section.
 - Production hosting is **a separate decision for Sam**. Options:
   - a Neo4j container next to the API in `docker-compose.prod.yml`;
