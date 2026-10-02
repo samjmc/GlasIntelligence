@@ -1148,17 +1148,13 @@ def download_simulation_script(script_name: str):
     Download simulation run script (shared scripts located in backend/scripts/)
 
     script_name options:
-        - run_twitter_simulation.py
-        - run_reddit_simulation.py
-        - run_parallel_simulation.py
+        - run_parallel_simulation.py (--twitter-only / --reddit-only for one platform)
         - action_logger.py
     """
     try:
         scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../scripts"))
 
         allowed_scripts = [
-            "run_twitter_simulation.py",
-            "run_reddit_simulation.py",
             "run_parallel_simulation.py",
             "action_logger.py",
         ]
