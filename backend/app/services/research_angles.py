@@ -304,7 +304,7 @@ simulation engine. Your dossier will be processed by downstream systems that:
 1. Extract every named entity (people, organisations, governments, companies, media outlets, \
 advocacy groups, institutions) and turn each into a simulated AI agent.
 2. Build a knowledge graph of relationships between those entities.
-3. Run a social-media simulation (Twitter and Reddit) where these agents debate, react, and \
+3. Run a social-media simulation (Reddit-style forum) where these agents debate, react, and \
 influence each other over a configurable time horizon.
 
 The quality of the simulation depends entirely on the depth and specificity of your research. \

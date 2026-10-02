@@ -3,19 +3,17 @@
 Drives the real OASIS platforms with ManualActions only, so no LLM is called. Measured
 2026-09-25 before the fix: round 1 re-read the trace from rowid 0, so on reddit all 8
 opening posts came back as round-1 CREATE_POSTs; on twitter only 1 did, because twitter
-kept one opening post per agent and published 1 of the 8.
+kept one opening post per agent and published 1 of the 8. Twitter has since been dropped,
+so only the reddit platform is driven here.
 """
 
 from __future__ import annotations
 
 import asyncio
-import csv
 import json
 import os
 import sqlite3
 import sys
-
-import pytest
 
 _SCRIPTS = os.path.join(os.path.dirname(__file__), "..", "scripts")
 for _p in (_SCRIPTS, os.path.join(_SCRIPTS, "lib")):  # the paths run_parallel_simulation.py sets up
@@ -47,39 +45,26 @@ def _model():
     )
 
 
-async def _make_env(platform: str, tmp_path):
-    if platform == "twitter":
-        profile = tmp_path / "twitter_profiles.csv"
-        with open(profile, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["user_id", "name", "username", "user_char", "description"])
-            for i, n in NAMES.items():
-                w.writerow([i, n, n.lower(), f"{n} persona", f"{n} bio"])
-        graph = await pr.generate_twitter_agent_graph_with_tools(
-            profile_path=str(profile), model=_model(), available_actions=pr.TWITTER_ACTIONS
-        )
-        kind = oasis.DefaultPlatformType.TWITTER
-    else:
-        profile = tmp_path / "reddit_profiles.json"
-        profile.write_text(
-            json.dumps(
-                [
-                    {
-                        "user_id": i, "username": n.lower(), "name": n, "bio": f"{n} bio",
-                        "persona": f"{n} persona", "karma": 1000, "age": 30, "gender": "other",
-                        "mbti": "ISTJ", "country": "Ireland",
-                    }
-                    for i, n in NAMES.items()
-                ]
-            ),
-            encoding="utf-8",
-        )
-        graph = await pr.generate_reddit_agent_graph_with_tools(
-            profile_path=str(profile), model=_model(), available_actions=pr.REDDIT_ACTIONS
-        )
-        kind = oasis.DefaultPlatformType.REDDIT
-    db_path = str(tmp_path / f"{platform}.db")
-    env = oasis.make(agent_graph=graph, platform=kind, database_path=db_path)
+async def _make_env(tmp_path):
+    profile = tmp_path / "reddit_profiles.json"
+    profile.write_text(
+        json.dumps(
+            [
+                {
+                    "user_id": i, "username": n.lower(), "name": n, "bio": f"{n} bio",
+                    "persona": f"{n} persona", "karma": 1000, "age": 30, "gender": "other",
+                    "mbti": "ISTJ", "country": "Ireland",
+                }
+                for i, n in NAMES.items()
+            ]
+        ),
+        encoding="utf-8",
+    )
+    graph = await pr.generate_reddit_agent_graph_with_tools(
+        profile_path=str(profile), model=_model(), available_actions=pr.REDDIT_ACTIONS
+    )
+    db_path = str(tmp_path / "reddit.db")
+    env = oasis.make(agent_graph=graph, platform=oasis.DefaultPlatformType.REDDIT, database_path=db_path)
     await env.reset()
     return env, db_path
 
@@ -89,16 +74,15 @@ def _trace_posts(db_path: str) -> int:
         return conn.execute("SELECT count(*) FROM trace WHERE action = 'create_post'").fetchone()[0]
 
 
-@pytest.mark.parametrize("platform", ["twitter", "reddit"])
-def test_round_one_does_not_replay_opening_posts(platform, tmp_path):
+def test_round_one_does_not_replay_opening_posts(tmp_path):
     async def scenario():
-        env, db_path = await _make_env(platform, tmp_path)
+        env, db_path = await _make_env(tmp_path)
         try:
             actions, accepted = pr._opening_actions(env.agent_graph, OPENING)
             assert len(accepted) == 4
             last_rowid = await pr._publish_opening_posts(env, actions, db_path, NAMES)
 
-            # Every opening post reached the platform (twitter used to keep 1 per agent).
+            # Every opening post reached the platform (the old twitter path kept 1 per agent).
             assert _trace_posts(db_path) == 4
             # The old handoff (rowid 0) replays them: proves the check below can fail.
             replayed, _ = fetch_new_actions_from_db(db_path, 0, NAMES)

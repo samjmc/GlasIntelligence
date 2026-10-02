@@ -38,7 +38,7 @@ def run_full_pipeline(
 
         task_manager.update_task(task_id, message="Running simulation...", progress=30)
         effective_rounds = max_rounds if max_rounds is not None else max_round_cap
-        run_simulation_task(simulation_id, platform="all", max_rounds=effective_rounds, user_plan=user_plan)
+        run_simulation_task(simulation_id, max_rounds=effective_rounds, user_plan=user_plan)
 
         report_task_id = f"report_{simulation_id}"
         task_manager.create_task("report_generate")

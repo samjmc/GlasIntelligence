@@ -3,8 +3,8 @@
     <!-- Top Control Bar -->
     <div class="control-bar">
       <div class="status-group">
-        <!-- Twitter Platform Progress -->
-        <div class="platform-status twitter" :class="{ active: runStatus.twitter_running, completed: runStatus.twitter_completed }">
+        <!-- Twitter Platform Progress (only runs from before twitter was dropped) -->
+        <div v-if="showTwitter" class="platform-status twitter" :class="{ active: runStatus.twitter_running, completed: runStatus.twitter_completed }">
           <div class="platform-header">
             <svg class="platform-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
@@ -102,18 +102,20 @@
       </div>
     </div>
 
-    <!-- Main Content: Dual Timeline -->
+    <!-- Main Content: Timeline -->
     <div class="main-content-area" ref="scrollContainer">
       <!-- Timeline Header -->
       <div class="timeline-header" v-if="allActions.length > 0">
         <div class="timeline-stats">
           <span class="total-count">TOTAL EVENTS: <span class="mono">{{ allActions.length }}</span></span>
           <span class="platform-breakdown">
-            <span class="breakdown-item twitter">
-              <svg class="mini-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-              <span class="mono">{{ twitterActionsCount }}</span>
-            </span>
-            <span class="breakdown-divider">/</span>
+            <template v-if="showTwitter">
+              <span class="breakdown-item twitter">
+                <svg class="mini-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <span class="mono">{{ twitterActionsCount }}</span>
+              </span>
+              <span class="breakdown-divider">/</span>
+            </template>
             <span class="breakdown-item reddit">
               <svg class="mini-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
               <span class="mono">{{ redditActionsCount }}</span>
@@ -123,7 +125,7 @@
       </div>
       
       <!-- Timeline Feed -->
-      <div class="timeline-feed">
+      <div class="timeline-feed" :class="{ single: !showTwitter }">
         <div class="timeline-axis"></div>
         
         <TransitionGroup name="timeline-item">
@@ -354,6 +356,12 @@ const redditActionsCount = computed(() => {
   return allActions.value.filter(a => a.platform === 'reddit').length
 })
 
+// New runs are reddit only; the twitter side shows only for runs made before it was dropped
+const showTwitter = computed(() => {
+  const s = runStatus.value
+  return Boolean(s.twitter_running || s.twitter_completed || s.twitter_actions_count || twitterActionsCount.value)
+})
+
 const formatElapsedTime = (currentRound) => {
   if (!currentRound || currentRound <= 0) return '0h 0m'
   const totalMinutes = currentRound * props.minutesPerRound
@@ -398,13 +406,12 @@ const doStartSimulation = async () => {
   
   isStarting.value = true
   startError.value = null
-  addLog('Starting parallel simulation...')
+  addLog('Starting simulation...')
   emit('update-status', 'processing')
-  
+
   try {
     const params = {
       simulation_id: props.simulationId,
-      platform: 'parallel',
       force: true,
       // Off: live graph memory writes every agent action to Zep, about 2,000+
       // credits per simulation on a 10k/month free plan. Opt in via the API only.
@@ -1049,6 +1056,15 @@ onUnmounted(() => {
 .timeline-item.reddit .timeline-card {
   margin-right: auto;
   margin-left: 32px; /* Gap from axis */
+}
+
+/* One platform (new runs are reddit only): a single column with the axis on the left */
+.timeline-feed.single .timeline-axis,
+.timeline-feed.single .timeline-marker {
+  left: 16px;
+}
+.timeline-feed.single .timeline-item.reddit {
+  padding-left: 16px;
 }
 
 /* Card Content Styles */

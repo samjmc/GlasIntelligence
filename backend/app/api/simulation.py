@@ -152,10 +152,11 @@ def create_simulation():
     Request (JSON):
         {
             "project_id": "proj_xxxx",      // required
-            "graph_id": "glas_xxxx",    // optional, if not provided will be fetched from project
-            "enable_twitter": true,          // optional, default true
-            "enable_reddit": true            // optional, default true
+            "graph_id": "glas_xxxx"     // optional, if not provided will be fetched from project
         }
+
+    Simulations run on reddit only (twitter was dropped). The old "enable_twitter" and
+    "enable_reddit" request fields are no longer read.
 
     Returns:
         {
@@ -165,7 +166,7 @@ def create_simulation():
                 "project_id": "proj_xxxx",
                 "graph_id": "glas_xxxx",
                 "status": "created",
-                "enable_twitter": true,
+                "enable_twitter": false,
                 "enable_reddit": true,
                 "created_at": "2025-12-01T10:00:00"
             }
@@ -189,12 +190,7 @@ def create_simulation():
             ), 400
 
         manager = SimulationManager()
-        state = manager.create_simulation(
-            project_id=project_id,
-            graph_id=graph_id,
-            enable_twitter=data.get("enable_twitter", True),
-            enable_reddit=data.get("enable_reddit", True),
-        )
+        state = manager.create_simulation(project_id=project_id, graph_id=graph_id)
 
         return jsonify({"success": True, "data": state.to_dict()})
 
@@ -1148,7 +1144,7 @@ def download_simulation_script(script_name: str):
     Download simulation run script (shared scripts located in backend/scripts/)
 
     script_name options:
-        - run_parallel_simulation.py (--twitter-only / --reddit-only for one platform)
+        - run_parallel_simulation.py (runs the reddit simulation)
         - action_logger.py
     """
     try:
@@ -1246,13 +1242,12 @@ def generate_profiles():
 @require_auth
 def start_simulation():
     """
-    Start running simulation
+    Start running simulation (reddit only; the old "platform" field is no longer read)
 
     Request (JSON):
         {
             "simulation_id": "sim_xxxx",          // required
-            "platform": "parallel",                // optional: twitter / reddit / parallel (default)
-            "max_rounds": 100,                     // optional: max simulation rounds, to truncate long simulations
+            "max_rounds": 100,                    // optional: max simulation rounds, to truncate long simulations
             "enable_graph_memory_update": false,   // optional: whether to dynamically update Agent activity to Zep graph memory
             "force": false                         // optional: force restart (stops running simulation and cleans logs)
         }
@@ -1276,7 +1271,6 @@ def start_simulation():
                 "simulation_id": "sim_xxxx",
                 "runner_status": "running",
                 "process_pid": 12345,
-                "twitter_running": true,
                 "reddit_running": true,
                 "started_at": "2025-12-01T10:00:00",
                 "graph_memory_update_enabled": true,
@@ -1291,7 +1285,6 @@ def start_simulation():
         if not simulation_id:
             return jsonify({"success": False, "error": "Please provide simulation_id"}), 400
 
-        platform = data.get("platform", "parallel")
         max_rounds = data.get("max_rounds")
         enable_graph_memory_update = data.get("enable_graph_memory_update", False)
         force = data.get("force", False)
@@ -1303,11 +1296,6 @@ def start_simulation():
                     return jsonify({"success": False, "error": "max_rounds must be a positive integer"}), 400
             except (ValueError, TypeError):
                 return jsonify({"success": False, "error": "max_rounds must be a valid integer"}), 400
-
-        if platform not in ["twitter", "reddit", "parallel"]:
-            return jsonify(
-                {"success": False, "error": f"Invalid platform type: {platform}, options: twitter/reddit/parallel"}
-            ), 400
 
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
@@ -1399,7 +1387,6 @@ def start_simulation():
 
         run_state = SimulationRunner.start_simulation(
             simulation_id=simulation_id,
-            platform=platform,
             max_rounds=max_rounds,
             enable_graph_memory_update=enable_graph_memory_update,
             graph_id=graph_id,

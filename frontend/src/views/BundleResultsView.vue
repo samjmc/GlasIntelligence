@@ -185,9 +185,10 @@
                 </div>
               </div>
               <div class="comp-platforms" aria-label="Platforms">
+                <!-- Plaza (twitter) only for runs from before twitter was dropped -->
                 <span
-                  class="plat-pill"
-                  :class="{ done: sc.final_state?.twitter_completed }"
+                  v-if="sc.final_state?.twitter_completed"
+                  class="plat-pill done"
                 >Plaza</span>
                 <span
                   class="plat-pill"

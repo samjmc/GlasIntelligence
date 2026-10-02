@@ -27,6 +27,19 @@ from .jev_report_gates import (
 logger = get_logger("glas.zep_tools")
 
 
+def platform_response_text(twitter_response: str, reddit_response: str) -> str:
+    """One agent's interview answer, with a section per platform that answered.
+
+    New runs are reddit only, so an always-present twitter section would read
+    "(No response received...)" in every report.
+    """
+    answered = [(name, text) for name, text in (("Twitter", twitter_response), ("Reddit", reddit_response)) if text]
+    return (
+        "\n\n".join(f"[{name} Platform Response]\n{text}" for name, text in answered)
+        or "(No response received from this platform)"
+    )
+
+
 @dataclass
 class SearchResult:
     """Search result"""
@@ -1327,11 +1340,7 @@ Return a JSON-formatted list of sub-questions in English."""
                 twitter_response = self._clean_tool_call_response(twitter_response)
                 reddit_response = self._clean_tool_call_response(reddit_response)
 
-                twitter_text = twitter_response if twitter_response else "(No response received from this platform)"
-                reddit_text = reddit_response if reddit_response else "(No response received from this platform)"
-                response_text = (
-                    f"[Twitter Platform Response]\n{twitter_text}\n\n[Reddit Platform Response]\n{reddit_text}"
-                )
+                response_text = platform_response_text(twitter_response, reddit_response)
 
                 # Extract key quotes from both platform responses
                 import re

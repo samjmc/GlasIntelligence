@@ -179,12 +179,7 @@ def run_bundle_task(self, bundle_id, session_id, user_id):
                 had_failure = True
                 break
 
-            sim_state = manager.create_simulation(
-                project_id=project_id,
-                graph_id=graph_id,
-                enable_twitter=base_state.enable_twitter,
-                enable_reddit=base_state.enable_reddit,
-            )
+            sim_state = manager.create_simulation(project_id=project_id, graph_id=graph_id)
             sim_id = sim_state.simulation_id
             SupabaseDB.update_bundle(bundle_id, current_simulation_id=sim_id)
             logger.info(f"Bundle {bundle_id}: created sim {sim_id} for scenario {i}")
@@ -268,11 +263,7 @@ def run_bundle_task(self, bundle_id, session_id, user_id):
                         bundle_id,
                     )
 
-            SimulationRunner.start_simulation(
-                simulation_id=sim_id,
-                platform="parallel",
-                user_plan=user_plan,
-            )
+            SimulationRunner.start_simulation(simulation_id=sim_id, user_plan=user_plan)
             sim_state.status = SimulationStatus.RUNNING
             manager._save_simulation_state(sim_state)
             logger.info(f"Bundle {bundle_id}: simulation {sim_id} started running")

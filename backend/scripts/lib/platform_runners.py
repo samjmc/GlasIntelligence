@@ -1,4 +1,8 @@
-"""Platform simulation runners (Twitter/Reddit) for the parallel simulation runner."""
+"""Platform simulation runner for run_parallel_simulation.py.
+
+Only reddit runs. Twitter was dropped to halve the LLM cost of a run; runs saved before
+that still have twitter/actions.jsonl, and the readers in app/ keep handling it.
+"""
 
 import os
 import sys
@@ -7,10 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional  # noqa: UP035
 
 from action_logger import PlatformActionLogger, SimulationLogManager
-from agent_graphs import (
-    generate_reddit_agent_graph_with_tools,
-    generate_twitter_agent_graph_with_tools,
-)
+from agent_graphs import generate_reddit_agent_graph_with_tools
 from config_utils import get_agent_names_from_config
 from db_utils import fetch_new_actions_from_db, fetch_new_tool_calls
 from model_factory import create_model
@@ -106,16 +107,6 @@ async def _publish_opening_posts(env, initial_actions, db_path, agent_names):
 _shutdown_event = None
 _cleanup_done = False
 
-# Twitter available actions (INTERVIEW excluded; it can only be triggered manually via ManualAction)
-TWITTER_ACTIONS = [
-    ActionType.CREATE_POST,
-    ActionType.LIKE_POST,
-    ActionType.REPOST,
-    ActionType.FOLLOW,
-    ActionType.DO_NOTHING,
-    ActionType.QUOTE_POST,
-]
-
 # Reddit available actions (INTERVIEW excluded; it can only be triggered manually via ManualAction)
 REDDIT_ACTIONS = [
     ActionType.LIKE_POST,
@@ -144,18 +135,14 @@ class PlatformSimulation:
 @dataclass(frozen=True)
 class _PlatformSpec:
     label: str
-    profile_file: str  # OASIS reads twitter profiles as CSV, reddit profiles as JSON
+    profile_file: str
     build_graph: Any
     actions: list
     oasis_type: Any
-    use_boost: bool  # reddit uses the boost LLM when one is configured
+    use_boost: bool  # use the boost LLM when one is configured
 
 
 PLATFORMS = {
-    "twitter": _PlatformSpec(
-        "Twitter", "twitter_profiles.csv", generate_twitter_agent_graph_with_tools,
-        TWITTER_ACTIONS, oasis.DefaultPlatformType.TWITTER, use_boost=False,
-    ),
     "reddit": _PlatformSpec(
         "Reddit", "reddit_profiles.json", generate_reddit_agent_graph_with_tools,
         REDDIT_ACTIONS, oasis.DefaultPlatformType.REDDIT, use_boost=True,
@@ -173,7 +160,7 @@ async def run_platform_simulation(
     tool_registry=None,
     effect_engine=None,
 ) -> PlatformSimulation:
-    """Run one platform's simulation ("twitter" or "reddit")
+    """Run one platform's simulation (a key of PLATFORMS: "reddit")
 
     Args:
         platform: key into PLATFORMS

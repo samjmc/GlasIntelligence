@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import csv
 import importlib
 import itertools
 import json
@@ -128,14 +127,6 @@ def build_sim_dir(tape_path: Path, sim_dir: Path, sim_id: str) -> dict[str, Any]
             }
         )
     (sim_dir / "reddit_profiles.json").write_text(json.dumps(reddit, ensure_ascii=False, indent=2), encoding="utf-8")
-    with open(sim_dir / "twitter_profiles.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["user_id", "name", "username", "user_char", "description"])
-        for i, p in enumerate(profiles):
-            bio = (p.get("bio") or "").replace("\n", " ").replace("\r", " ")
-            persona = (p.get("persona") or "").replace("\n", " ").replace("\r", " ")
-            char = f"{bio} {persona}".strip() if persona and persona != bio else bio
-            w.writerow([i, p.get("name"), p.get("username"), char, bio])
     (sim_dir / "simulation_config.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     return cfg
 

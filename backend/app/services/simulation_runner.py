@@ -321,18 +321,16 @@ class SimulationRunner:
     def start_simulation(
         cls,
         simulation_id: str,
-        platform: str = "parallel",
         max_rounds: int = None,
         enable_graph_memory_update: bool = False,
         graph_id: str = None,
         user_plan: str = "pro",
     ) -> SimulationRunState:
         """
-        Start simulation
+        Start simulation (reddit only; twitter was dropped to halve the LLM cost of a run)
 
         Args:
             simulation_id: Simulation ID
-            platform: Run platform (twitter/reddit/parallel)
             max_rounds: Max simulation rounds (optional, truncates overly long simulations)
             enable_graph_memory_update: Whether to dynamically update Agent activities to Zep graph
             graph_id: Zep graph ID (required when graph update is enabled)
@@ -394,17 +392,7 @@ class SimulationRunner:
         else:
             cls._graph_memory_enabled[simulation_id] = False
 
-        # One runner script for every platform choice (backend/scripts/); a single platform is a flag
-        platform_flags = []
-        if platform == "twitter":
-            platform_flags = ["--twitter-only"]
-            state.twitter_running = True
-        elif platform == "reddit":
-            platform_flags = ["--reddit-only"]
-            state.reddit_running = True
-        else:
-            state.twitter_running = True
-            state.reddit_running = True
+        state.reddit_running = True
 
         script_path = os.path.join(cls.SCRIPTS_DIR, "run_parallel_simulation.py")
 
@@ -418,17 +406,16 @@ class SimulationRunner:
         # Start simulation process
         try:
             # Build run command using full path
-            # New log structure:
-            #   twitter/actions.jsonl - Twitter action log
+            # Log structure:
             #   reddit/actions.jsonl  - Reddit action log
             #   simulation.log        - Main process log
+            # (runs from before twitter was dropped also have twitter/actions.jsonl; readers keep it)
 
             cmd = [
                 sys.executable,  # Python interpreter
                 script_path,
                 "--config",
                 config_path,  # Use full config file path
-                *platform_flags,
             ]
 
             # If max rounds specified, add to command-line arguments
@@ -474,7 +461,7 @@ class SimulationRunner:
             monitor_thread.start()
             cls._monitor_threads[simulation_id] = monitor_thread
 
-            logger.info(f"Simulation started successfully: {simulation_id}, pid={process.pid}, platform={platform}")
+            logger.info(f"Simulation started successfully: {simulation_id}, pid={process.pid}")
 
         except Exception as e:
             state.runner_status = RunnerStatus.FAILED

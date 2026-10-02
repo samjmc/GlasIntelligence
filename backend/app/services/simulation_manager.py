@@ -49,8 +49,8 @@ class SimulationState:
     project_id: str
     graph_id: str
 
-    # Platform enable status
-    enable_twitter: bool = True
+    # Platform enable status (twitter was dropped; runs saved before that still carry True)
+    enable_twitter: bool = False
     enable_reddit: bool = True
 
     # Status
@@ -194,7 +194,7 @@ class SimulationManager:
         self,
         project_id: str,
         graph_id: str,
-        enable_twitter: bool = True,
+        enable_twitter: bool = False,
         enable_reddit: bool = True,
     ) -> SimulationState:
         """
@@ -203,7 +203,7 @@ class SimulationManager:
         Args:
             project_id: Project ID
             graph_id: Zep graph ID
-            enable_twitter: Whether to enable Twitter simulation
+            enable_twitter: Twitter was dropped (runs are reddit only); kept for saved states
             enable_reddit: Whether to enable Reddit simulation
 
         Returns:
@@ -496,15 +496,11 @@ class SimulationManager:
             "scripts_dir": scripts_dir,
             "config_file": config_path,
             "commands": {
-                "twitter": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path} --twitter-only",
-                "reddit": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path} --reddit-only",
-                "parallel": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
+                "reddit": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
             },
             "instructions": (
                 f"1. Activate conda env: conda activate glas\n"
                 f"2. Run simulation (scripts in {scripts_dir}):\n"
-                f"   - Twitter only: python {scripts_dir}/run_parallel_simulation.py --config {config_path} --twitter-only\n"
-                f"   - Reddit only: python {scripts_dir}/run_parallel_simulation.py --config {config_path} --reddit-only\n"
-                f"   - Both platforms in parallel: python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
+                f"   python {scripts_dir}/run_parallel_simulation.py --config {config_path}"
             ),
         }
