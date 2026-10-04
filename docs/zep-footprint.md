@@ -54,6 +54,11 @@ Only **user-initiated** graph refresh should pass `refresh: true` to `getGraphDa
 
 Larger batches / longer intervals → fewer Zep writes and fewer cache generation bumps (often **better** cache hit rate); first write to Zep may appear later.
 
+Until 2026-10-04 the updater ignored both variables (it used fixed values of 5 and 0.5); it reads them now. Also since then:
+- Likes, dislikes and reposts quote only the first 80 characters of the post. Searches, trend clicks and refreshes are not sent. This cuts the bytes Zep bills for.
+- The backlog is sent when the run ends, not when the app shuts down.
+- A report waits for the run's memory to finish writing (see `docs/graphiti-setup.md`).
+
 ## Rollback
 
 1. Revert or adjust `VITE_ZEP_*` / Docker build args and rebuild the frontend.

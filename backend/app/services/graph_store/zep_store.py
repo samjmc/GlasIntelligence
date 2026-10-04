@@ -75,6 +75,9 @@ class ZepGraphStore:
     def preferred_chunking(self) -> tuple[int, int] | None:
         return None  # the project's own chunking (Config.DEFAULT_CHUNK_SIZE), as before
 
+    def preferred_memory_batch_size(self) -> int | None:
+        return None  # ZEP_GRAPH_MEMORY_BATCH_SIZE
+
     def create_graph(self, graph_id: str, name: str, description: str) -> None:
         self.client.graph.create(graph_id=graph_id, name=name, description=description)
 

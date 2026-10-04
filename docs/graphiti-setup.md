@@ -62,6 +62,8 @@ Keep `NEO4J_PASSWORD` in a **user-level environment variable**, not in a `.env` 
 | `GRAPHITI_MAX_COROUTINES` | `5` | Parallel LLM calls per episode. Higher values draw rate-limit errors from DeepSeek. |
 | `GRAPHITI_CHUNK_SIZE` / `GRAPHITI_CHUNK_OVERLAP` | `2000` / `100` | Graphiti cost follows LLM calls per chunk, so it uses larger chunks than Zep. |
 | `GRAPHITI_EPISODE_TIMEOUT_SEC` | `300` | Time limit for one chunk's extraction. |
+| `GRAPHITI_MEMORY_BATCH_SIZE` | `20` | Live graph memory: simulation activities per episode. |
+| `GRAPH_MEMORY_DRAIN_TIMEOUT_SEC` | `1200` | How long a report waits for a run's live graph memory to finish writing. |
 
 ## Check that it works
 
@@ -79,7 +81,10 @@ This builds small throwaway graphs, extracts typed entities, searches them and d
 - **A graph build takes several minutes.** The pharmacy dossier (34 chunks) took about 7 minutes. Each chunk is extracted before the next one starts, so progress moves chunk by chunk.
 - **Search uses RRF ranking.** The optional cross-encoder reranker is a 2.2 GB download and is not used.
 - **Graphs do not move between backends.** A graph built on Zep is not in Neo4j. Opening it with `GRAPH_BACKEND=graphiti` gives a clear "not in this Neo4j database" error. Rebuild the graph from the project instead.
-- **Live graph memory** (`enable_graph_memory_update`) writes agent activity to the graph during a simulation. It costs LLM tokens per batch of activity. It is off by default, and the UI always sends it off.
+- **Live graph memory** (`enable_graph_memory_update`) writes agent activity to the graph during a simulation. It is off by default, and the UI always sends it off. When it is on:
+  - Activities go in batches of `GRAPHITI_MEMORY_BATCH_SIZE` (default 20). Measured on a real run, that is about 75 activities a minute at 2.3x fewer tokens than batches of 5.
+  - Likes and reposts quote only the first 80 characters of the post. Searches, trend clicks and refreshes are not written.
+  - Writing continues after the run ends. **A report waits** until the run's memory is written (up to `GRAPH_MEMORY_DRAIN_TIMEOUT_SEC`, default 20 minutes), so it can search what the agents did.
 
 ## Switching to Zep Cloud
 

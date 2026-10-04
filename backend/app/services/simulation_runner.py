@@ -498,6 +498,7 @@ class SimulationRunner:
 
         twitter_position = 0
         reddit_position = 0
+        memory_finishing = False
 
         try:
             while process.poll() is None:  # Process still running
@@ -508,6 +509,17 @@ class SimulationRunner:
                 # Read Reddit action log
                 if os.path.exists(reddit_actions_log):
                     reddit_position = cls._read_action_log(reddit_actions_log, reddit_position, state, "reddit")
+
+                # Every platform has logged simulation_end, so the updater has every activity.
+                # Send its backlog now: the process stays alive for interviews, and waiting
+                # for it to exit left the backlog unsent (measured 2026-10-04: 115 of 687).
+                if (
+                    not memory_finishing
+                    and cls._graph_memory_enabled.get(simulation_id, False)
+                    and cls._check_all_platforms_completed(state)
+                ):
+                    ZepGraphMemoryManager.finish_updater_async(simulation_id)
+                    memory_finishing = True
 
                 # Surface the Jev post-validity alert, if the run has raised one (never stops the run)
                 cls._apply_validity_alert(state, sim_dir)
@@ -559,11 +571,11 @@ class SimulationRunner:
             cls._save_run_state(state)
 
         finally:
-            # Stop graph memory updater
+            # Send the graph memory backlog in the background (a no-op if already finishing)
             if cls._graph_memory_enabled.get(simulation_id, False):
                 try:
-                    ZepGraphMemoryManager.stop_updater(simulation_id)
-                    logger.info(f"Stopped graph memory update: simulation_id={simulation_id}")
+                    ZepGraphMemoryManager.finish_updater_async(simulation_id)
+                    logger.info(f"Finishing graph memory update: simulation_id={simulation_id}")
                 except Exception as e:
                     logger.error(f"Failed to stop graph memory updater: {e}")
                 cls._graph_memory_enabled.pop(simulation_id, None)
@@ -864,11 +876,11 @@ class SimulationRunner:
         state.completed_at = datetime.now().isoformat()
         cls._save_run_state(state)
 
-        # Stop graph memory updater
+        # Send the graph memory backlog in the background, so the stop request returns at once
         if cls._graph_memory_enabled.get(simulation_id, False):
             try:
-                ZepGraphMemoryManager.stop_updater(simulation_id)
-                logger.info(f"Stopped graph memory update: simulation_id={simulation_id}")
+                ZepGraphMemoryManager.finish_updater_async(simulation_id)
+                logger.info(f"Finishing graph memory update: simulation_id={simulation_id}")
             except Exception as e:
                 logger.error(f"Failed to stop graph memory updater: {e}")
             cls._graph_memory_enabled.pop(simulation_id, None)

@@ -70,6 +70,9 @@ class FakeGraphStore:
     def preferred_chunking(self) -> tuple[int, int] | None:
         return None
 
+    def preferred_memory_batch_size(self) -> int | None:
+        return None
+
     def create_graph(self, graph_id: str, name: str, description: str) -> None:
         self.graphs[graph_id] = {"name": name, "description": description}
 
