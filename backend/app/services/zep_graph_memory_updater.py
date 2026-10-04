@@ -5,16 +5,32 @@ Dynamically updates Agent activities from simulations into the Zep graph
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Empty, Queue
 from typing import Any
 
+from ..config import Config
 from ..utils.logger import get_logger
 from .graph_snapshot_cache import bump_mutation_generation
 from .graph_store import GraphStore, get_graph_store
 
 logger = get_logger("glas.zep_graph_memory_updater")
+
+# Actions that add nothing to the graph: no stance, no content, no relationship.
+MEMORY_SKIP_ACTIONS = frozenset({"DO_NOTHING", "REFRESH", "TREND", "SEARCH_POSTS", "SEARCH_USER"})
+
+# A reaction (like, dislike, repost, reply target) quotes only this much of the post it
+# refers to. The full post is already in the graph from its CREATE_POST; repeating it
+# made reactions most of the memory text (measured 2026-10-04: 417 of 688 actions were
+# likes), and both backends pay per byte or per LLM token for it.
+REFERENCE_SNIPPET_CHARS = 80
+
+
+def _snippet(text: str, limit: int = REFERENCE_SNIPPET_CHARS) -> str:
+    text = " ".join((text or "").split())
+    return text if len(text) <= limit else text[:limit].rstrip() + "..."
 
 
 @dataclass
@@ -65,8 +81,8 @@ class AgentActivity:
         return "published a post"
 
     def _describe_like_post(self) -> str:
-        """Like a post - includes post content and author info"""
-        post_content = self.action_args.get("post_content", "")
+        """Like a post - includes the author and the start of the post"""
+        post_content = _snippet(self.action_args.get("post_content", ""))
         post_author = self.action_args.get("post_author_name", "")
 
         if post_content and post_author:
@@ -78,8 +94,8 @@ class AgentActivity:
         return "liked a post"
 
     def _describe_dislike_post(self) -> str:
-        """Dislike a post - includes post content and author info"""
-        post_content = self.action_args.get("post_content", "")
+        """Dislike a post - includes the author and the start of the post"""
+        post_content = _snippet(self.action_args.get("post_content", ""))
         post_author = self.action_args.get("post_author_name", "")
 
         if post_content and post_author:
@@ -91,8 +107,8 @@ class AgentActivity:
         return "disliked a post"
 
     def _describe_repost(self) -> str:
-        """Repost - includes original post content and author info"""
-        original_content = self.action_args.get("original_content", "")
+        """Repost - includes the original author and the start of the post"""
+        original_content = _snippet(self.action_args.get("original_content", ""))
         original_author = self.action_args.get("original_author_name", "")
 
         if original_content and original_author:
@@ -104,8 +120,8 @@ class AgentActivity:
         return "reposted a post"
 
     def _describe_quote_post(self) -> str:
-        """Quote a post - includes original post content, author info, and quote comment"""
-        original_content = self.action_args.get("original_content", "")
+        """Quote a post - includes the start of the original post, its author, and the full quote comment"""
+        original_content = _snippet(self.action_args.get("original_content", ""))
         original_author = self.action_args.get("original_author_name", "")
         quote_content = self.action_args.get("quote_content", "") or self.action_args.get("content", "")
 
@@ -132,9 +148,9 @@ class AgentActivity:
         return "followed a user"
 
     def _describe_create_comment(self) -> str:
-        """Create a comment - includes comment content and commented post info"""
+        """Create a comment - the full comment, plus the start of the post it answers"""
         content = self.action_args.get("content", "")
-        post_content = self.action_args.get("post_content", "")
+        post_content = _snippet(self.action_args.get("post_content", ""))
         post_author = self.action_args.get("post_author_name", "")
 
         if content:
@@ -148,8 +164,8 @@ class AgentActivity:
         return "posted a comment"
 
     def _describe_like_comment(self) -> str:
-        """Like a comment - includes comment content and author info"""
-        comment_content = self.action_args.get("comment_content", "")
+        """Like a comment - includes the author and the start of the comment"""
+        comment_content = _snippet(self.action_args.get("comment_content", ""))
         comment_author = self.action_args.get("comment_author_name", "")
 
         if comment_content and comment_author:
@@ -161,8 +177,8 @@ class AgentActivity:
         return "liked a comment"
 
     def _describe_dislike_comment(self) -> str:
-        """Dislike a comment - includes comment content and author info"""
-        comment_content = self.action_args.get("comment_content", "")
+        """Dislike a comment - includes the author and the start of the comment"""
+        comment_content = _snippet(self.action_args.get("comment_content", ""))
         comment_author = self.action_args.get("comment_author_name", "")
 
         if comment_content and comment_author:
@@ -238,6 +254,13 @@ class ZepGraphMemoryUpdater:
         self.graph_id = graph_id
         self.store = store or get_graph_store(api_key)
 
+        # Batch size: the store's preference (Graphiti: bigger batches, because its cost and
+        # time follow LLM calls per episode), else ZEP_GRAPH_MEMORY_BATCH_SIZE.
+        preferred = getattr(self.store, "preferred_memory_batch_size", lambda: None)()
+        self.BATCH_SIZE = max(1, preferred or Config.ZEP_GRAPH_MEMORY_BATCH_SIZE or self.BATCH_SIZE)
+        self.SEND_INTERVAL = Config.ZEP_GRAPH_MEMORY_SEND_INTERVAL_SEC
+        self._in_flight = 0  # activities taken from the buffers and being sent now
+
         # Activity queue
         self._activity_queue: Queue = Queue()
 
@@ -277,15 +300,24 @@ class ZepGraphMemoryUpdater:
         self._worker_thread.start()
         logger.info(f"ZepGraphMemoryUpdater started: graph_id={self.graph_id}")
 
-    def stop(self):
-        """Stop background worker thread"""
+    def stop(self, timeout: float | None = None):
+        """Stop accepting work, send everything still queued, then return.
+
+        The worker thread does the final sends itself, so batches are never sent from two
+        threads at once (Graphiti would then extract into the same graph concurrently).
+        ``timeout=None`` waits until everything is sent; at process exit pass a short one.
+        """
         self._running = False
 
-        # Send remaining activities
-        self._flush_remaining()
-
         if self._worker_thread and self._worker_thread.is_alive():
-            self._worker_thread.join(timeout=10)
+            self._worker_thread.join(timeout=timeout)
+            if self._worker_thread.is_alive():
+                logger.warning(
+                    f"Graph memory still sending after {timeout}s: graph_id={self.graph_id}, "
+                    f"{self.pending()} activities not yet written"
+                )
+        else:
+            self._flush_remaining()
 
         logger.info(
             f"ZepGraphMemoryUpdater stopped: graph_id={self.graph_id}, "
@@ -317,8 +349,8 @@ class ZepGraphMemoryUpdater:
         Args:
             activity: Agent activity record
         """
-        # Skip DO_NOTHING activity types
-        if activity.action_type == "DO_NOTHING":
+        # Skip actions that add nothing to the graph (see MEMORY_SKIP_ACTIONS)
+        if activity.action_type in MEMORY_SKIP_ACTIONS:
             self._skipped_count += 1
             return
 
@@ -370,10 +402,14 @@ class ZepGraphMemoryUpdater:
                         if len(self._platform_buffers[platform]) >= self.BATCH_SIZE:
                             batch = self._platform_buffers[platform][: self.BATCH_SIZE]
                             self._platform_buffers[platform] = self._platform_buffers[platform][self.BATCH_SIZE :]
+                            self._in_flight = len(batch)
                     if batch:
                         # Send after releasing the lock: a Graphiti store ingests synchronously
                         # (seconds per batch), and holding the lock would block add_activity.
-                        self._send_batch_activities(batch, platform)
+                        try:
+                            self._send_batch_activities(batch, platform)
+                        finally:
+                            self._in_flight = 0
                         # Send interval to avoid sending too fast
                         time.sleep(self.SEND_INTERVAL)
 
@@ -383,6 +419,9 @@ class ZepGraphMemoryUpdater:
             except Exception as e:
                 logger.error(f"Worker loop exception: {e}")
                 time.sleep(1)
+
+        # Stopped and the queue is empty: send what is left, from this same thread.
+        self._flush_remaining()
 
     def _send_batch_activities(self, activities: list[AgentActivity], platform: str):
         """
@@ -436,17 +475,31 @@ class ZepGraphMemoryUpdater:
             except Empty:
                 break
 
-        # Then send remaining activities in each platform buffer (even if less than BATCH_SIZE)
+        # Then send what is left in each platform buffer, in normal-size batches: one huge
+        # episode would exceed what a Graphiti extraction call handles in its timeout.
         with self._buffer_lock:
             pending = [(p, b) for p, b in self._platform_buffers.items() if b]
             # Clear all buffers
             for platform in self._platform_buffers:
                 self._platform_buffers[platform] = []
+            self._in_flight = sum(len(b) for _, b in pending)
         # Send outside the lock (see _worker_loop).
-        for platform, buffer in pending:
-            display_name = self._get_platform_display_name(platform)
-            logger.info(f"Sending remaining {len(buffer)} activities for {display_name} platform")
-            self._send_batch_activities(buffer, platform)
+        try:
+            for platform, buffer in pending:
+                display_name = self._get_platform_display_name(platform)
+                logger.info(f"Sending remaining {len(buffer)} activities for {display_name} platform")
+                for i in range(0, len(buffer), self.BATCH_SIZE):
+                    chunk = buffer[i : i + self.BATCH_SIZE]
+                    self._send_batch_activities(chunk, platform)
+                    self._in_flight -= len(chunk)
+        finally:
+            self._in_flight = 0
+
+    def pending(self) -> int:
+        """Activities accepted but not yet written to the graph (queued, buffered or being sent)."""
+        with self._buffer_lock:
+            buffered = sum(len(b) for b in self._platform_buffers.values())
+        return self._activity_queue.qsize() + buffered + self._in_flight
 
     def get_stats(self) -> dict[str, Any]:
         """Get statistics"""
@@ -463,6 +516,7 @@ class ZepGraphMemoryUpdater:
             "skipped_count": self._skipped_count,  # Filtered/skipped activity count (DO_NOTHING)
             "queue_size": self._activity_queue.qsize(),
             "buffer_sizes": buffer_sizes,  # Per-platform buffer sizes
+            "pending": self.pending(),  # accepted but not yet written
             "running": self._running,
         }
 
@@ -475,6 +529,8 @@ class ZepGraphMemoryManager:
     """
 
     _updaters: dict[str, ZepGraphMemoryUpdater] = {}
+    # Updaters whose run has ended and which are sending their backlog: sim id -> (thread, updater)
+    _finishing: dict[str, tuple[threading.Thread, ZepGraphMemoryUpdater]] = {}
     _lock = threading.Lock()
 
     @classmethod
@@ -489,11 +545,9 @@ class ZepGraphMemoryManager:
         Returns:
             ZepGraphMemoryUpdater instance
         """
+        # If one already exists, let it finish first (outside the lock: it may send for a while)
+        cls.stop_updater(simulation_id)
         with cls._lock:
-            # If already exists, stop the old one first
-            if simulation_id in cls._updaters:
-                cls._updaters[simulation_id].stop()
-
             updater = ZepGraphMemoryUpdater(graph_id)
             updater.start()
             cls._updaters[simulation_id] = updater
@@ -507,13 +561,72 @@ class ZepGraphMemoryManager:
         return cls._updaters.get(simulation_id)
 
     @classmethod
-    def stop_updater(cls, simulation_id: str):
-        """Stop and remove a simulation's updater"""
+    def stop_updater(cls, simulation_id: str, timeout: float | None = None):
+        """Stop and remove a simulation's updater, after it has sent its backlog.
+
+        The lock is released before the (possibly long) send, so other simulations'
+        updaters are never blocked behind this one.
+        """
         with cls._lock:
-            if simulation_id in cls._updaters:
-                cls._updaters[simulation_id].stop()
-                del cls._updaters[simulation_id]
-                logger.info(f"Stopped graph memory updater: simulation_id={simulation_id}")
+            updater = cls._updaters.pop(simulation_id, None)
+        if updater is not None:
+            updater.stop(timeout=timeout)
+            logger.info(f"Stopped graph memory updater: simulation_id={simulation_id}")
+
+    @classmethod
+    def finish_updater_async(cls, simulation_id: str) -> None:
+        """The run is over: send the backlog in the background, then stop.
+
+        Called when every platform has reported simulation_end. The OASIS process stays
+        alive afterwards for interviews, so waiting for it to exit would leave the backlog
+        unsent until shutdown, when a Graphiti store can no longer write.
+        """
+        with cls._lock:
+            updater = cls._updaters.pop(simulation_id, None)
+            if updater is None or simulation_id in cls._finishing:
+                return
+            thread = threading.Thread(target=updater.stop, name=f"GraphMemoryFinish-{simulation_id[:12]}", daemon=True)
+            cls._finishing[simulation_id] = (thread, updater)
+        logger.info(f"Finishing graph memory: simulation_id={simulation_id}, {updater.pending()} activities to send")
+        thread.start()
+
+    @classmethod
+    def pending(cls, simulation_id: str) -> int:
+        """Activities of this simulation not yet written to the graph (0 when none or memory off)."""
+        with cls._lock:
+            updater = cls._updaters.get(simulation_id)
+            finishing = cls._finishing.get(simulation_id)
+        if finishing is not None:
+            thread, f_updater = finishing
+            if thread.is_alive():
+                return max(1, f_updater.pending())  # still sending: never report 0
+        return updater.pending() if updater is not None else 0
+
+    @classmethod
+    def wait_until_drained(
+        cls, simulation_id: str, timeout: float, on_wait: Callable[[int], None] | None = None, poll: float = 2.0
+    ) -> bool:
+        """Block until this simulation's graph memory is fully written. True when done, False on timeout.
+
+        Returns at once when the simulation has no graph memory. Used before a report,
+        so the report can search what the agents did.
+        """
+        deadline = time.time() + timeout
+        while True:
+            with cls._lock:
+                active = simulation_id in cls._updaters
+                finishing = cls._finishing.get(simulation_id)
+            if finishing is not None and not finishing[0].is_alive():
+                with cls._lock:
+                    cls._finishing.pop(simulation_id, None)
+                finishing = None
+            if not active and finishing is None:
+                return True
+            if time.time() >= deadline:
+                return False
+            if on_wait:
+                on_wait(cls.pending(simulation_id))
+            time.sleep(poll)
 
     # Flag to prevent duplicate stop_all calls
     _stop_all_done = False
@@ -527,14 +640,16 @@ class ZepGraphMemoryManager:
         cls._stop_all_done = True
 
         with cls._lock:
-            if cls._updaters:
-                for simulation_id, updater in list(cls._updaters.items()):
-                    try:
-                        updater.stop()
-                    except Exception as e:
-                        logger.error(f"Failed to stop updater: simulation_id={simulation_id}, error={e}")
-                cls._updaters.clear()
-            logger.info("All graph memory updaters stopped")
+            updaters = list(cls._updaters.items())
+            cls._updaters.clear()
+        # Process exit: best effort only, so a long backlog cannot hold the exit up. Runs
+        # finish their memory when they end (finish_updater_async), not here.
+        for simulation_id, updater in updaters:
+            try:
+                updater.stop(timeout=10)
+            except Exception as e:
+                logger.error(f"Failed to stop updater: simulation_id={simulation_id}, error={e}")
+        logger.info("All graph memory updaters stopped")
 
     @classmethod
     def get_all_stats(cls) -> dict[str, dict[str, Any]]:

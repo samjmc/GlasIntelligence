@@ -9,12 +9,14 @@ import traceback
 
 from flask import jsonify, request, send_file
 
+from ..config import Config
 from ..middleware.auth import require_auth
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.case_predictions import record_predictions_for_report
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
+from ..services.zep_graph_memory_updater import ZepGraphMemoryManager
 from ..utils.logger import get_logger
 from . import report_bp
 from .simulation_access import caller_may_see, simulation_owner
@@ -109,6 +111,21 @@ def generate_report():
                 task_manager.update_task(
                     task_id, status=TaskStatus.PROCESSING, progress=0, message="Initializing Report Agent..."
                 )
+
+                # If the run wrote live graph memory, let it finish so the report can search
+                # what the agents did. Returns at once when graph memory was off.
+                drained = ZepGraphMemoryManager.wait_until_drained(
+                    simulation_id,
+                    timeout=Config.GRAPH_MEMORY_DRAIN_TIMEOUT_SEC,
+                    on_wait=lambda left: task_manager.update_task(
+                        task_id, progress=0, message=f"Waiting for graph memory: {left} activities left to write..."
+                    ),
+                )
+                if not drained:
+                    logger.warning(
+                        f"Graph memory still writing after {Config.GRAPH_MEMORY_DRAIN_TIMEOUT_SEC}s; "
+                        f"report for {simulation_id} starts without the rest"
+                    )
 
                 agent = ReportAgent(
                     graph_id=graph_id,

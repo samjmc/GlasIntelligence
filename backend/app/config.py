@@ -110,6 +110,16 @@ class Config:
     GRAPHITI_CHUNK_OVERLAP = _safe_int(
         os.environ.get("GRAPHITI_CHUNK_OVERLAP", "100"), 100, env_key="GRAPHITI_CHUNK_OVERLAP"
     )
+    # Live graph memory: simulation activities per Graphiti episode. Measured 2026-10-04 on
+    # a real run's activities: 5 -> 29/min, 20 -> 75/min at 2.3x fewer tokens, 40 -> 117/min
+    # but keeping fewer facts. Zep keeps ZEP_GRAPH_MEMORY_BATCH_SIZE.
+    GRAPHITI_MEMORY_BATCH_SIZE = _safe_int(
+        os.environ.get("GRAPHITI_MEMORY_BATCH_SIZE", "20"), 20, env_key="GRAPHITI_MEMORY_BATCH_SIZE"
+    )
+    # How long a report waits for the run's graph memory to finish writing before it starts anyway.
+    GRAPH_MEMORY_DRAIN_TIMEOUT_SEC = _safe_int(
+        os.environ.get("GRAPH_MEMORY_DRAIN_TIMEOUT_SEC", "1200"), 1200, env_key="GRAPH_MEMORY_DRAIN_TIMEOUT_SEC"
+    )
     GRAPHITI_EPISODE_TIMEOUT_SEC = _safe_int(
         os.environ.get("GRAPHITI_EPISODE_TIMEOUT_SEC", "300"), 300, env_key="GRAPHITI_EPISODE_TIMEOUT_SEC"
     )

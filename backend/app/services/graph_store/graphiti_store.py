@@ -159,6 +159,10 @@ class GraphitiGraphStore:
         # Cost scales with LLM calls per episode, not bytes: larger chunks are cheaper.
         return Config.GRAPHITI_CHUNK_SIZE, Config.GRAPHITI_CHUNK_OVERLAP
 
+    def preferred_memory_batch_size(self) -> int | None:
+        # Same reason: one episode per batch, so bigger batches mean far fewer LLM calls.
+        return Config.GRAPHITI_MEMORY_BATCH_SIZE
+
     # ---- graph identity ----
     def _require_graph(self, graph_id: str) -> None:
         """Fail loud on a graph this database never created (e.g. one built on Zep).
