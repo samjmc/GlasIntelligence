@@ -29,6 +29,8 @@ dependencies = [
     # local embedder. sentence-transformers is pinned to 3.0.0 by camel-oasis already.
     "graphiti-core==0.30.2",
     "sentence-transformers>=3.0.0,<4",
+    # Declared directly only so [tool.uv.sources] can point Linux at the CPU build (below).
+    "torch==2.9.1",
 
     # File processing
     "PyMuPDF>=1.24.0",
@@ -82,6 +84,18 @@ dev = [
 # imports neo4j for its optional backend="neo4j" agent graph, which we never enable.
 # Measured 2026-09-24 (G0.5): full suite and an 8-round OASIS smoke pass on 5.28.6.
 override-dependencies = ["neo4j>=5.26,<6"]
+
+# On Linux, PyPI's torch is the CUDA build: 4.3 GB of NVIDIA libraries plus triton that
+# no server here uses (measured in the Dockerfile.prod image, 2026-10-07: 12.4 GB total,
+# torch 2.9.1+cu128). Take the CPU build there instead. Windows and macOS already get CPU
+# builds from PyPI, so they are unchanged.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

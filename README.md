@@ -113,9 +113,13 @@ All checks must pass before a PR can be merged to `main`:
 
 ## Deployment
 
-The backend is **not deployed anywhere** at present. The Hetzner server pipeline (staging and production, `deploy.yml`, `deploy.sh`, `docker-compose.prod.yml` / `.staging.yml`) was retired on 2026-08-10. Only the static demo is live, on GitHub Pages.
+**The app:** one Hetzner server running Docker Compose (Caddy for HTTPS, the app, a Celery worker, Neo4j and Redis), at **app.glasinsight.com**. This was decided on 2026-10-05.
+- The kit is in [`deploy/`](deploy/). The runbook, with costs, first setup and everyday operations, is [docs/hosting.md](docs/hosting.md).
+- Until the server is created, the backend is not deployed anywhere.
 
-Hosting the backend again is an open decision. It now also needs a home for Neo4j (see the end of [docs/graphiti-setup.md](docs/graphiti-setup.md)).
+**The static demo:** glasinsight.com (Cloudflare Pages), plus the GitHub Pages copy built by `deploy-pages.yml`.
+
+The older Hetzner pipeline (`deploy.yml`, `docker-compose.prod.yml` / `.staging.yml`) was retired on 2026-08-10, and the new kit replaces it.
 
 ## Monitoring & Observability
 

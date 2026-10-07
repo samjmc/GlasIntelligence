@@ -92,8 +92,4 @@ Set `GRAPH_BACKEND=zep` and `ZEP_API_KEY`. Zep is metered: each text episode cos
 
 ## Production
 
-No production backend is deployed (the old server was retired on 2026-08-10). Hosting Neo4j for production is a separate, open decision:
-
-- a Neo4j container next to the API;
-- Neo4j AuraDB Free, which pauses after 3 idle days and is fine for a demo;
-- or Zep Cloud in production, with Graphiti for development.
+Decided on 2026-10-05: production runs Neo4j Community as a container next to the API, on one Hetzner server, with Docker Compose. The kit is in `deploy/`, and the runbook is [hosting.md](hosting.md).
