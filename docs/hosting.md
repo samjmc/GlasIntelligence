@@ -57,7 +57,7 @@ Steps marked **(you)** need your accounts or payment. Claude must not create acc
    ```
    powershell -NoProfile -ExecutionPolicy Bypass -File deploy\push-secrets.ps1 -Server <IPv4>
    ```
-   For each value it uses your user environment variable when one exists (`LLM_API_KEY`, …); otherwise it asks, with hidden typing. Nothing is printed, and the temporary files are deleted at both ends.
+   For each value it uses, in order: the files given with `-EnvFile` (your local dev KEY=VALUE files; separate several with commas; `VITE_SUPABASE_*` also fills `SUPABASE_*`), your user environment variable (`LLM_API_KEY`, …), or it asks, with hidden typing. Nothing is printed, and the temporary files are deleted at both ends.
 8. **Deploy:**
    ```
    ssh -i %USERPROFILE%\.ssh\glas_hetzner root@<IPv4> /opt/glas/deploy/deploy.sh
