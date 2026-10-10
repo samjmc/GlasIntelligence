@@ -55,7 +55,7 @@
             <span v-if="selectedItem.type === 'node'" class="detail-type-badge" :style="{ background: selectedItem.color, color: '#fff' }">
               {{ selectedItem.entityType }}
             </span>
-            <button class="detail-close" @click="closeDetailPanel">×</button>
+            <button class="detail-close" aria-label="Close details" @click="closeDetailPanel">×</button>
           </div>
           
           <!-- Node details -->
@@ -801,12 +801,19 @@ const handleResize = () => {
   nextTick(renderGraph)
 }
 
+// Escape closes the details panel, same as its × button
+const handleKeydown = (e) => {
+  if (e.key === 'Escape' && selectedItem.value) closeDetailPanel()
+}
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeydown)
   if (currentSimulation) {
     currentSimulation.stop()
   }

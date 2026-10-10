@@ -1,6 +1,9 @@
 <template>
   <DemoBanner v-if="isDemoMode" />
-  <router-view />
+  <!-- The one <main> landmark on every page; views must not render their own -->
+  <main>
+    <router-view />
+  </main>
 </template>
 
 <script setup>

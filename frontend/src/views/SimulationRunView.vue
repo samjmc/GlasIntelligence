@@ -37,8 +37,10 @@
       </div>
     </header>
 
+    <ProjectUnavailable v-if="notFound" />
+
     <!-- Main Content Area -->
-    <main class="content-area">
+    <div v-else class="content-area">
       <!-- Left Panel: Graph -->
       <div class="panel-wrapper left" :style="leftPanelStyle">
         <GraphPanel 
@@ -56,6 +58,7 @@
         <Step3Simulation
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
+          :startOnMount="startRequested"
           :minutesPerRound="minutesPerRound"
           :projectData="projectData"
           :graphData="graphData"
@@ -66,7 +69,7 @@
           @update-status="updateStatus"
         />
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -75,6 +78,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
+import ProjectUnavailable from '../components/ProjectUnavailable.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation, getSimulationConfig, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
 
@@ -93,12 +97,19 @@ const viewMode = ref('split')
 const currentSimulationId = ref(route.params.simulationId)
 // Get maxRounds from query params at init so child component receives it immediately
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
+// Set by Step 2's "start" (history state, not the URL), so only that click starts a run.
+// Cleared at once so a page reload or a later visit does not restart it.
+const startRequested = Boolean(window.history.state?.startRun)
+if (startRequested) {
+  window.history.replaceState({ ...window.history.state, startRun: false }, '')
+}
 const minutesPerRound = ref(30) // Default 30 minutes per round
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
 const systemLogs = ref([])
 const currentStatus = ref('processing') // processing | completed | error
+const notFound = ref(false) // backend 404: the simulation or project was deleted or expired
 
 // --- Computed Layout Styles ---
 const leftPanelStyle = computed(() => {
@@ -240,6 +251,12 @@ const loadSimulationData = async () => {
       addLog(`Failed to load simulation data: ${simRes.error || 'Unknown error'}`)
     }
   } catch (err) {
+    if (err.response?.status === 404) {
+      notFound.value = true
+      currentStatus.value = 'error'
+      addLog('This project is no longer available.')
+      return
+    }
     addLog(`Load error: ${err.message}`)
   }
 }
@@ -420,7 +437,7 @@ onUnmounted(() => {
 .step-num {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  color: #999;
+  color: #6b6b6b;
 }
 
 .step-name {

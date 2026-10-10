@@ -38,7 +38,7 @@
     </header>
 
     <!-- Main Content Area -->
-    <main class="content-area">
+    <div class="content-area">
       <!-- Left Panel: Graph -->
       <div class="panel-wrapper left" :style="leftPanelStyle">
         <GraphPanel 
@@ -61,7 +61,7 @@
           @update-status="updateStatus"
         />
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -322,7 +322,7 @@ onMounted(() => {
 .step-num {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  color: #999;
+  color: #6b6b6b;
 }
 
 .step-name {

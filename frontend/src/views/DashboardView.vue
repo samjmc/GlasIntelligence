@@ -151,7 +151,8 @@
           <div v-if="creditHistory.length === 0" class="empty-block">
             <p>No simulation transactions yet.</p>
           </div>
-          <table v-else class="credit-table">
+          <div v-else class="credit-table-wrap">
+          <table class="credit-table">
             <thead>
               <tr>
                 <th>Date</th>
@@ -171,6 +172,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </section>
       </template>
     </div>
@@ -477,7 +479,7 @@ onMounted(() => {
 
 .stat-label {
   font-size: 12px;
-  color: #666;
+  color: #8a8a8a;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -535,7 +537,7 @@ onMounted(() => {
 .empty-block {
   padding: 32px;
   text-align: center;
-  color: #555;
+  color: #8a8a8a;
   font-size: 14px;
   background: #111;
   border-radius: 8px;
@@ -581,7 +583,7 @@ onMounted(() => {
 .sim-date {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: #555;
+  color: #8a8a8a;
 }
 
 .sim-status {
@@ -663,7 +665,7 @@ onMounted(() => {
 .session-date {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #555;
+  color: #8a8a8a;
 }
 
 .session-status-badge {
@@ -683,6 +685,7 @@ onMounted(() => {
 }
 
 .step-link {
+  min-height: 24px;
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 500;
@@ -719,6 +722,10 @@ onMounted(() => {
 }
 
 /* Credit Table */
+.credit-table-wrap {
+  overflow-x: auto;
+}
+
 .credit-table {
   width: 100%;
   border-collapse: collapse;
@@ -730,7 +737,7 @@ onMounted(() => {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #555;
+  color: #8a8a8a;
   padding: 8px 12px;
   border-bottom: 1px solid #1e1e1e;
 }
@@ -824,7 +831,7 @@ onMounted(() => {
   font-size: 12px;
   color: #888;
 }
-.bundle-progress-text { font-size: 11px; color: #666; font-family: 'JetBrains Mono', monospace; }
+.bundle-progress-text { font-size: 11px; color: #8a8a8a; font-family: 'JetBrains Mono', monospace; }
 .bundle-bar-wrap {
   width: 80px; height: 4px; background: #222; border-radius: 2px; overflow: hidden;
 }
@@ -839,7 +846,7 @@ onMounted(() => {
 .reminder-row { padding: 12px 20px; background: #111; }
 .reminder-info { display: flex; justify-content: space-between; }
 .reminder-scenario { font-size: 13px; color: #ccc; }
-.reminder-date { font-size: 12px; color: #666; font-family: 'JetBrains Mono', monospace; }
+.reminder-date { font-size: 12px; color: #8a8a8a; font-family: 'JetBrains Mono', monospace; }
 
 @media (max-width: 640px) {
   .stats-row {
@@ -855,5 +862,19 @@ onMounted(() => {
   }
 
   .credit-banner { flex-direction: column; text-align: center; }
+}
+
+/* Narrow phones: stack the session row so the date, badge and buttons never overlap */
+@media (max-width: 400px) {
+  .session-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .session-meta,
+  .session-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

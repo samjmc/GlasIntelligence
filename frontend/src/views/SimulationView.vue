@@ -37,8 +37,10 @@
       </div>
     </header>
 
+    <ProjectUnavailable v-if="notFound" />
+
     <!-- Main Content Area -->
-    <main class="content-area">
+    <div v-else class="content-area">
       <!-- Left Panel: Graph -->
       <div class="panel-wrapper left" :style="leftPanelStyle">
         <GraphPanel 
@@ -64,7 +66,7 @@
           @update-status="updateStatus"
         />
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -73,6 +75,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+import ProjectUnavailable from '../components/ProjectUnavailable.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { useApi } from '../composables/useApi'
@@ -96,6 +99,7 @@ const graphData = ref(null)
 const graphLoading = ref(false)
 const systemLogs = ref([])
 const currentStatus = ref('processing') // processing | completed | error
+const notFound = ref(false) // backend 404: the simulation or project was deleted or expired
 const userPlan = ref('free')
 
 // --- Computed Layout Styles ---
@@ -165,7 +169,9 @@ const handleNextStep = (params = {}) => {
   // Build route parameters
   const routeParams = {
     name: 'SimulationRun',
-    params: { simulationId: currentSimulationId.value }
+    params: { simulationId: currentSimulationId.value },
+    // Tells Step 3 to start (or restart) the run; opening Step 3 any other way never restarts it
+    state: { startRun: true }
   }
   
   // If custom rounds specified, pass via query parameter
@@ -206,6 +212,12 @@ const loadSimulationData = async () => {
       addLog(`Failed to load simulation data: ${simRes.error || 'Unknown error'}`)
     }
   } catch (err) {
+    if (err.response?.status === 404) {
+      notFound.value = true
+      currentStatus.value = 'error'
+      addLog('This project is no longer available.')
+      return
+    }
     addLog(`Load error: ${err.message}`)
   }
 }
@@ -349,7 +361,7 @@ onMounted(async () => {
 .step-num {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  color: #999;
+  color: #6b6b6b;
 }
 
 .step-name {

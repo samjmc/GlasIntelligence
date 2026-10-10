@@ -120,7 +120,7 @@ onMounted(async () => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.empty-state { text-align: center; padding: 60px; color: #666; }
+.empty-state { text-align: center; padding: 60px; color: #8a8a8a; }
 .back-link { color: #00c853; text-decoration: none; }
 
 .compare-grid { display: grid; gap: 16px; }
@@ -129,11 +129,11 @@ onMounted(async () => {
   padding: 24px; display: flex; flex-direction: column; gap: 20px;
 }
 .card-header { }
-.card-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #666; }
+.card-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #8a8a8a; }
 .card-title { font-size: 14px; font-weight: 600; color: #fff; margin: 6px 0 0; line-height: 1.4; }
 
 .card-verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.verdict-label { font-size: 11px; text-transform: uppercase; color: #666; letter-spacing: 0.08em; }
+.verdict-label { font-size: 11px; text-transform: uppercase; color: #8a8a8a; letter-spacing: 0.08em; }
 .verdict-value { font-size: 18px; font-weight: 700; }
 .verdict-go { color: #00b894; }
 .verdict-nogo { color: #e17055; }
@@ -155,7 +155,7 @@ onMounted(async () => {
 .dir-positive { color: #00b894; }
 .dir-negative { color: #e17055; }
 .dir-neutral { color: #888; }
-.driver-mag { font-size: 11px; color: #666; }
+.driver-mag { font-size: 11px; color: #8a8a8a; }
 
 .tested-list { margin: 0; padding-left: 16px; font-size: 12px; color: #999; }
 .tested-list li { line-height: 1.6; }

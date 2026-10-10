@@ -33,8 +33,10 @@
       </div>
     </header>
 
+    <ProjectUnavailable v-if="notFound" />
+
     <!-- Main Content Area -->
-    <main class="content-area">
+    <div v-else class="content-area">
       <!-- Left Panel: Graph -->
       <div class="panel-wrapper left" :style="leftPanelStyle">
         <GraphPanel 
@@ -70,7 +72,7 @@
           @add-log="addLog"
         />
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -80,6 +82,7 @@ import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+import ProjectUnavailable from '../components/ProjectUnavailable.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 
@@ -99,6 +102,7 @@ const currentProjectId = ref(route.params.projectId)
 const loading = ref(false)
 const graphLoading = ref(false)
 const error = ref('')
+const notFound = ref(false) // backend 404: the project was deleted or expired
 const projectData = ref(null)
 const graphData = ref(null)
 const currentPhase = ref(-1) // -1: Upload, 0: Ontology, 1: Build, 2: Complete
@@ -255,6 +259,12 @@ const loadProject = async () => {
       addLog(`Error loading project: ${res.error}`)
     }
   } catch (err) {
+    if (err.response?.status === 404) {
+      notFound.value = true
+      error.value = 'This project is no longer available.'
+      addLog(error.value)
+      return
+    }
     error.value = err.message
     addLog(`Exception in loadProject: ${err.message}`)
   } finally {
@@ -496,7 +506,7 @@ onUnmounted(() => {
 .step-num {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  color: #999;
+  color: #6b6b6b;
 }
 
 .step-name {

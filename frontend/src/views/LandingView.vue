@@ -373,8 +373,7 @@ const plans = [
   font-family: 'JetBrains Mono', monospace;
   font-size: 32px;
   font-weight: 700;
-  color: #00c853;
-  opacity: 0.5;
+  color: #0d9c46; /* was #00c853 at 0.5 opacity (2.9:1 on #111); a solid dim green passes */
   display: block;
   margin-bottom: 16px;
 }
@@ -469,14 +468,14 @@ const plans = [
 .feed-excerpt {
   font-size: 13px;
   line-height: 1.65;
-  color: #777;
+  color: #8a8a8a;
   margin: 0 0 16px;
 }
 
 .feed-date {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: #555;
+  color: #8a8a8a;
 }
 
 /* ── Pricing Preview ─────────────────────── */
@@ -526,7 +525,7 @@ const plans = [
 
 .plan-desc {
   font-size: 13px;
-  color: #666;
+  color: #8a8a8a;
   margin: 0;
 }
 
@@ -548,7 +547,7 @@ const plans = [
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   letter-spacing: 0.2em;
-  color: #555;
+  color: #8a8a8a;
   margin: 0 0 24px;
   font-weight: 600;
 }
@@ -561,7 +560,7 @@ const plans = [
 }
 
 .footer-links a {
-  color: #777;
+  color: #8a8a8a;
   text-decoration: none;
   font-size: 14px;
   transition: color 0.2s;
@@ -573,7 +572,7 @@ const plans = [
 
 .footer-disclaimer {
   font-size: 12px;
-  color: #444;
+  color: #8a8a8a;
   line-height: 1.6;
   margin: 0 0 16px;
   max-width: 480px;
@@ -583,7 +582,7 @@ const plans = [
 
 .footer-copy {
   font-size: 12px;
-  color: #333;
+  color: #8a8a8a;
   margin: 0;
 }
 

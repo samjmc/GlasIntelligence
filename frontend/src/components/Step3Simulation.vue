@@ -104,6 +104,19 @@
 
     <!-- Main Content: Timeline -->
     <div class="main-content-area" ref="scrollContainer">
+      <!-- Run error: shown instead of silently restarting (a restart can use a credit) -->
+      <div v-if="startError" class="run-error" role="alert" data-test="run-error">
+        <span class="run-error-msg">{{ startError }}</span>
+        <button
+          class="action-btn primary"
+          data-test="restart-simulation"
+          :disabled="isStarting"
+          @click="doStartSimulation"
+        >
+          {{ isStarting ? 'Starting...' : 'Restart simulation' }}
+        </button>
+      </div>
+
       <!-- Timeline Header -->
       <div class="timeline-header" v-if="allActions.length > 0">
         <div class="timeline-stats">
@@ -263,7 +276,7 @@
           </div>
         </TransitionGroup>
 
-        <div v-if="allActions.length === 0" class="waiting-state">
+        <div v-if="allActions.length === 0 && !startError && phase !== 2" class="waiting-state">
           <div class="pulse-ring"></div>
           <span>Waiting for agent actions...</span>
         </div>
@@ -324,7 +337,10 @@ const props = defineProps({
   },
   projectData: Object,
   graphData: Object,
-  systemLogs: Array
+  systemLogs: Array,
+  // True only when the user just clicked "start" in Step 2: start (or restart) the run
+  // without asking the backend first. Otherwise the run's current state decides.
+  startOnMount: Boolean
 })
 
 const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
@@ -539,7 +555,7 @@ const fetchRunStatus = async () => {
         addLog(`✗ Simulation failed: ${data.error || 'Unknown error'}`)
         startError.value = data.error || 'Simulation failed'
         stopPolling()
-        emit('update-status', 'failed')
+        emit('update-status', 'error')
         return
       }
       
@@ -699,10 +715,66 @@ watch(() => props.systemLogs?.length, () => {
   })
 })
 
+// Statuses from the backend RunnerStatus enum (simulation_runner.py) that mean a run is in progress.
+const ACTIVE_RUNNER_STATUSES = ['starting', 'running', 'paused', 'stopping']
+
+// Opening this page must not restart a run: starting again stops a live run, clears its
+// logs and can use a credit. Only a run that never started (status 'idle') starts here.
+const initRun = async () => {
+  if (props.startOnMount) {
+    doStartSimulation()
+    return
+  }
+
+  let data
+  try {
+    const res = await getRunStatus(props.simulationId)
+    if (!res.success || !res.data) throw new Error(res.error || 'Could not read the simulation status')
+    data = res.data
+  } catch (err) {
+    startError.value = err.message
+    addLog(`✗ Status check failed: ${err.message}`)
+    emit('update-status', 'error')
+    return
+  }
+
+  const status = data.runner_status
+  if (status === 'idle') {
+    doStartSimulation()
+    return
+  }
+
+  runStatus.value = data
+  prevTwitterRound.value = data.twitter_current_round || 0
+  prevRedditRound.value = data.reddit_current_round || 0
+
+  if (status === 'completed' || status === 'stopped') {
+    addLog('✓ Simulation already finished')
+    phase.value = 2
+    emit('update-status', 'completed')
+    fetchRunStatusDetail()
+  } else if (status === 'failed') {
+    startError.value = data.error || 'Simulation failed'
+    addLog(`✗ Simulation failed: ${startError.value}`)
+    emit('update-status', 'error')
+    fetchRunStatusDetail()
+  } else if (ACTIVE_RUNNER_STATUSES.includes(status)) {
+    addLog('✓ Attached to running simulation')
+    phase.value = 1
+    fetchRunStatusDetail()
+    startStatusPolling()
+    startDetailPolling()
+  } else {
+    startError.value = `Unknown simulation status: ${status}`
+    addLog(`✗ ${startError.value}`)
+    emit('update-status', 'error')
+  }
+}
+
 onMounted(() => {
   addLog('Step3 simulation runtime initializing')
   if (props.simulationId) {
-    doStartSimulation()
+    initRun()
   }
 })
 
@@ -921,6 +993,23 @@ onUnmounted(() => {
   background: #FFF;
 }
 
+.run-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 24px;
+  padding: 12px 16px;
+  border: 1px solid #F5C2C0;
+  border-radius: 4px;
+  background: #FFF5F5;
+}
+
+.run-error-msg {
+  font-size: 13px;
+  color: #B42318;
+}
+
 /* Timeline Header */
 .timeline-header {
   position: sticky;
@@ -1129,7 +1218,7 @@ onUnmounted(() => {
 .badge-post { background: #F0F0F0; color: #333; border-color: #E0E0E0; }
 .badge-comment { background: #F0F0F0; color: #666; border-color: #E0E0E0; }
 .badge-action { background: #FFF; color: #666; border: 1px solid #E0E0E0; }
-.badge-meta { background: #FAFAFA; color: #999; border: 1px dashed #DDD; }
+.badge-meta { background: #FAFAFA; color: #6b6b6b; border: 1px dashed #DDD; }
 .badge-idle { opacity: 0.5; }
 
 .content-text {

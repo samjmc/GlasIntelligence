@@ -1111,7 +1111,7 @@ onUnmounted(() => {
   font-family: 'JetBrains Mono', monospace;
   font-size: 20px;
   font-weight: 700;
-  color: #E0E0E0;
+  color: #8a8a8a;
 }
 
 .step-card.active .step-num,
@@ -1134,8 +1134,8 @@ onUnmounted(() => {
 }
 
 .badge.success { background: #E8F5E9; color: #2E7D32; }
-.badge.processing { background: #FF5722; color: #FFF; }
-.badge.pending { background: #F5F5F5; color: #999; }
+.badge.processing { background: #FF5722; color: #000; }
+.badge.pending { background: #F5F5F5; color: #6b6b6b; }
 .badge.accent { background: #E3F2FD; color: #1565C0; }
 
 .card-content {
@@ -1145,7 +1145,7 @@ onUnmounted(() => {
 .api-note {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  color: #999;
+  color: #6b6b6b;
   margin-bottom: 8px;
 }
 
