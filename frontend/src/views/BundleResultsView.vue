@@ -28,7 +28,7 @@
       </div>
     </header>
 
-    <main
+    <div
       class="bundle-main"
       :class="{ 'has-sidebar': status?.status === 'running', 'has-comparison': isComparisonVisible }"
     >
@@ -225,7 +225,7 @@
         <div class="loading-spinner"></div>
         <span>Loading analysis status...</span>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 

@@ -1053,7 +1053,7 @@ onUnmounted(() => {
 }
 .history-empty-hint {
   font-size: 0.9rem;
-  color: #666;
+  color: #8a8a8a;
   line-height: 1.5;
   margin: 0;
 }

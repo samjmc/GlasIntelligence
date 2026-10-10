@@ -7,6 +7,7 @@ import atexit
 import contextlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -36,6 +37,42 @@ ZERO_AGENT_ACTIONS_ERROR = (
     "Simulation completed with zero agent actions — only the opening posts were published. "
     "Check model/API key configuration and the schedule (time_config start_hour vs agents' active_hours)."
 )
+
+# HTTP status of an LLM provider error, as the openai client prints it ("Error code: 402 - ...")
+_LLM_STATUS_RE = re.compile(r"Error code: (401|402|429)\b")
+_LLM_STATUS_CAUSES = {
+    "402": "the LLM provider refused the agents' requests because the account is out of credit (HTTP 402). "
+    "Top up the LLM account, then restart the simulation.",
+    "401": "the LLM provider rejected the API key (HTTP 401). Check LLM_API_KEY.",
+    "429": "the LLM provider rate-limited the agents' requests (HTTP 429). Wait, then restart the simulation.",
+}
+
+
+def _is_zero_action_error(error: str | None) -> bool:
+    return bool(error) and error.startswith((ZERO_ACTIONS_ERROR, ZERO_AGENT_ACTIONS_ERROR))
+
+
+def _llm_error_cause(sim_log_path: str) -> str | None:
+    """The most frequent LLM provider failure in the run's log, as a sentence; None if there is none.
+
+    A zero-action run is usually the provider failing every agent call, and the generic
+    "check model/API key" message gave users no way to tell credit, key and rate limit apart.
+    """
+    try:
+        with open(sim_log_path, encoding="utf-8", errors="replace") as f:
+            f.seek(max(0, os.path.getsize(sim_log_path) - 2_000_000))
+            codes = _LLM_STATUS_RE.findall(f.read())
+    except OSError:
+        return None
+    if not codes:
+        return None
+    return _LLM_STATUS_CAUSES[max(set(codes), key=codes.count)]
+
+
+def _zero_action_error(base: str, sim_dir: str) -> str:
+    cause = _llm_error_cause(os.path.join(sim_dir, "simulation.log"))
+    return f"{base} Cause: {cause}" if cause else base
+
 
 # Platform detection
 IS_WINDOWS = sys.platform == "win32"
@@ -538,7 +575,7 @@ class SimulationRunner:
             # Process ended
             exit_code = process.returncode
 
-            if exit_code == 0 and state.error in (ZERO_ACTIONS_ERROR, ZERO_AGENT_ACTIONS_ERROR):
+            if exit_code == 0 and _is_zero_action_error(state.error):
                 # A clean exit does not undo the zero-action verdict from simulation_end.
                 state.runner_status = RunnerStatus.FAILED
                 logger.warning(f"Simulation process exited cleanly but stays failed: {state.error}")
@@ -664,13 +701,18 @@ class SimulationRunner:
                                         state.completed_at = datetime.now().isoformat()
                                         if cls._completed_with_zero_actions(state):
                                             state.runner_status = RunnerStatus.FAILED
-                                            state.error = ZERO_ACTIONS_ERROR
+                                            state.error = _zero_action_error(
+                                                ZERO_ACTIONS_ERROR, os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
+                                            )
                                             logger.warning(
                                                 f"Simulation completed with zero actions across all platforms: {state.simulation_id}"
                                             )
                                         elif state.agent_actions_count == 0:
                                             state.runner_status = RunnerStatus.FAILED
-                                            state.error = ZERO_AGENT_ACTIONS_ERROR
+                                            state.error = _zero_action_error(
+                                                ZERO_AGENT_ACTIONS_ERROR,
+                                                os.path.join(cls.RUN_STATE_DIR, state.simulation_id),
+                                            )
                                             logger.warning(
                                                 f"Simulation completed with zero agent actions (opening posts only): {state.simulation_id}"
                                             )

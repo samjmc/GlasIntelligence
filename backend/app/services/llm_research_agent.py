@@ -163,7 +163,9 @@ class LLMResearchAgent:
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
-                return llm.chat(messages=messages, temperature=0.3, max_tokens=4096)
+                # The prompt asks for 3000-6000 words (~8k tokens). At 4096 every dossier was cut
+                # mid-"Historical Precedents", losing the later sections incl. Key Facts (2026-10-10).
+                return llm.chat(messages=messages, temperature=0.3, max_tokens=16000)
             except RateLimitError as e:
                 # insufficient_quota is permanent — no point retrying until credits are added
                 if getattr(e, "code", None) == "insufficient_quota" or "insufficient_quota" in str(e):

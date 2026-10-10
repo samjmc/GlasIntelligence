@@ -1,10 +1,10 @@
 import DOMPurify from 'dompurify'
 
-export function renderMarkdown(content) {
+export function renderMarkdown(content, { stripLeadingHeading = true } = {}) {
   if (!content) return ''
-  
+
   // Remove leading ## header (chapter title shown elsewhere)
-  let processedContent = content.replace(/^##\s+.+\n+/, '')
+  let processedContent = stripLeadingHeading ? content.replace(/^##\s+.+\n+/, '') : content
   
   // Handle code blocks
   let html = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')

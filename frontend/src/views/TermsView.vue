@@ -178,6 +178,9 @@ a {
   text-decoration: none;
 }
 
+/* Links inside text must not rely on colour alone (WCAG 1.4.1) */
+p a,
+li a,
 a:hover {
   text-decoration: underline;
 }
@@ -196,6 +199,6 @@ section:last-of-type {
   padding-top: 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 0.85rem;
-  color: #666;
+  color: #8a8a8a;
 }
 </style>

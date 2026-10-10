@@ -131,7 +131,7 @@ async function handleLogin() {
 .auth-subtitle {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 0.72rem;
-  color: #555;
+  color: #8a8a8a;
   margin: 0 0 32px 0;
   letter-spacing: 0.5px;
 }
@@ -165,7 +165,7 @@ async function handleLogin() {
 }
 
 .auth-input::placeholder {
-  color: #444;
+  color: #8a8a8a;
 }
 
 .auth-input:focus {
@@ -240,7 +240,7 @@ async function handleLogin() {
   text-align: center;
   margin-top: 28px;
   font-size: 0.85rem;
-  color: #555;
+  color: #8a8a8a;
 }
 
 .auth-link {

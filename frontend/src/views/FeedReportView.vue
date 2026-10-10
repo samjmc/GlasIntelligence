@@ -212,7 +212,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 16px;
   padding: 120px 0;
-  color: #666;
+  color: #8a8a8a;
 }
 
 .spinner {
@@ -288,12 +288,12 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   font-size: 0.85rem;
-  color: #666;
+  color: #8a8a8a;
   margin-bottom: 24px;
 }
 
 .meta-sep {
-  color: #333;
+  color: #8a8a8a;
 }
 
 .meta-free {

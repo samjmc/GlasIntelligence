@@ -30,4 +30,24 @@ describe('App', () => {
     })
     expect(wrapper.html()).toContain('Home')
   })
+
+  it('renders the routed page inside exactly one <main> landmark', async () => {
+    router.push('/')
+    await router.isReady()
+
+    const wrapper = mount(App, {
+      global: { plugins: [router] },
+    })
+    expect(wrapper.findAll('main')).toHaveLength(1)
+    expect(wrapper.find('main').text()).toContain('Home')
+  })
+
+  it('has no view or component that renders a second <main>', () => {
+    const sources = import.meta.glob(['./views/*.vue', './components/**/*.vue'], {
+      query: '?raw', import: 'default', eager: true,
+    })
+    expect(Object.keys(sources).length).toBeGreaterThan(20)
+    const offenders = Object.keys(sources).filter((f) => /<main[\s>]/.test(sources[f]))
+    expect(offenders).toEqual([])
+  })
 })

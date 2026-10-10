@@ -31,7 +31,7 @@
           <div class="logo-container">
             <img src="../assets/logo/glas-logo.png" alt="Glas Intelligence Logo" class="hero-logo" />
           </div>
-          <button class="scroll-down-btn" @click="scrollToBottom">
+          <button class="scroll-down-btn" aria-label="Scroll down" @click="scrollToBottom">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
         </div>
@@ -226,7 +226,11 @@
                     </button>
                     <button class="remove-btn" @click="removeBriefing">&times;</button>
                   </div>
-                  <div class="briefing-content" :class="{ expanded: briefingExpanded }">{{ briefingExpanded ? briefing.content_md : briefing.content_md.slice(0, 300) + '...' }}</div>
+                  <div
+                    class="briefing-content"
+                    :class="{ expanded: briefingExpanded }"
+                    v-html="renderMarkdown(briefingExpanded ? briefing.content_md : briefing.content_md.slice(0, 300) + '...', { stripLeadingHeading: false })"
+                  ></div>
                 </div>
 
                 <div class="console-divider inner-divider">
@@ -354,6 +358,7 @@ import { isDemoMode, SESSION_KEY } from '../demo/config'
 import { encodeDemoId } from '../demo/sessionId'
 import { setActiveScenario } from '../demo/adapter'
 import DemoScenarioPicker from '../components/DemoScenarioPicker.vue'
+import { renderMarkdown } from '../components/step4/step4ReportMarkdown.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -1105,9 +1110,20 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
   line-height: 1.6;
   max-height: 120px;
   overflow: hidden;
-  white-space: pre-wrap;
   transition: max-height 0.3s ease;
 }
+/* Rendered Markdown (v-html): scoped styles need :deep to reach it */
+.briefing-content :deep(.md-p),
+.briefing-content :deep(.md-ul),
+.briefing-content :deep(.md-ol),
+.briefing-content :deep(.md-quote) { margin-bottom: 0.6em; }
+.briefing-content :deep(.md-ul),
+.briefing-content :deep(.md-ol) { padding-left: 1.4em; }
+.briefing-content :deep(.md-h2),
+.briefing-content :deep(.md-h3),
+.briefing-content :deep(.md-h4),
+.briefing-content :deep(.md-h5) { margin: 0.8em 0 0.4em; color: var(--text-primary); font-size: 0.9rem; }
+.briefing-content :deep(strong) { color: var(--text-primary); }
 .briefing-content.expanded {
   max-height: none;
   overflow-y: auto;
@@ -1153,7 +1169,7 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
   color: #ccc;
 }
 .file-name { flex: 1; }
-.remove-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #666; }
+.remove-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #8a8a8a; }
 .remove-btn:hover { color: #c62828; }
 
 .console-divider {
@@ -1213,7 +1229,7 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
 .decision-input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text-primary); font-size: 13px; font-family: var(--font-sans); transition: border-color 0.2s; }
 .prefill-restored-hint { font-size: 11px; color: var(--accent, #00e0ff); font-family: var(--font-mono); opacity: 0.75; margin-top: 4px; }
 .decision-input:focus { outline: none; border-color: var(--accent); }
-.decision-input::placeholder { color: #555; }
+.decision-input::placeholder { color: #8a8a8a; }
 
 /* Research loading */
 .research-loading-content { display: inline-flex; align-items: center; gap: 8px; }
@@ -1246,7 +1262,7 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
   border-radius: 5px; background: rgba(255,255,255,0.02); border: 1px solid var(--border);
 }
 .bundle-preview-idx {
-  font-family: var(--font-mono); font-size: 11px; color: #555;
+  font-family: var(--font-mono); font-size: 11px; color: #8a8a8a;
   min-width: 18px; text-align: center; padding-top: 1px;
 }
 .bundle-preview-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }

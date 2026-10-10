@@ -205,7 +205,8 @@ async function redirectToCheckout(product) {
       loading.value = false
     }
   } catch (err) {
-    errorMsg.value = 'Network error — please try again'
+    // A server reply (err.status set by useApi) carries its own message, e.g. "Billing not configured"
+    errorMsg.value = (err.status && err.message) || 'Network error — please try again'
     loading.value = false
   }
 }
@@ -336,7 +337,7 @@ async function redirectToCheckout(product) {
 
 .price-period {
   font-size: 0.9rem;
-  color: #666;
+  color: #8a8a8a;
   margin-left: 0.15rem;
 }
 
@@ -363,13 +364,13 @@ async function redirectToCheckout(product) {
 }
 
 .cross {
-  color: #555;
+  color: #8a8a8a;
   font-weight: 700;
   font-size: 0.85rem;
 }
 
 .feature-excluded {
-  color: #555 !important;
+  color: #8a8a8a !important;
 }
 
 .feature-overage {
@@ -501,7 +502,7 @@ async function redirectToCheckout(product) {
 
 .pack-unit {
   font-size: 0.75rem;
-  color: #666;
+  color: #8a8a8a;
 }
 
 .pack-research {

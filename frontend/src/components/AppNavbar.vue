@@ -48,6 +48,17 @@ async function handleLogout() {
   gap: 24px;
 }
 
+.nav-brand,
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px; /* minimum tap target (WCAG 2.5.8) */
+}
+
+.nav-logout {
+  min-height: 24px;
+}
+
 .nav-link {
   color: #888;
   text-decoration: none;
@@ -78,5 +89,22 @@ async function handleLogout() {
 .nav-logout:hover {
   border-color: #666;
   color: #fff;
+}
+
+/* Phones: keep the logo clear of the first link */
+@media (max-width: 480px) {
+  .app-nav {
+    padding: 0 16px;
+    gap: 16px;
+  }
+
+  .nav-right {
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .nav-logout {
+    padding: 4px 10px;
+  }
 }
 </style>

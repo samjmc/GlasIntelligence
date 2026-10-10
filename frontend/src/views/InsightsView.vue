@@ -88,7 +88,7 @@ onMounted(async () => {
 
 .insights-sub {
   font-size: 15px;
-  color: #666;
+  color: #8a8a8a;
   margin: 0;
 }
 
@@ -102,7 +102,7 @@ onMounted(async () => {
 .empty-state {
   text-align: center;
   padding: 64px 0;
-  color: #555;
+  color: #8a8a8a;
   font-size: 15px;
 }
 
@@ -145,7 +145,7 @@ onMounted(async () => {
 .article-date {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: #555;
+  color: #8a8a8a;
 }
 
 .article-title {
@@ -160,7 +160,7 @@ onMounted(async () => {
 .article-excerpt {
   font-size: 14px;
   line-height: 1.7;
-  color: #777;
+  color: #8a8a8a;
   margin: 0 0 18px;
 }
 

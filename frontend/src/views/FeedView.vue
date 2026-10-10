@@ -14,8 +14,8 @@
 
       <div class="feed-controls">
         <div class="filter-group">
-          <label class="filter-label">Industry</label>
-          <select v-model="selectedIndustry" class="filter-select" @change="loadSimulations">
+          <label class="filter-label" for="feed-industry">Industry</label>
+          <select id="feed-industry" v-model="selectedIndustry" class="filter-select" @change="loadSimulations">
             <option value="">All Industries</option>
             <option v-for="ind in industries" :key="ind.id" :value="ind.id">
               {{ ind.name }} ({{ ind.country }})
@@ -240,9 +240,10 @@ function viewSimulation(sim) {
 }
 
 function viewReport(sim) {
-  const targetPath = sim.id?.startsWith('demo-')
-    ? `/feed/report/${sim.id}`
-    : sim.report_id ? `/report/${sim.report_id}` : null
+  // No report_id yet: the feed report page (the same link Insights uses) still works
+  const targetPath = !sim.id?.startsWith('demo-') && sim.report_id
+    ? `/report/${sim.report_id}`
+    : sim.id ? `/feed/report/${sim.id}` : null
   if (!targetPath) return
 
   if (!authState.user) {
@@ -347,7 +348,7 @@ watch(
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #666;
+  color: #8a8a8a;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -379,7 +380,7 @@ watch(
   justify-content: center;
   gap: 16px;
   padding: 80px 0;
-  color: #666;
+  color: #8a8a8a;
   font-size: 0.95rem;
 }
 
@@ -399,12 +400,12 @@ watch(
 .empty-state {
   text-align: center;
   padding: 100px 20px;
-  color: #666;
+  color: #8a8a8a;
 }
 
 .empty-icon {
   font-size: 2rem;
-  color: #333;
+  color: #8a8a8a;
   margin-bottom: 20px;
 }
 
@@ -479,7 +480,7 @@ watch(
 .card-date {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.7rem;
-  color: #555;
+  color: #8a8a8a;
 }
 
 .card-title {
@@ -563,7 +564,7 @@ watch(
   align-items: center;
   gap: 8px;
   font-size: 0.8rem;
-  color: #555;
+  color: #8a8a8a;
 }
 
 .lock-icon {
