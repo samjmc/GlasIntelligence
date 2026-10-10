@@ -864,7 +864,7 @@ class QuantitativeAnalysisService:
 
         result.most_active_agents = agent_stats[:5]
 
-        name_to_type = self._build_agent_type_map(profiles)
+        name_to_type = self._build_agent_type_map(profiles, simulation_id)
         type_stats: dict[str, dict[str, Any]] = {}
         for agent in agent_stats:
             atype = name_to_type.get(agent["agent_name"], "Unknown")
@@ -902,14 +902,16 @@ class QuantitativeAnalysisService:
             except Exception as e:
                 logger.warning(f"Failed to retrieve graph facts for stance analysis: {e}")
 
+        name_to_type = self._build_agent_type_map(profiles, simulation_id)
         agent_summaries = []
         for i, profile in enumerate(profiles):
+            name = self._agent_name(profile) or f"Agent_{i}"
             agent_summaries.append(
                 {
                     "index": i,
-                    "name": profile.get("realname", profile.get("username", f"Agent_{i}")),
+                    "name": name,
                     "country": profile.get("country", "Unknown"),
-                    "entity_type": profile.get("source_entity_type", profile.get("profession", "Unknown")),
+                    "entity_type": name_to_type.get(name, "Unknown"),
                     "bio": profile.get("bio", "")[:200],
                     "persona": profile.get("persona", "")[:300],
                 }
@@ -1027,7 +1029,9 @@ class QuantitativeAnalysisService:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.2,
-                max_tokens=4096,
+                # ~45 tokens per agent: at 4096 a 90-agent run's JSON was cut mid-list, failed to
+                # parse, and stance analysis returned 0 agents (live, 2026-10-10).
+                max_tokens=16000,
             )
         except Exception as e:
             logger.error(f"LLM stance classification failed: {e}")
@@ -1516,7 +1520,7 @@ class QuantitativeAnalysisService:
 
         agent_stats = SimulationRunner.get_agent_stats(simulation_id)
         profiles = self._load_agent_profiles(simulation_id)
-        name_to_type = self._build_agent_type_map(profiles)
+        name_to_type = self._build_agent_type_map(profiles, simulation_id)
 
         global_mean = 0.0
         if agent_stats:
@@ -1575,12 +1579,13 @@ class QuantitativeAnalysisService:
     # Helpers
     # ───────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _sim_dir(simulation_id: str) -> str:
+        return os.path.join(os.path.dirname(__file__), f"../../uploads/simulations/{simulation_id}")
+
     def _load_agent_profiles(self, simulation_id: str) -> list[dict[str, Any]]:
         """Load agent persona files (mirrors ZepTools._load_agent_profiles)."""
-        sim_dir = os.path.join(
-            os.path.dirname(__file__),
-            f"../../uploads/simulations/{simulation_id}",
-        )
+        sim_dir = self._sim_dir(simulation_id)
 
         reddit_path = os.path.join(sim_dir, "reddit_profiles.json")
         if os.path.exists(reddit_path):
@@ -1612,14 +1617,33 @@ class QuantitativeAnalysisService:
 
         return []
 
-    def _build_agent_type_map(self, profiles: list[dict[str, Any]]) -> dict[str, str]:
-        """Map agent name -> entity type from profiles."""
+    @staticmethod
+    def _agent_name(profile: dict[str, Any]) -> str:
+        """The display name the action logs use. Reddit profiles store it as ``name``, not ``realname``."""
+        return profile.get("realname") or profile.get("name") or profile.get("username") or ""
+
+    def _build_agent_type_map(self, profiles: list[dict[str, Any]], simulation_id: str | None = None) -> dict[str, str]:
+        """Map agent name -> entity type.
+
+        The simulation config's agent_configs carry the graph entity type (Company, Politician, ...)
+        per entity_name and win. Profiles have no source_entity_type, and their ``profession`` is
+        free text, so the old profile-only map (keyed by username) put every agent under "Unknown".
+        """
         name_to_type: dict[str, str] = {}
         for profile in profiles:
-            name = profile.get("realname", profile.get("username", ""))
-            etype = profile.get("source_entity_type", profile.get("profession", "Unknown"))
+            name = self._agent_name(profile)
             if name:
-                name_to_type[name] = etype
+                name_to_type[name] = profile.get("source_entity_type") or profile.get("profession") or "Unknown"
+        if simulation_id:
+            config_path = os.path.join(self._sim_dir(simulation_id), "simulation_config.json")
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    agent_configs = json.load(f).get("agent_configs") or []
+            except (OSError, ValueError):
+                agent_configs = []
+            for agent in agent_configs:
+                if agent.get("entity_name") and agent.get("entity_type"):
+                    name_to_type[agent["entity_name"]] = agent["entity_type"]
         return name_to_type
 
     def _compute_stance_aggregates(self, result: StanceAnalysis) -> None:
