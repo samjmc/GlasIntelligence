@@ -812,9 +812,9 @@ onUnmounted(() => {
 }
 
 /* Progress state colors */
-.card-progress.completed { color: #10B981; }    /* Completed - green */
-.card-progress.in-progress { color: #F59E0B; }  /* In progress - orange */
-.card-progress.not-started { color: #9CA3AF; }  /* Not started - gray */
+.card-progress.completed { color: #047857; }    /* Completed - green */
+.card-progress.in-progress { color: #b45309; }  /* In progress - orange */
+.card-progress.not-started { color: #6b7280; }  /* Not started - gray */
 .card-status.pending { color: #9CA3AF; }
 
 /* Files list area */
@@ -890,7 +890,7 @@ onUnmounted(() => {
 .file-tag.doc { background: #e6eff5; color: #5a7ea6; }
 .file-tag.xls { background: #e6f2e8; color: #5aa668; }
 .file-tag.ppt { background: #f5efe6; color: #a6815a; }
-.file-tag.txt { background: #f0f0f0; color: #757575; }
+.file-tag.txt { background: #f0f0f0; color: #5f5f5f; }
 .file-tag.code { background: #eae6f2; color: #815aa6; }
 .file-tag.img { background: #e6f2f2; color: #5aa6a6; }
 .file-tag.zip { background: #f2f0e6; color: #a69b5a; }
@@ -988,7 +988,7 @@ onUnmounted(() => {
   border-top: 1px solid #F3F4F6;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.65rem;
-  color: #9CA3AF;
+  color: #6b7280;
   font-weight: 500;
 }
 
@@ -1014,9 +1014,9 @@ onUnmounted(() => {
 }
 
 /* Progress state colors - footer */
-.card-footer .card-progress.completed { color: #10B981; }
-.card-footer .card-progress.in-progress { color: #F59E0B; }
-.card-footer .card-progress.not-started { color: #9CA3AF; }
+.card-footer .card-progress.completed { color: #047857; }
+.card-footer .card-progress.in-progress { color: #b45309; }
+.card-footer .card-progress.not-started { color: #6b7280; }
 
 /* Bottom decoration line */
 .card-bottom-line {
