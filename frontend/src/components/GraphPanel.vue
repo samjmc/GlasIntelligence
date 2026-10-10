@@ -27,7 +27,7 @@
               <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-4.04z" />
             </svg>
           </div>
-          {{ isSimulating ? 'GraphRAG memory updating in real time' : 'Updating...' }}
+          {{ isSimulating ? 'Simulation running' : 'Updating...' }}
         </div>
         
         <!-- Post-simulation hint -->
@@ -227,7 +227,7 @@
     <!-- Edge labels toggle -->
     <div v-if="graphData" class="edge-labels-toggle">
       <label class="toggle-switch">
-        <input type="checkbox" v-model="showEdgeLabels" />
+        <input type="checkbox" v-model="showEdgeLabels" aria-label="Show edge labels" />
         <span class="slider"></span>
       </label>
       <span class="toggle-label">Show Edge Labels</span>

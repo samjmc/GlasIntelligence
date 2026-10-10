@@ -266,6 +266,28 @@ def test_clock_at_midnight_reproduces_the_silent_zero_action_run(tmp_path, monke
     assert (saved["runner_status"], saved["agent_actions_count"]) == ("failed", 0)
 
 
+def test_zero_action_run_names_the_llm_credit_failure(tmp_path, monkeypatch):
+    # Live run sim_b8bb8b07981b (2026-10-10): every agent call got DeepSeek's 402
+    # "Insufficient Balance", and the UI only said "check model/API key and the schedule".
+    _, _, _, sim_dir = _run(tmp_path, monkeypatch, measured_config(start_hour=0))
+    with open(sim_dir / "simulation.log", "a", encoding="utf-8") as f:
+        for _ in range(3):
+            f.write(
+                "openai.APIStatusError: Error code: 402 - {'error': {'message': 'Insufficient Balance'}}\n"
+            )
+        f.write("openai.RateLimitError: Error code: 429 - {'error': {'message': 'slow down'}}\n")
+
+    monkeypatch.setattr(SimulationRunner, "RUN_STATE_DIR", str(tmp_path))
+    state = SimulationRunState(simulation_id="sim", runner_status=RunnerStatus.RUNNING)
+    monkeypatch.setitem(SimulationRunner._run_states, "sim", state)
+    monkeypatch.setitem(SimulationRunner._processes, "sim", ExitedCleanly())
+    SimulationRunner._monitor_simulation("sim")
+
+    assert state.runner_status == RunnerStatus.FAILED  # a clean exit must not flip it to COMPLETED
+    assert state.error.startswith(ZERO_AGENT_ACTIONS_ERROR)
+    assert "out of credit (HTTP 402)" in state.error  # the most frequent code wins over the one 429
+
+
 def test_a_run_with_agent_actions_still_completes(tmp_path, monkeypatch):
     _run(tmp_path, monkeypatch, measured_config())
 
