@@ -1,0 +1,115 @@
+# Production stack for one server. See docs/hosting.md.
+#
+#   caddy   public HTTPS (Let's Encrypt, automatic), proxies to app
+#   app     Dockerfile.prod: built frontend (nginx) + Flask API (gunicorn, one process)
+#   worker  same image: Celery worker for deep research and scenario bundles
+#   neo4j   Neo4j Community 5.26, the knowledge graph (GRAPH_BACKEND=graphiti)
+#   redis   Celery broker
+#
+# Only caddy publishes ports. Secrets live in app-secrets.conf next to this file
+# (chmod 600, never committed); deploy/deploy.sh exports it before building, so the
+# frontend build args below are filled from it too.
+
+name: glas
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: Dockerfile.prod
+    args:
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+  image: glas-intelligence:local
+  env_file: app-secrets.conf
+  environment:
+    GRAPH_BACKEND: graphiti
+    NEO4J_URI: bolt://neo4j:7687
+    NEO4J_USER: neo4j
+    REDIS_URL: redis://redis:6379/0
+    FLASK_DEBUG: "false"
+    PYTHONUNBUFFERED: "1"
+  volumes:
+    - uploads:/app/backend/uploads
+    - hf_cache:/root/.cache/huggingface # embedding + OASIS models, downloaded once
+  depends_on:
+    neo4j:
+      condition: service_healthy
+    redis:
+      condition: service_started
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  worker:
+    <<: *app
+    build: !reset null # reuse the image the app service builds
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_started
+    command:
+      - sh
+      - -c
+      - cd /app/backend && .venv/bin/celery -A app.celery_app:celery_app worker -Q celery,research,simulation --concurrency=2 --loglevel=INFO
+
+  neo4j:
+    image: neo4j:5.26-community
+    # Only NEO4J_AUTH, never the whole secrets file: the image turns every NEO4J_* variable
+    # into a Neo4j setting and refuses to start on unknown ones (e.g. NEO4J_PASSWORD).
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:?set NEO4J_AUTH in app-secrets.conf}
+      NEO4J_server_memory_heap_initial__size: 1G
+      NEO4J_server_memory_heap_max__size: 2G
+      NEO4J_server_memory_pagecache_size: 1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/7687' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in app-secrets.conf}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in app-secrets.conf}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  hf_cache:
+  neo4j_data:
+  neo4j_logs:
+  redis_data:
+  caddy_data:
+  caddy_config:

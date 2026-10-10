@@ -72,3 +72,6 @@ celerybeat-schedule
 celerybeat.pid
 .superpowers/
 .review/
+
+# Server secrets for the production stack (deploy/app-secrets.example.conf is the template)
+deploy/app-secrets.conf
