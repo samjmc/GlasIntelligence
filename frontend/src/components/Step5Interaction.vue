@@ -308,6 +308,7 @@
             <textarea 
               v-model="chatInput"
               class="chat-input"
+              aria-label="Your question"
               placeholder="Enter your question..."
               @keydown.enter.exact.prevent="sendMessage"
               :disabled="isSending || (!selectedAgent && chatTarget === 'agent')"
@@ -316,6 +317,7 @@
             ></textarea>
             <button 
               class="send-btn"
+              aria-label="Send"
               @click="sendMessage"
               :disabled="!chatInput.trim() || isSending || (!selectedAgent && chatTarget === 'agent')"
             >
