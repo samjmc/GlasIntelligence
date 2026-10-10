@@ -18,12 +18,14 @@ All files are in `deploy/`: `docker-compose.yml`, `Caddyfile`, `nginx-app.conf`,
 
 | Item | € / month |
 |---|---|
-| CX43 server (8 vCPU, 16 GB RAM, 160 GB disk), Germany or Finland | 15.99 |
+| CX33 server (4 vCPU, 8 GB RAM, 80 GB disk), Germany or Finland | about 8.49 |
 | IPv4 address | about 0.60 |
-| Daily backups (20% of the server price, 7 kept) | about 3.20 |
-| **Total** | **about 19.80** |
+| Daily backups (20% of the server price, 7 kept) | about 1.70 |
+| **Total** | **about 10.80** (about 13.30 with Irish VAT) |
 
-Plus LLM tokens: about $0.15 per graph build, more per simulation and report. 16 GB of RAM leaves room for a run: torch, the OASIS models, the embedder and Neo4j's 3 GB together. The server can be resized later in the Hetzner console, in a few minutes.
+Plus LLM tokens: about $0.15 per graph build, more per simulation and report.
+
+The kit is sized for 8 GB: Neo4j gets a 1 GB heap and a 512 MB page cache, and the 4 GB swap file covers peaks. The only local model is the small embedder (`BAAI/bge-small-en-v1.5`); the agents' LLM calls go to the API. That is enough for a few people at a time. CX43 (16 GB) was the first choice but was sold out on 2026-10-10. To grow, resize the server in the Hetzner console (a few minutes, data kept), then raise the Neo4j memory lines in `docker-compose.yml` and run `deploy.sh`.
 
 ## First setup
 
@@ -33,8 +35,8 @@ Steps marked **(you)** need your accounts or payment. Claude must not create acc
 2. **(you) SSH key.** In the project, open *Security → SSH keys → Add* and paste the public key from `%USERPROFILE%\.ssh\glas_hetzner.pub`. Its private half never leaves your PC.
 3. **(you) Server.** Choose *Add server*:
    - Location: Nuremberg or Falkenstein (DE), or Helsinki (FI).
-   - Image: **Ubuntu 24.04**.
-   - Type: shared vCPU, x86, **CX43**.
+   - Image: **Ubuntu 24.04** or **26.04** (Docker supports both).
+   - Type: shared vCPU, x86, **CX33** or bigger.
    - Networking: IPv4 and IPv6.
    - SSH key: `glas_hetzner`.
    - Turn **Backups** on.
@@ -55,7 +57,7 @@ Steps marked **(you)** need your accounts or payment. Claude must not create acc
    ```
    powershell -NoProfile -ExecutionPolicy Bypass -File deploy\push-secrets.ps1 -Server <IPv4>
    ```
-   For each value it uses your user environment variable when one exists (`LLM_API_KEY`, …); otherwise it asks, with hidden typing. Nothing is printed, and the temporary files are deleted at both ends.
+   For each value it uses, in order: your user environment variable (`LLM_API_KEY`, …), the files given with `-EnvFile` (your local dev KEY=VALUE files; separate several with commas; `VITE_SUPABASE_*` also fills `SUPABASE_*`), or it asks, with hidden typing. Nothing is printed, and the temporary files are deleted at both ends.
 8. **Deploy:**
    ```
    ssh -i %USERPROFILE%\.ssh\glas_hetzner root@<IPv4> /opt/glas/deploy/deploy.sh

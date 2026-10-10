@@ -4,17 +4,44 @@
 
     powershell -NoProfile -ExecutionPolicy Bypass -File deploy\push-secrets.ps1 -Server <server-ip>
 
-  For each setting it uses your user environment variable when one exists (LLM_API_KEY,
-  SUPABASE_URL, ...); otherwise it asks you, with hidden typing for secret values.
+  For each setting it uses, in order: your user environment variable (LLM_API_KEY,
+  SUPABASE_URL, ...), the -EnvFile files (KEY=VALUE lines, e.g. the dotenv files your local
+  dev setup already uses), or it asks you, with hidden typing for secret values.
+  User env vars win because an old dev file can hold stale values (it had deepseek-chat).
+  A VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in those files also fills SUPABASE_URL /
+  SUPABASE_ANON_KEY.
   Values are never printed. They travel over SSH in a temporary file that is deleted at
   both ends. Settings you leave empty keep their current value on the server.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Server,
     [string]$KeyFile = "$env:USERPROFILE\.ssh\glas_hetzner",
-    [string]$User = 'root'
+    [string]$User = 'root',
+    [string[]]$EnvFile = @()
 )
 $ErrorActionPreference = 'Stop'
+
+# KEY=VALUE files: skip comments and blanks, drop a leading "export ", strip matching quotes.
+$fileValues = @{}
+# powershell -File passes "a,b" as one string, so split on commas.
+foreach ($path in ($EnvFile | ForEach-Object { $_ -split ',' } | Where-Object { $_.Trim() })) {
+    $path = $path.Trim()
+    if (-not (Test-Path -LiteralPath $path)) { throw "not found: $path" }
+    foreach ($line in [IO.File]::ReadAllLines((Resolve-Path -LiteralPath $path).Path)) {
+        $t = $line.Trim()
+        if (-not $t -or $t.StartsWith('#')) { continue }
+        if ($t.StartsWith('export ')) { $t = $t.Substring(7).Trim() }
+        $i = $t.IndexOf('=')
+        if ($i -lt 1) { continue }
+        $k = $t.Substring(0, $i).Trim()
+        $v = $t.Substring($i + 1).Trim()
+        if ($v.Length -ge 2 -and (($v[0] -eq '"' -and $v[-1] -eq '"') -or ($v[0] -eq "'" -and $v[-1] -eq "'"))) { $v = $v.Substring(1, $v.Length - 2) }
+        if ($v -and -not $fileValues.ContainsKey($k)) { $fileValues[$k] = $v }
+    }
+}
+foreach ($pair in @(@('SUPABASE_URL', 'VITE_SUPABASE_URL'), @('SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY'))) {
+    if (-not $fileValues.ContainsKey($pair[0]) -and $fileValues.ContainsKey($pair[1])) { $fileValues[$pair[0]] = $fileValues[$pair[1]] }
+}
 
 # name, secret?, required?, hint
 $settings = @(
@@ -35,6 +62,7 @@ $settings = @(
 function Read-Value([string]$name, [bool]$secret, [string]$hint) {
     $fromEnv = [Environment]::GetEnvironmentVariable($name, 'User')
     if ($fromEnv) { Write-Host "  $name  <- your user environment variable"; return $fromEnv }
+    if ($fileValues.ContainsKey($name)) { Write-Host "  $name  <- file"; return $fileValues[$name] }
     if ($secret) {
         $ss = Read-Host "  $name ($hint; Enter to skip)" -AsSecureString
         $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
