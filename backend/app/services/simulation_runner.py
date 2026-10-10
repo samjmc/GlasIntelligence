@@ -73,6 +73,7 @@ def _zero_action_error(base: str, sim_dir: str) -> str:
     cause = _llm_error_cause(os.path.join(sim_dir, "simulation.log"))
     return f"{base} Cause: {cause}" if cause else base
 
+
 # Platform detection
 IS_WINDOWS = sys.platform == "win32"
 
@@ -709,7 +710,8 @@ class SimulationRunner:
                                         elif state.agent_actions_count == 0:
                                             state.runner_status = RunnerStatus.FAILED
                                             state.error = _zero_action_error(
-                                                ZERO_AGENT_ACTIONS_ERROR, os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
+                                                ZERO_AGENT_ACTIONS_ERROR,
+                                                os.path.join(cls.RUN_STATE_DIR, state.simulation_id),
                                             )
                                             logger.warning(
                                                 f"Simulation completed with zero agent actions (opening posts only): {state.simulation_id}"
