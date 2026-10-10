@@ -67,9 +67,10 @@ services:
     # into a Neo4j setting and refuses to start on unknown ones (e.g. NEO4J_PASSWORD).
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH:?set NEO4J_AUTH in app-secrets.conf}
-      NEO4J_server_memory_heap_initial__size: 1G
-      NEO4J_server_memory_heap_max__size: 2G
-      NEO4J_server_memory_pagecache_size: 1G
+      # Sized for a CX33 (8 GB RAM). On a 16 GB server, raise to heap 1G/2G and pagecache 1G.
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs

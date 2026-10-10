@@ -18,7 +18,7 @@ DIR=/opt/glas
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root"; exit 1; }
 . /etc/os-release
-[ "${ID:-}" = "ubuntu" ] || echo "WARNING: tested on Ubuntu 24.04 only (this is ${PRETTY_NAME:-unknown})"
+[ "${ID:-}" = "ubuntu" ] || echo "WARNING: written for Ubuntu 24.04/26.04 (this is ${PRETTY_NAME:-unknown})"
 
 echo "== 1/4 updates, automatic security updates, firewall"
 export DEBIAN_FRONTEND=noninteractive
