@@ -4,9 +4,10 @@
 
     powershell -NoProfile -ExecutionPolicy Bypass -File deploy\push-secrets.ps1 -Server <server-ip>
 
-  For each setting it uses, in order: the -EnvFile files (KEY=VALUE lines, e.g. the dotenv
-  files your local dev setup already uses), your user environment variable (LLM_API_KEY,
-  SUPABASE_URL, ...), or it asks you, with hidden typing for secret values.
+  For each setting it uses, in order: your user environment variable (LLM_API_KEY,
+  SUPABASE_URL, ...), the -EnvFile files (KEY=VALUE lines, e.g. the dotenv files your local
+  dev setup already uses), or it asks you, with hidden typing for secret values.
+  User env vars win because an old dev file can hold stale values (it had deepseek-chat).
   A VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY in those files also fills SUPABASE_URL /
   SUPABASE_ANON_KEY.
   Values are never printed. They travel over SSH in a temporary file that is deleted at
@@ -59,9 +60,9 @@ $settings = @(
 )
 
 function Read-Value([string]$name, [bool]$secret, [string]$hint) {
-    if ($fileValues.ContainsKey($name)) { Write-Host "  $name  <- file"; return $fileValues[$name] }
     $fromEnv = [Environment]::GetEnvironmentVariable($name, 'User')
     if ($fromEnv) { Write-Host "  $name  <- your user environment variable"; return $fromEnv }
+    if ($fileValues.ContainsKey($name)) { Write-Host "  $name  <- file"; return $fileValues[$name] }
     if ($secret) {
         $ss = Read-Host "  $name ($hint; Enter to skip)" -AsSecureString
         $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
