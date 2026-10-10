@@ -20,6 +20,32 @@ def optimize_interview_prompt(prompt: str) -> str:
     return f"{INTERVIEW_PROMPT_PREFIX}{prompt}"
 
 
+def required_prepared_files(simulation_dir: str) -> list[str]:
+    """Files a prepared simulation must have: only the profile files of its enabled platforms.
+
+    Runs are reddit only (twitter was dropped), so prepare no longer writes
+    twitter_profiles.csv. Requiring it made every finished or failed simulation
+    "not prepared": restart returned 400 and /prepare rebuilt all personas.
+    """
+    import json
+    import os
+
+    enable_reddit, enable_twitter = True, False
+    try:
+        with open(os.path.join(simulation_dir, "state.json"), encoding="utf-8") as f:
+            state = json.load(f)
+        enable_reddit = state.get("enable_reddit", True)
+        enable_twitter = state.get("enable_twitter", False)
+    except (OSError, ValueError):
+        pass  # state.json missing or unreadable: the caller reports it as missing
+    files = ["state.json", "simulation_config.json"]
+    if enable_reddit:
+        files.append("reddit_profiles.json")
+    if enable_twitter:
+        files.append("twitter_profiles.csv")
+    return files
+
+
 def check_simulation_prepared(simulation_id: str) -> tuple:
     """
     Check if simulation preparation is complete.
@@ -38,7 +64,7 @@ def check_simulation_prepared(simulation_id: str) -> tuple:
     if not os.path.exists(simulation_dir):
         return False, {"reason": "Simulation directory not found"}
 
-    required_files = ["state.json", "simulation_config.json", "reddit_profiles.json", "twitter_profiles.csv"]
+    required_files = required_prepared_files(simulation_dir)
 
     existing_files = []
     missing_files = []

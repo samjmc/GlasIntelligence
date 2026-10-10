@@ -1028,7 +1028,7 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
 }
 .starter-header {
   font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
-  color: var(--text-muted, #666); margin-bottom: 10px; padding-left: 2px;
+  color: var(--text-muted, #8a8a8a); margin-bottom: 10px; padding-left: 2px;
 }
 .starter-cards {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;

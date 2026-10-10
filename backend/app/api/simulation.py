@@ -25,6 +25,7 @@ from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from . import simulation_bp
 from .simulation_access import caller_may_see, simulation_owner
+from .simulation_helpers import required_prepared_files
 
 logger = get_logger("glas.api.simulation")
 
@@ -205,7 +206,8 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
     Checks:
     1. state.json exists and status is "ready"
-    2. Required files exist: reddit_profiles.json, twitter_profiles.csv, simulation_config.json
+    2. Required files exist: simulation_config.json and the enabled platforms' profiles
+       (see required_prepared_files)
 
     Note: Run scripts (run_*.py) remain in backend/scripts/, no longer copied to simulation directory
 
@@ -224,7 +226,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
     if not os.path.exists(simulation_dir):
         return False, {"reason": "Simulation directory not found"}
 
-    required_files = ["state.json", "simulation_config.json", "reddit_profiles.json", "twitter_profiles.csv"]
+    required_files = required_prepared_files(simulation_dir)
 
     existing_files = []
     missing_files = []
