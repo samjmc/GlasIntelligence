@@ -1434,7 +1434,11 @@ def start_simulation():
 
         # Recorded once the run has started, so a failed start does not use up the free run.
         if charge == "free":
-            SupabaseDB.insert_credit_tx(g.user_id, 0, "usage", "Free monthly simulation")
+            try:
+                SupabaseDB.insert_credit_tx(g.user_id, 0, "usage", "Free monthly simulation")
+            except Exception as e:
+                # The run is already going; failing the request here would hide it from the user.
+                logger.error(f"Free run started for {g.user_id} but its usage row failed: {e}")
 
         # Counted only once the run has started, so a failed start does not use up the covered run.
         if session_row is not None:
