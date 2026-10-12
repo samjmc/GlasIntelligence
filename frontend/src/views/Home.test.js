@@ -17,6 +17,7 @@ const pending = vi.hoisted(() => ({
   clearPendingUpload: vi.fn(),
 }))
 const push = vi.hoisted(() => vi.fn())
+const apiPost = vi.hoisted(() => vi.fn())
 // What GET /billing/<path> answers; tests replace it to play a free-plan user
 const billing = vi.hoisted(() => ({ status: { plan: 'pro' }, canSimulate: { plan: 'pro', can_simulate: true } }))
 
@@ -28,7 +29,7 @@ vi.mock('../composables/useApi', () => ({
       success: true,
       data: path === '/billing/can-simulate' ? billing.canSimulate : billing.status,
     })),
-    apiPost: vi.fn(),
+    apiPost,
   }),
 }))
 vi.mock('../lib/analytics', () => ({ trackEvent: vi.fn() }))
@@ -118,6 +119,31 @@ describe('Home start flow', () => {
     expect(wrapper.find('.research-error').text()).toBe('Failed to connect to the server')
     wrapper.unmount()
   })
+
+  // Live 2026-10-12: an Enterprise user with 0 research credits got 402 and the page said
+  // "Failed to connect to the server", so starting without a document was impossible.
+  it('with no research credits left, writes a quick briefing instead and starts', async () => {
+    const err = Object.assign(new Error('Request failed with status code 402'), {
+      response: { status: 402, data: { error: 'no_research_credits', message: 'No research credits remaining.' } },
+    })
+    api.startDeepResearch.mockRejectedValue(err)
+    apiPost.mockResolvedValue({
+      success: true,
+      data: { title: 'Research Briefing', content_md: '# Quick', filename: 'briefing_x.md' },
+    })
+
+    const wrapper = mountHome()
+    await flushPromises()
+    await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
+    await wrapper.find('[data-test="start-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(apiPost).toHaveBeenCalledWith('/source/auto-research', { prompt: 'What if the US raises steel tariffs?' })
+    const [files] = pending.setPendingUpload.mock.calls[0]
+    expect(files.map((f) => f.name)).toEqual(['briefing_x.md'])
+    expect(push).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+    wrapper.unmount()
+  })
 })
 
 describe('Home for a free-plan user', () => {
@@ -162,6 +188,28 @@ describe('Home for a free-plan user', () => {
 
     expect(api.startDeepResearch).not.toHaveBeenCalled()
     expect(wrapper.find('.upgrade-modal').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('with no free briefings left: asks for a document, no paid-only quick briefing', async () => {
+    freeUser(true)
+    api.startDeepResearch.mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 402'), {
+        response: { status: 402, data: { error: 'no_research_credits', message: 'No research credits remaining.' } },
+      }),
+    )
+
+    const wrapper = mountHome()
+    await flushPromises()
+    await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
+    await wrapper.find('[data-test="start-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(apiPost).not.toHaveBeenCalledWith('/source/auto-research', expect.anything())
+    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.find('.research-error').text()).toBe(
+      'No free research briefings left this month. Upload a document to start.',
+    )
     wrapper.unmount()
   })
 
