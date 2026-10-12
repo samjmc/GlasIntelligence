@@ -156,6 +156,15 @@
                 ></textarea>
                 <div class="model-badge">Engine: GLAS v1.0</div>
               </div>
+              <p v-if="!isDemoMode && freeRun" class="free-plan-note" data-test="free-plan-note">
+                <template v-if="freeRun.free_run_left">
+                  Free plan: 1 simulation this month (up to {{ freeRun.free_agents }} agents, {{ freeRun.free_rounds }} rounds).
+                </template>
+                <template v-else>
+                  Free plan: your free simulation for this month is used.
+                  <router-link to="/pricing">See plans.</router-link>
+                </template>
+              </p>
             </div>
 
             <DemoScenarioPicker v-if="isDemoMode" @select="onDemoScenarioSelected" />
@@ -208,13 +217,13 @@
                 <!-- Deep Research Button -->
                 <button
                   class="auto-research-btn"
-                  :class="{ disabled: !isPaidUser }"
+                  :class="{ disabled: !canRun }"
                   :disabled="researchLoading"
                   @click="runDeepResearch"
-                  :title="isPaidUser ? 'Launch deep research with AI web search' : 'Upgrade to Pro or Business to unlock deep research'"
+                  :title="canRun ? 'Launch deep research with AI web search' : 'Upgrade to Pro or Business to unlock deep research'"
                 >
                   <span v-if="!researchLoading">
-                    {{ isPaidUser ? 'Deep Research Briefing' : 'Deep Research (Paid Plans)' }}
+                    {{ canRun ? 'Deep Research Briefing' : 'Deep Research (Paid Plans)' }}
                   </span>
                   <span v-else class="research-loading-content">
                     <span class="pulse-indicator"></span>
@@ -351,7 +360,7 @@
           <p class="modal-desc">Upgrade to Pro or Business to run custom scenario simulations with AI agents, deep research, and quantified decision reports.</p>
           <div class="modal-actions">
             <button class="modal-btn primary" @click="router.push('/pricing')">View Plans</button>
-            <button class="modal-btn secondary" @click="router.push('/feed')">Browse Free Reports</button>
+            <button class="modal-btn secondary" @click="router.push('/feed')">Browse Report Summaries</button>
           </div>
         </div>
       </div>
@@ -431,6 +440,11 @@ onMounted(() => {
     if (res?.success) userPlan.value = res.data?.plan || 'free'
   }).catch(() => {})
 
+  // The free plan's monthly simulation (and its size limits) come from the backend
+  apiGet('/billing/can-simulate').then(res => {
+    if (res?.success && res.data?.plan === 'free') freeRun.value = res.data
+  }).catch(() => {})
+
   if (route.query.prefill) {
     const pending = getPendingUpload()
     if (pending.simulationRequirement) {
@@ -456,6 +470,12 @@ const isPaidUser = computed(() => {
   return ['pro', 'business', 'enterprise', 'payg'].includes(userPlan.value)
 })
 
+// Set for free-plan users only: { free_run_left, free_agents, free_rounds } from /billing/can-simulate
+const freeRun = ref(null)
+
+// Paid users, and free users who have not used this month's free simulation
+const canRun = computed(() => isPaidUser.value || !!freeRun.value?.free_run_left)
+
 const planLimits = computed(() => {
   if (userPlan.value === 'business') return { agents: 75, rounds: 30 }
   if (userPlan.value === 'enterprise') return { agents: 200, rounds: 50 }
@@ -477,9 +497,9 @@ const canSubmit = computed(() => {
   return formData.value.simulationRequirement.trim() !== ''
 })
 
-// Paid users with no documents get a research briefing written before the build
+// Users who can run, with no documents, get a research briefing written before the build
 const showResearchFirstHint = computed(() => {
-  return !isDemoMode && isPaidUser.value && files.value.length === 0
+  return !isDemoMode && canRun.value && files.value.length === 0
 })
 
 async function handleEnhancePrompt() {
@@ -503,7 +523,7 @@ async function handleEnhancePrompt() {
 }
 
 async function runDeepResearch() {
-  if (!isPaidUser.value) return
+  if (!canRun.value) return
   const prompt = formData.value.simulationRequirement.trim()
   if (!prompt) return
   researchLoading.value = true
@@ -648,7 +668,7 @@ const startSimulation = async () => {
     return
   }
 
-  if (!isPaidUser.value) {
+  if (!canRun.value) {
     showUpgradeModal.value = true
     return
   }
@@ -982,6 +1002,8 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
 .console-section { padding: 20px; }
 .console-section.btn-section { padding-top: 0; }
 .start-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 10px; }
+.free-plan-note { font-size: 0.8rem; color: var(--text-secondary); margin: 8px 0 0; }
+.free-plan-note a { color: var(--accent); }
 .console-header {
   display: flex;
   justify-content: space-between;

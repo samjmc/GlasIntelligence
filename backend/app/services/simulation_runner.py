@@ -23,6 +23,7 @@ from ..config import Config
 from ..utils.logger import get_logger
 from .jev_simulation_gates import read_validity_alert
 from .simulation_ipc import SimulationIPCClient
+from .supabase_client import SupabaseDB
 from .zep_graph_memory_updater import ZepGraphMemoryManager
 
 logger = get_logger("glas.simulation_runner")
@@ -199,6 +200,12 @@ class SimulationRunState:
     # Jev post-validity alert (reason text) surfaced from <sim_dir>/jev_validity_alert.json; informational only
     validity_alert: str | None = None
 
+    # How the run was paid for ("credit", "free", "session"; None for runs started before this existed),
+    # who paid, and whether a zero-action run has already been given back
+    charge: str | None = None
+    charged_user_id: str | None = None
+    refunded: bool = False
+
     def add_action(self, action: AgentAction):
         """Add action to recent actions list"""
         self.recent_actions.insert(0, action)
@@ -240,6 +247,8 @@ class SimulationRunState:
             "error": self.error,
             "process_pid": self.process_pid,
             "validity_alert": self.validity_alert,
+            "charge": self.charge,
+            "refunded": self.refunded,
         }
 
     def to_detail_dict(self) -> dict[str, Any]:
@@ -277,6 +286,9 @@ class SimulationRunner:
 
     # Graph memory update configuration
     _graph_memory_enabled: dict[str, bool] = {}  # simulation_id -> enabled
+
+    # Runs whose zero-action refund has been tried in this process (see _refund_zero_action_run)
+    _refund_attempts: set[str] = set()
 
     @classmethod
     def get_run_state(cls, simulation_id: str) -> SimulationRunState | None:
@@ -326,6 +338,9 @@ class SimulationRunner:
                 error=data.get("error"),
                 process_pid=data.get("process_pid"),
                 validity_alert=data.get("validity_alert"),
+                charge=data.get("charge"),
+                charged_user_id=data.get("charged_user_id"),
+                refunded=data.get("refunded", False),
             )
 
             # Load recent actions
@@ -358,6 +373,7 @@ class SimulationRunner:
         state_file = os.path.join(sim_dir, "run_state.json")
 
         data = state.to_detail_dict()
+        data["charged_user_id"] = state.charged_user_id  # kept out of to_dict, which API responses use
 
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -372,6 +388,8 @@ class SimulationRunner:
         enable_graph_memory_update: bool = False,
         graph_id: str = None,
         user_plan: str = "pro",
+        charge: str | None = None,
+        charged_user_id: str | None = None,
     ) -> SimulationRunState:
         """
         Start simulation (reddit only; twitter was dropped to halve the LLM cost of a run)
@@ -381,6 +399,7 @@ class SimulationRunner:
             max_rounds: Max simulation rounds (optional, truncates overly long simulations)
             enable_graph_memory_update: Whether to dynamically update Agent activities to Zep graph
             graph_id: Zep graph ID (required when graph update is enabled)
+            charge / charged_user_id: how the run was paid for, so a zero-action run can be refunded
 
         Returns:
             SimulationRunState
@@ -420,6 +439,8 @@ class SimulationRunner:
             total_rounds=total_rounds,
             total_simulation_hours=total_hours,
             started_at=datetime.now().isoformat(),
+            charge=charge,
+            charged_user_id=charged_user_id,
         )
 
         cls._save_run_state(state)
@@ -561,6 +582,9 @@ class SimulationRunner:
                 # Surface the Jev post-validity alert, if the run has raised one (never stops the run)
                 cls._apply_validity_alert(state, sim_dir)
 
+                # The process stays alive for interviews, so give back a zero-action run now
+                cls._refund_zero_action_run(state)
+
                 # Update state
                 cls._save_run_state(state)
                 time.sleep(2)
@@ -597,6 +621,7 @@ class SimulationRunner:
                 state.error = f"Process exit code: {exit_code}, error: {error_info}"
                 logger.error(f"Simulation failed: {simulation_id}, error={state.error}")
 
+            cls._refund_zero_action_run(state)
             state.twitter_running = False
             state.reddit_running = False
             cls._save_run_state(state)
@@ -630,6 +655,42 @@ class SimulationRunner:
                 with contextlib.suppress(Exception):
                     cls._stderr_files[simulation_id].close()
                 cls._stderr_files.pop(simulation_id, None)
+
+    @classmethod
+    def _refund_zero_action_run(cls, state: SimulationRunState) -> None:
+        """Give back what a run that produced no agent actions cost. Never raises.
+
+        At most one attempt per run: state.refunded is saved with the run state, and
+        _refund_attempts stops a failed attempt being retried every poll.
+        """
+        if state.refunded or state.simulation_id in cls._refund_attempts:
+            return
+        if state.runner_status != RunnerStatus.FAILED or not _is_zero_action_error(state.error):
+            return
+        if state.charge not in ("credit", "free") or not state.charged_user_id:
+            return  # "session": the session's first run was covered, so nothing was charged for it
+        cls._refund_attempts.add(state.simulation_id)
+        try:
+            if state.charge == "credit":
+                ok = SupabaseDB.refund_credit(state.charged_user_id, "Refund: simulation produced no agent actions")
+                note = " Your simulation credit was refunded."
+            else:
+                # A 0-amount refund cancels the free run's usage row in has_free_simulation_remaining
+                SupabaseDB.insert_credit_tx(
+                    state.charged_user_id, 0, "refund", "Refund: free simulation produced no agent actions"
+                )
+                ok = True
+                note = " Your free run was given back."
+        except Exception as e:
+            logger.error(f"Refund failed for zero-action simulation {state.simulation_id}: {e}")
+            return
+        if not ok:
+            logger.error(f"Refund not applied for zero-action simulation {state.simulation_id}")
+            return
+        state.refunded = True
+        state.error = f"{state.error}{note}"
+        cls._save_run_state(state)
+        logger.info(f"Refunded zero-action simulation {state.simulation_id} ({state.charge})")
 
     @classmethod
     def _apply_validity_alert(cls, state: SimulationRunState, sim_dir: str) -> None:

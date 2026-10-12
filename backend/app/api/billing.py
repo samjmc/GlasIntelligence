@@ -1,7 +1,5 @@
 """Stripe billing API routes."""
 
-from datetime import UTC
-
 import stripe
 from flask import Blueprint, g, jsonify, request
 
@@ -322,41 +320,19 @@ def can_simulate():
     plan = Config.normalize_plan(profile.get("plan", "free") if profile else "free")
     credits = profile.get("credits", 0) if profile else 0
 
-    can_run = credits > 0
-    if not can_run and plan == "free":
-        can_run = _has_free_simulation_remaining(g.user_id)
+    free_run_left = plan == "free" and SupabaseDB.has_free_simulation_remaining(g.user_id)
+    free_agents, free_rounds = Config.simulation_limits("free")
 
     return jsonify(
         {
             "success": True,
             "data": {
-                "can_simulate": can_run,
+                "can_simulate": credits > 0 or free_run_left,
                 "credits": credits,
                 "plan": plan,
+                "free_run_left": free_run_left,
+                "free_agents": free_agents,
+                "free_rounds": free_rounds,
             },
         }
     )
-
-
-def _has_free_simulation_remaining(user_id):
-    """Check if a free-tier user has their 1 monthly simulation remaining."""
-    from datetime import datetime
-
-    now = datetime.now(UTC)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-    try:
-        result = (
-            SupabaseDB.client()
-            .table("credit_transactions")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .gte("created_at", month_start)
-            .in_("type", ["usage"])
-            .execute()
-        )
-        used = result.count if result.count is not None else len(result.data or [])
-        return used < 1
-    except Exception as e:
-        logger.warning(f"Free simulation check failed for {user_id}: {e}")
-        return False

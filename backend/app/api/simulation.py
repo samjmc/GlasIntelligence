@@ -1401,16 +1401,23 @@ def start_simulation():
         session_runs = session_row.get("simulation_count", 0) if session_row else 0
         credit_covered = session_row is not None and session_runs == 0
 
-        if not credit_covered and not SupabaseDB.deduct_credit(g.user_id, "Simulation run"):
-            profile = SupabaseDB.get_profile(g.user_id)
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "insufficient_credits",
-                    "credits": profile.get("credits", 0) if profile else 0,
-                    "message": "You need at least 1 simulation remaining to run",
-                }
-            ), 402
+        # How the run is paid for; a run that produces nothing gets this back (SimulationRunner).
+        charge = "session"
+        if not credit_covered:
+            charge = "credit"
+            if not SupabaseDB.deduct_credit(g.user_id, "Simulation run"):
+                profile = SupabaseDB.get_profile(g.user_id)
+                plan = Config.normalize_plan(profile.get("plan", "free") if profile else "free")
+                if plan != "free" or not SupabaseDB.has_free_simulation_remaining(g.user_id):
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": "insufficient_credits",
+                            "credits": profile.get("credits", 0) if profile else 0,
+                            "message": "You need at least 1 simulation remaining to run",
+                        }
+                    ), 402
+                charge = "free"
 
         profile = SupabaseDB.get_profile(g.user_id)
         user_plan = profile.get("plan", "free") if profile else "free"
@@ -1421,7 +1428,13 @@ def start_simulation():
             enable_graph_memory_update=enable_graph_memory_update,
             graph_id=graph_id,
             user_plan=user_plan,
+            charge=charge,
+            charged_user_id=g.user_id,
         )
+
+        # Recorded once the run has started, so a failed start does not use up the free run.
+        if charge == "free":
+            SupabaseDB.insert_credit_tx(g.user_id, 0, "usage", "Free monthly simulation")
 
         # Counted only once the run has started, so a failed start does not use up the covered run.
         if session_row is not None:

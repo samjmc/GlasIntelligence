@@ -19,12 +19,12 @@
           <span class="price-period">forever</span>
         </div>
         <ul class="plan-features">
-          <li><span class="check">&#10003;</span> 1 simulation / month</li>
-          <li><span class="check">&#10003;</span> Pre-built scenarios only</li>
-          <li><span class="check">&#10003;</span> Browse industry insights</li>
-          <li class="feature-excluded"><span class="cross">&#10005;</span> Custom inputs</li>
+          <li><span class="check">&#10003;</span> 1 small simulation / month (up to 25 agents, 15 rounds)</li>
+          <li><span class="check">&#10003;</span> Your own scenario, with a research briefing if you have no documents</li>
+          <li><span class="check">&#10003;</span> Report summaries in the Intelligence Feed</li>
+          <li class="feature-excluded"><span class="cross">&#10005;</span> Full feed reports</li>
           <li class="feature-excluded"><span class="cross">&#10005;</span> PDF / report exports</li>
-          <li class="feature-excluded"><span class="cross">&#10005;</span> Deep Research</li>
+          <li class="feature-excluded"><span class="cross">&#10005;</span> Larger simulations</li>
           <li class="feature-excluded"><span class="cross">&#10005;</span> Decision Recommendations</li>
         </ul>
         <button class="plan-cta cta-secondary" @click="handleFree">

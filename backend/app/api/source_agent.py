@@ -149,7 +149,8 @@ def auto_research():
 @source_agent_bp.route("/deep-research", methods=["POST"])
 @require_auth
 def start_deep_research():
-    """Launch deep research as a background task. Requires auth + research credits.
+    """Launch deep research as a background task. Requires auth + a research credit, or a free
+    plan briefing (FREE_MONTHLY_BRIEFINGS a month while the monthly free simulation is unused).
 
     DEPRECATED: Use POST /api/session/:id/research instead for session-based
     research with Supabase persistence and credit management.
@@ -160,22 +161,34 @@ def start_deep_research():
     if not Config.LLM_API_KEY:
         return jsonify({"success": False, "error": "Research is not enabled"}), 403
 
-    if not SupabaseDB.deduct_research_credit(g.user_id, "Deep research (legacy endpoint)"):
+    paid = SupabaseDB.deduct_research_credit(g.user_id, "Deep research (legacy endpoint)")
+    if not paid:
+        # The free plan's monthly simulation needs a briefing when the user has no documents
         profile = SupabaseDB.get_profile(g.user_id)
-        return jsonify(
-            {
-                "success": False,
-                "error": "no_research_credits",
-                "research_credits": profile.get("research_credits", 0) if profile else 0,
-                "message": "No research credits remaining.",
-            }
-        ), 402
+        free_ok = (
+            Config.normalize_plan(profile.get("plan", "free") if profile else "free") == "free"
+            and SupabaseDB.has_free_simulation_remaining(g.user_id)
+            and SupabaseDB.has_free_briefing_remaining(g.user_id)
+        )
+        if not free_ok:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "no_research_credits",
+                    "research_credits": profile.get("research_credits", 0) if profile else 0,
+                    "message": "No research credits remaining.",
+                }
+            ), 402
 
     data = request.get_json() or {}
     prompt = data.get("prompt", "").strip()
     if not prompt or len(prompt) < 10:
-        SupabaseDB.refund_research_credit(g.user_id, "Invalid prompt — refund")
+        if paid:
+            SupabaseDB.refund_research_credit(g.user_id, "Invalid prompt — refund")
         return jsonify({"success": False, "error": "Please describe your scenario in more detail"}), 400
+
+    if not paid:
+        SupabaseDB.insert_credit_tx(g.user_id, 0, "research_usage", "Free monthly briefing")
 
     angle_overrides = data.get("angle_overrides") or None
     if angle_overrides is not None and not isinstance(angle_overrides, dict):
@@ -197,7 +210,8 @@ def start_deep_research():
         except Exception:
             logger.exception("Deep research background task failed")
             tm.fail_task(task_id, "Deep research failed. Please try again.")
-            SupabaseDB.refund_research_credit(user_id, "Deep research failed — refund")
+            if paid:
+                SupabaseDB.refund_research_credit(user_id, "Deep research failed — refund")
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
