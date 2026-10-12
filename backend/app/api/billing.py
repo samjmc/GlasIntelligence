@@ -188,7 +188,7 @@ def _handle_checkout_complete(session):
             SupabaseDB.insert_credit_tx(
                 user_id,
                 research_grant,
-                "research_grant",
+                "subscription_grant",
                 f"{product.title()} plan — {research_grant} research briefings",
             )
         logger.info(f"Subscription activated: {user_id} -> {product} ({grant} sims, {research_grant} research)")
@@ -199,7 +199,7 @@ def _handle_checkout_complete(session):
         current_research = profile.get("research_credits", 0) if profile else 0
         SupabaseDB.update_profile(user_id, credits=current + 1, research_credits=current_research + 1)
         SupabaseDB.insert_credit_tx(user_id, 1, "purchase", "Pay-as-you-go simulation")
-        SupabaseDB.insert_credit_tx(user_id, 1, "research_grant", "Pay-as-you-go research briefing")
+        SupabaseDB.insert_credit_tx(user_id, 1, "purchase", "Pay-as-you-go research briefing")
         logger.info(f"PAYG purchased: {user_id} +1 sim, +1 research")
 
     elif product in PACK_QUANTITIES:
@@ -212,7 +212,7 @@ def _handle_checkout_complete(session):
         SupabaseDB.insert_credit_tx(user_id, qty, "purchase", f"Simulation pack ({qty})")
         if research_qty:
             SupabaseDB.insert_credit_tx(
-                user_id, research_qty, "research_grant", f"Simulation pack — {research_qty} research briefings"
+                user_id, research_qty, "purchase", f"Simulation pack — {research_qty} research briefings"
             )
         logger.info(f"Pack purchased: {user_id} +{qty} sims, +{research_qty} research")
 
@@ -221,14 +221,14 @@ def _handle_checkout_complete(session):
         profile = SupabaseDB.get_profile(user_id)
         current_research = profile.get("research_credits", 0) if profile else 0
         SupabaseDB.update_profile(user_id, research_credits=current_research + qty)
-        SupabaseDB.insert_credit_tx(user_id, qty, "research_purchase", f"Research briefing purchase ({qty})")
+        SupabaseDB.insert_credit_tx(user_id, qty, "purchase", f"Research briefing purchase ({qty})")
         logger.info(f"Research purchased: {user_id} +{qty} research credits")
 
     elif product.startswith("overage_"):
         profile = SupabaseDB.get_profile(user_id)
         current = profile.get("credits", 0) if profile else 0
         SupabaseDB.update_profile(user_id, credits=current + 1)
-        SupabaseDB.insert_credit_tx(user_id, 1, "overage", f"Overage simulation ({product})")
+        SupabaseDB.insert_credit_tx(user_id, 1, "purchase", f"Overage simulation ({product})")
         logger.info(f"Overage simulation: {user_id} +1")
 
 
@@ -252,7 +252,7 @@ def _handle_invoice_paid(invoice):
         SupabaseDB.insert_credit_tx(user_id, sims, "subscription_grant", f"Monthly {plan} renewal ({sims} simulations)")
         if research:
             SupabaseDB.insert_credit_tx(
-                user_id, research, "research_grant", f"Monthly {plan} renewal ({research} research briefings)"
+                user_id, research, "subscription_grant", f"Monthly {plan} renewal ({research} research briefings)"
             )
         logger.info(f"Subscription renewed: {user_id} -> {sims} sims, {research} research")
 
