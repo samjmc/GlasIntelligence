@@ -17,12 +17,17 @@ const pending = vi.hoisted(() => ({
   clearPendingUpload: vi.fn(),
 }))
 const push = vi.hoisted(() => vi.fn())
+// What GET /billing/<path> answers; tests replace it to play a free-plan user
+const billing = vi.hoisted(() => ({ status: { plan: 'pro' }, canSimulate: { plan: 'pro', can_simulate: true } }))
 
 vi.mock('../api/simulation', () => api)
 vi.mock('../store/pendingUpload', () => pending)
 vi.mock('../composables/useApi', () => ({
   useApi: () => ({
-    apiGet: vi.fn(async () => ({ success: true, data: { plan: 'pro' } })),
+    apiGet: vi.fn(async (path) => ({
+      success: true,
+      data: path === '/billing/can-simulate' ? billing.canSimulate : billing.status,
+    })),
     apiPost: vi.fn(),
   }),
 }))
@@ -33,8 +38,17 @@ import Home from './Home.vue'
 
 function mountHome() {
   return mount(Home, {
-    global: { stubs: { AppNavbar: true, HistoryDatabase: true, DemoScenarioPicker: true, teleport: true } },
+    global: {
+      stubs: { AppNavbar: true, HistoryDatabase: true, DemoScenarioPicker: true, teleport: true, RouterLink: true },
+    },
   })
+}
+
+function freeUser(freeRunLeft) {
+  billing.status = { plan: 'free' }
+  billing.canSimulate = {
+    plan: 'free', can_simulate: freeRunLeft, free_run_left: freeRunLeft, free_agents: 25, free_rounds: 15,
+  }
 }
 
 describe('Home start flow', () => {
@@ -102,6 +116,59 @@ describe('Home start flow', () => {
     expect(pending.setPendingUpload).not.toHaveBeenCalled()
     expect(push).not.toHaveBeenCalled()
     expect(wrapper.find('.research-error').text()).toBe('Failed to connect to the server')
+    wrapper.unmount()
+  })
+})
+
+describe('Home for a free-plan user', () => {
+  afterEach(() => {
+    billing.status = { plan: 'pro' }
+    billing.canSimulate = { plan: 'pro', can_simulate: true }
+    vi.clearAllMocks()
+  })
+
+  it('with the free run left: shows the note and starts like a paid user (no upgrade modal)', async () => {
+    freeUser(true)
+    api.startDeepResearch.mockResolvedValue({ success: false, error: 'stop here' })
+
+    const wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.find('[data-test="free-plan-note"]').text()).toBe(
+      'Free plan: 1 simulation this month (up to 25 agents, 15 rounds).',
+    )
+
+    await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
+    expect(wrapper.find('[data-test="research-first-hint"]').exists()).toBe(true)
+    await wrapper.find('[data-test="start-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(api.startDeepResearch).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('.upgrade-modal').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('with the free run used: says so and shows the upgrade modal on start', async () => {
+    freeUser(false)
+
+    const wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.find('[data-test="free-plan-note"]').text()).toContain(
+      'Free plan: your free simulation for this month is used.',
+    )
+
+    await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
+    await wrapper.find('[data-test="start-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(api.startDeepResearch).not.toHaveBeenCalled()
+    expect(wrapper.find('.upgrade-modal').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows no free-plan note to a paid user', async () => {
+    const wrapper = mountHome()
+    await flushPromises()
+    expect(wrapper.find('[data-test="free-plan-note"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

@@ -12,6 +12,11 @@ from ..utils.logger import get_logger
 
 logger = get_logger("glas.supabase")
 
+# The free plan gets this many simulations a calendar month (UTC), and up to this many
+# free research briefings to feed them.
+FREE_MONTHLY_SIMULATIONS = 1
+FREE_MONTHLY_BRIEFINGS = 2
+
 
 @lru_cache(maxsize=1)
 def get_supabase_client() -> Client:
@@ -181,6 +186,70 @@ class SupabaseDB:
                 return False
             cls.insert_credit_tx(user_id, -1, "usage", description)
             return True
+
+    @classmethod
+    def refund_credit(cls, user_id: str, description: str = "refund") -> bool:
+        """Give back one simulation credit. Returns True if it was added."""
+        for _ in range(3):
+            profile = cls.get_profile(user_id)
+            if not profile:
+                return False
+            old = profile.get("credits") or 0
+            # Only writes if nobody changed the balance since we read it.
+            resp = (
+                cls.client()
+                .table("profiles")
+                .update({"credits": old + 1})
+                .eq("id", user_id)
+                .eq("credits", old)
+                .execute()
+            )
+            if resp.data:
+                try:
+                    cls.insert_credit_tx(user_id, 1, "refund", description)
+                except Exception as e:
+                    # The credit is back; a retry would add a second one
+                    logger.error(f"Credit refunded to {user_id} but its ledger row failed: {e}")
+                return True
+        return False
+
+    @classmethod
+    def _count_tx_this_month(cls, user_id: str, tx_type: str, amount: int | None = None) -> int:
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        q = (
+            cls.client()
+            .table("credit_transactions")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .eq("type", tx_type)
+            .gte("created_at", month_start)
+        )
+        if amount is not None:
+            q = q.eq("amount", amount)
+        result = q.execute()
+        return result.count if result.count is not None else len(result.data or [])
+
+    @classmethod
+    def has_free_simulation_remaining(cls, user_id: str) -> bool:
+        """True if the free plan's monthly simulation is still unused.
+
+        Net usage: runs this month minus free runs given back (0-amount refunds).
+        """
+        try:
+            used = cls._count_tx_this_month(user_id, "usage") - cls._count_tx_this_month(user_id, "refund", amount=0)
+            return used < FREE_MONTHLY_SIMULATIONS
+        except Exception as e:
+            logger.warning(f"Free simulation check failed for {user_id}: {e}")
+            return False
+
+    @classmethod
+    def has_free_briefing_remaining(cls, user_id: str) -> bool:
+        """True if the free plan may still have a research briefing this month without a research credit."""
+        try:
+            return cls._count_tx_this_month(user_id, "research_usage", amount=0) < FREE_MONTHLY_BRIEFINGS
+        except Exception as e:
+            logger.warning(f"Free briefing check failed for {user_id}: {e}")
+            return False
 
     @classmethod
     def deduct_research_credit(cls, user_id: str, description: str = "deep_research") -> bool:

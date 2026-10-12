@@ -218,7 +218,7 @@ const feedItems = [
 ]
 
 const plans = [
-  { name: 'Free', price: '$0', desc: '1 pre-built simulation per month', featured: false },
+  { name: 'Free', price: '$0', desc: '1 small simulation per month + report summaries in the feed', featured: false },
   { name: 'Pro', price: '$99/mo', desc: '10 simulations + all industry feeds + PDF downloads', featured: true },
   { name: 'Business', price: '$299/mo', desc: '40 simulations + advanced scenario stacking + priority support', featured: false },
 ]

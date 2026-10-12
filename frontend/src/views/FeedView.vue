@@ -8,7 +8,7 @@
         <h1 class="header-title">Industry Intelligence Feed</h1>
         <p class="header-desc">
           Published scenario simulations across regulated industries.
-          Free reports available. Subscribe for full access to all analyses.
+          Report summaries are free. Full reports need a paid plan.
         </p>
       </header>
 

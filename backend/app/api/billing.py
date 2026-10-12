@@ -1,7 +1,5 @@
 """Stripe billing API routes."""
 
-from datetime import UTC
-
 import stripe
 from flask import Blueprint, g, jsonify, request
 
@@ -190,7 +188,7 @@ def _handle_checkout_complete(session):
             SupabaseDB.insert_credit_tx(
                 user_id,
                 research_grant,
-                "research_grant",
+                "subscription_grant",
                 f"{product.title()} plan — {research_grant} research briefings",
             )
         logger.info(f"Subscription activated: {user_id} -> {product} ({grant} sims, {research_grant} research)")
@@ -201,7 +199,7 @@ def _handle_checkout_complete(session):
         current_research = profile.get("research_credits", 0) if profile else 0
         SupabaseDB.update_profile(user_id, credits=current + 1, research_credits=current_research + 1)
         SupabaseDB.insert_credit_tx(user_id, 1, "purchase", "Pay-as-you-go simulation")
-        SupabaseDB.insert_credit_tx(user_id, 1, "research_grant", "Pay-as-you-go research briefing")
+        SupabaseDB.insert_credit_tx(user_id, 1, "purchase", "Pay-as-you-go research briefing")
         logger.info(f"PAYG purchased: {user_id} +1 sim, +1 research")
 
     elif product in PACK_QUANTITIES:
@@ -214,7 +212,7 @@ def _handle_checkout_complete(session):
         SupabaseDB.insert_credit_tx(user_id, qty, "purchase", f"Simulation pack ({qty})")
         if research_qty:
             SupabaseDB.insert_credit_tx(
-                user_id, research_qty, "research_grant", f"Simulation pack — {research_qty} research briefings"
+                user_id, research_qty, "purchase", f"Simulation pack — {research_qty} research briefings"
             )
         logger.info(f"Pack purchased: {user_id} +{qty} sims, +{research_qty} research")
 
@@ -223,14 +221,14 @@ def _handle_checkout_complete(session):
         profile = SupabaseDB.get_profile(user_id)
         current_research = profile.get("research_credits", 0) if profile else 0
         SupabaseDB.update_profile(user_id, research_credits=current_research + qty)
-        SupabaseDB.insert_credit_tx(user_id, qty, "research_purchase", f"Research briefing purchase ({qty})")
+        SupabaseDB.insert_credit_tx(user_id, qty, "purchase", f"Research briefing purchase ({qty})")
         logger.info(f"Research purchased: {user_id} +{qty} research credits")
 
     elif product.startswith("overage_"):
         profile = SupabaseDB.get_profile(user_id)
         current = profile.get("credits", 0) if profile else 0
         SupabaseDB.update_profile(user_id, credits=current + 1)
-        SupabaseDB.insert_credit_tx(user_id, 1, "overage", f"Overage simulation ({product})")
+        SupabaseDB.insert_credit_tx(user_id, 1, "purchase", f"Overage simulation ({product})")
         logger.info(f"Overage simulation: {user_id} +1")
 
 
@@ -254,7 +252,7 @@ def _handle_invoice_paid(invoice):
         SupabaseDB.insert_credit_tx(user_id, sims, "subscription_grant", f"Monthly {plan} renewal ({sims} simulations)")
         if research:
             SupabaseDB.insert_credit_tx(
-                user_id, research, "research_grant", f"Monthly {plan} renewal ({research} research briefings)"
+                user_id, research, "subscription_grant", f"Monthly {plan} renewal ({research} research briefings)"
             )
         logger.info(f"Subscription renewed: {user_id} -> {sims} sims, {research} research")
 
@@ -322,41 +320,19 @@ def can_simulate():
     plan = Config.normalize_plan(profile.get("plan", "free") if profile else "free")
     credits = profile.get("credits", 0) if profile else 0
 
-    can_run = credits > 0
-    if not can_run and plan == "free":
-        can_run = _has_free_simulation_remaining(g.user_id)
+    free_run_left = plan == "free" and SupabaseDB.has_free_simulation_remaining(g.user_id)
+    free_agents, free_rounds = Config.simulation_limits("free")
 
     return jsonify(
         {
             "success": True,
             "data": {
-                "can_simulate": can_run,
+                "can_simulate": credits > 0 or free_run_left,
                 "credits": credits,
                 "plan": plan,
+                "free_run_left": free_run_left,
+                "free_agents": free_agents,
+                "free_rounds": free_rounds,
             },
         }
     )
-
-
-def _has_free_simulation_remaining(user_id):
-    """Check if a free-tier user has their 1 monthly simulation remaining."""
-    from datetime import datetime
-
-    now = datetime.now(UTC)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-    try:
-        result = (
-            SupabaseDB.client()
-            .table("credit_transactions")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .gte("created_at", month_start)
-            .in_("type", ["usage"])
-            .execute()
-        )
-        used = result.count if result.count is not None else len(result.data or [])
-        return used < 1
-    except Exception as e:
-        logger.warning(f"Free simulation check failed for {user_id}: {e}")
-        return False
