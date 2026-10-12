@@ -36,13 +36,21 @@
         class="project-card"
         :class="{ expanded: isExpanded, hovering: hoveringCard === index }"
         :style="getCardStyle(index)"
+        role="button"
+        tabindex="0"
+        :aria-label="project.simulation_requirement || 'Unnamed Simulation'"
         @mouseenter="hoveringCard = index"
         @mouseleave="hoveringCard = null"
-        @click="selectMode ? toggleSelect(project) : navigateToProject(project)"
+        @click="activateCard(project)"
+        @keydown.enter.prevent="activateCard(project)"
+        @keydown.space.prevent="activateCard(project)"
       >
         <div v-if="selectMode" class="card-select-check" :class="{ checked: selectedIds.has(project.report_id), disabled: !project.report_id }">
           <svg v-if="selectedIds.has(project.report_id)" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#00c853" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
+        <!-- Card title: the scenario is the line people recognise -->
+        <h3 class="card-title">{{ project.simulation_requirement || 'Unnamed Simulation' }}</h3>
+
         <!-- Card header: simulation_id and feature availability -->
         <div class="card-header">
           <span class="card-id">{{ formatSimulationId(project.simulation_id) }}</span>
@@ -90,12 +98,6 @@
             <span class="empty-file-text">No files</span>
           </div>
         </div>
-
-        <!-- Card title (first 20 chars of simulation requirement) -->
-        <h3 class="card-title">{{ getSimulationTitle(project.simulation_requirement) }}</h3>
-
-        <!-- Card description (full simulation requirement) -->
-        <p class="card-desc">{{ truncateText(project.simulation_requirement, 55) }}</p>
 
         <!-- Card footer -->
         <div class="card-footer">
@@ -199,6 +201,15 @@
                 <span class="btn-icon">◆</span>
                 <span class="btn-text">Report</span>
               </button>
+              <button
+                class="modal-btn btn-interaction"
+                @click="goToInteraction"
+                :disabled="!selectedProject.report_id"
+              >
+                <span class="btn-step">Step5</span>
+                <span class="btn-icon">◎</span>
+                <span class="btn-text">Chat with agents</span>
+              </button>
             </div>
             <!-- Re-run with the same scenario -->
             <div class="modal-rerun">
@@ -209,7 +220,7 @@
             </div>
             <!-- Non-replayable hint -->
             <div class="modal-playback-hint">
-              <span class="hint-text">Steps 3 and 5 require an active simulation and cannot be replayed</span>
+              <span class="hint-text">Only the live simulation run (step 3) cannot be replayed</span>
             </div>
           </div>
         </div>
@@ -223,6 +234,7 @@ import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } f
 import { useRouter, useRoute } from 'vue-router'
 import { getSimulationHistory } from '../api/simulation'
 import { setPendingUpload } from '../store/pendingUpload'
+import { formatLocalDate as formatDate, formatLocalTime as formatTime } from '../utils/formatTime'
 
 const router = useRouter()
 const route = useRoute()
@@ -337,43 +349,6 @@ const getProgressClass = (simulation) => {
   }
 }
 
-// Format date (date part only)
-const formatDate = (dateStr) => {
-  if (!dateStr) return ''
-  try {
-    const date = new Date(dateStr)
-    return date.toISOString().slice(0, 10)
-  } catch {
-    return dateStr?.slice(0, 10) || ''
-  }
-}
-
-// Format time (hour:minute)
-const formatTime = (dateStr) => {
-  if (!dateStr) return ''
-  try {
-    const date = new Date(dateStr)
-    const hours = date.getHours().toString().padStart(2, '0')
-    const minutes = date.getMinutes().toString().padStart(2, '0')
-    return `${hours}:${minutes}`
-  } catch {
-    return ''
-  }
-}
-
-// Truncate text
-const truncateText = (text, maxLength) => {
-  if (!text) return ''
-  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
-}
-
-// Generate title from simulation requirement (first 20 chars)
-const getSimulationTitle = (requirement) => {
-  if (!requirement) return 'Unnamed Simulation'
-  const title = requirement.slice(0, 20)
-  return requirement.length > 20 ? title + '...' : title
-}
-
 // Format simulation_id display (first 6 chars)
 const formatSimulationId = (simulationId) => {
   if (!simulationId) return 'SIM_UNKNOWN'
@@ -428,6 +403,12 @@ const navigateToProject = (simulation) => {
   selectedProject.value = simulation
 }
 
+// Click, Enter and Space on a card all do the same thing
+const activateCard = (simulation) => {
+  if (selectMode.value) toggleSelect(simulation)
+  else navigateToProject(simulation)
+}
+
 // Close modal
 const closeModal = () => {
   selectedProject.value = null
@@ -460,6 +441,17 @@ const goToReport = () => {
   if (selectedProject.value?.report_id) {
     router.push({
       name: 'Report',
+      params: { reportId: selectedProject.value.report_id }
+    })
+    closeModal()
+  }
+}
+
+// Deep Interaction works from a finished report, no live simulation needed
+const goToInteraction = () => {
+  if (selectedProject.value?.report_id) {
+    router.push({
+      name: 'Interaction',
       params: { reportId: selectedProject.value.report_id }
     })
     closeModal()
@@ -952,30 +944,25 @@ onUnmounted(() => {
   font-size: 0.9rem;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 6px 0;
+  margin: 0 0 12px 0;
   line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 0.3s ease;
-}
-
-.project-card:hover .card-title {
-  color: #2563EB;
-}
-
-/* Card description */
-.card-desc {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.75rem;
-  color: #6B7280;
-  margin: 0 0 16px 0;
-  line-height: 1.5;
-  height: 34px;
+  height: 2.8em;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  transition: color 0.3s ease;
+}
+
+.project-card:hover .card-title,
+.project-card:focus-visible .card-title {
+  color: #2563EB;
+}
+
+.project-card:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+  z-index: 1000 !important;
 }
 
 /* Card footer */
@@ -1347,13 +1334,16 @@ onUnmounted(() => {
 /* Navigation buttons */
 .modal-actions {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 20px 32px;
   background: #FFFFFF;
 }
 
 .modal-btn {
   flex: 1;
+  min-width: 96px;
+  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1406,6 +1396,7 @@ onUnmounted(() => {
 .modal-btn.btn-project .btn-icon { color: #3B82F6; }
 .modal-btn.btn-simulation .btn-icon { color: #F59E0B; }
 .modal-btn.btn-report .btn-icon { color: #10B981; }
+.modal-btn.btn-interaction .btn-icon { color: #8B5CF6; }
 
 .modal-btn:hover:not(:disabled) .btn-text {
   color: #111827;

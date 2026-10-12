@@ -1,4 +1,43 @@
 /**
+ * Parse a server timestamp. The backend writes naive UTC times
+ * ("2026-10-10T16:03:00"), which the browser would read as local time,
+ * so a date-time with no zone is read as UTC.
+ * @param {string | null | undefined} str
+ * @returns {Date | null}
+ */
+export function parseServerDate(str) {
+  if (!str) return null
+  let s = String(str).trim().replace(' ', 'T')
+  if (/T\d{2}:\d{2}/.test(s) && !/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) s += 'Z'
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+const pad2 = (n) => String(n).padStart(2, '0')
+
+/**
+ * Local date as YYYY-MM-DD.
+ * @param {string | null | undefined} str
+ * @returns {string}
+ */
+export function formatLocalDate(str) {
+  const d = parseServerDate(str)
+  if (!d) return ''
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/**
+ * Local time as HH:MM (24-hour).
+ * @param {string | null | undefined} str
+ * @returns {string}
+ */
+export function formatLocalTime(str) {
+  const d = parseServerDate(str)
+  if (!d) return ''
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+/**
  * Human-readable relative time from an ISO-8601 timestamp.
  * @param {string | null | undefined} iso
  * @returns {string}

@@ -24,6 +24,11 @@
             </p>
           </div>
 
+          <div class="hero-actions">
+            <button class="hero-btn primary" data-test="hero-start" @click="scrollToScenario">Start a simulation</button>
+            <button class="hero-btn secondary" data-test="hero-history" @click="scrollToHistory">Your simulations</button>
+          </div>
+
           <div class="decoration-square"></div>
         </div>
 
@@ -54,14 +59,14 @@
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               </div>
               <div class="metric-value">{{ planLimits.agents }}</div>
-              <div class="metric-label">Agents per simulation</div>
+              <div class="metric-label">Max agents</div>
             </div>
             <div class="metric-card">
               <div class="metric-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               </div>
               <div class="metric-value">{{ planLimits.rounds }}</div>
-              <div class="metric-label">Decision rounds</div>
+              <div class="metric-label">Max rounds</div>
             </div>
           </div>
 
@@ -140,8 +145,10 @@
               </div>
               <div class="input-wrapper">
                 <textarea
+                  ref="scenarioInput"
                   v-model="formData.simulationRequirement"
                   class="code-input"
+                  aria-label="Describe your scenario"
                   placeholder="What happens if Ofgem removes the energy price cap? What if the US imposes new tariffs on EU goods?"
                   rows="5"
                   :disabled="loading"
@@ -304,24 +311,32 @@
                 <div class="bundle-spinner"></div>
                 <span>Generating analysis plan...</span>
               </div>
-
-              <div class="console-section btn-section">
-                <button
-                  class="start-engine-btn"
-                  @click="startSimulation"
-                  :disabled="!canSubmit || loading"
-                >
-                  <span v-if="!loading">{{ fullAnalysisMode ? 'Start Full Analysis' : 'Start Engine' }}</span>
-                  <span v-else>Initializing...</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                </button>
-              </div>
             </template>
+
+            <!-- Always visible (disabled until a scenario is typed) so the next step is never hidden -->
+            <div class="console-section btn-section">
+              <p v-if="showResearchFirstHint" class="start-hint" data-test="research-first-hint">
+                No documents? We will write a research briefing first (about 30 seconds).
+              </p>
+              <button
+                class="start-engine-btn"
+                data-test="start-btn"
+                @click="startSimulation"
+                :disabled="!canSubmit || loading || researchLoading"
+              >
+                <span v-if="researchLoading">{{ researchStatusMessage }} ({{ researchElapsed }}s)</span>
+                <span v-else-if="!loading">{{ fullAnalysisMode ? 'Start Full Analysis' : 'Start simulation' }}</span>
+                <span v-else>Starting...</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </button>
+              <!-- Repeated here: a briefing started by this button fails far below the research block -->
+              <div v-if="error" class="research-error" role="alert">{{ error }}</div>
+            </div>
           </div>
         </div>
       </section>
 
-      <HistoryDatabase />
+      <HistoryDatabase id="your-simulations" />
     </div>
 
     <!-- Upgrade Modal -->
@@ -370,6 +385,7 @@ const loading = ref(false)
 const error = ref('')
 const isDragOver = ref(false)
 const fileInput = ref(null)
+const scenarioInput = ref(null)
 
 const enhancing = ref(false)
 const showUpgradeModal = ref(false)
@@ -459,6 +475,11 @@ const starterExamples = [
 
 const canSubmit = computed(() => {
   return formData.value.simulationRequirement.trim() !== ''
+})
+
+// Paid users with no documents get a research briefing written before the build
+const showResearchFirstHint = computed(() => {
+  return !isDemoMode && isPaidUser.value && files.value.length === 0
 })
 
 async function handleEnhancePrompt() {
@@ -569,6 +590,13 @@ const addFiles = (newFiles) => {
 }
 const removeFile = (index) => { files.value.splice(index, 1) }
 const scrollToBottom = () => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }) }
+const scrollToScenario = () => {
+  scenarioInput.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  scenarioInput.value?.focus({ preventScroll: true })
+}
+const scrollToHistory = () => {
+  document.getElementById('your-simulations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 watch(() => formData.value.simulationRequirement, () => {
   if (fullAnalysisMode.value) {
@@ -602,8 +630,8 @@ watch(fullAnalysisMode, async (enabled) => {
   }
 })
 
-const startSimulation = () => {
-  if (!canSubmit.value || loading.value) return
+const startSimulation = async () => {
+  if (!canSubmit.value || loading.value || researchLoading.value) return
 
   // In demo mode, navigate directly to the pre-recorded simulation replay.
   if (isDemoMode) {
@@ -624,6 +652,14 @@ const startSimulation = () => {
     showUpgradeModal.value = true
     return
   }
+
+  // The build needs at least one document. With none attached, write the
+  // research briefing first; if that fails its error is already on screen.
+  if (files.value.length === 0) {
+    await runDeepResearch()
+    if (files.value.length === 0) return
+  }
+
   const hasDecision = decisionForm.role || decisionForm.decision
   const intake = hasDecision ? { ...decisionForm } : null
 
@@ -781,6 +817,20 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
   animation: blink 1s step-end infinite;
   font-weight: 700;
 }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: -16px 0 32px; }
+.hero-btn {
+  padding: 12px 22px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  transition: all 0.2s;
+}
+.hero-btn.primary { background: var(--accent); color: #000; }
+.hero-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.hero-btn.secondary { background: transparent; color: var(--accent); }
+.hero-btn.secondary:hover { background: rgba(0, 200, 83, 0.08); }
 .decoration-square { width: 14px; height: 14px; background: var(--accent); }
 
 .hero-right {
@@ -931,6 +981,7 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
 }
 .console-section { padding: 20px; }
 .console-section.btn-section { padding-top: 0; }
+.start-hint { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 10px; }
 .console-header {
   display: flex;
   justify-content: space-between;
@@ -1284,5 +1335,10 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
   .hero-logo { max-height: 160px; margin-bottom: 20px; }
   .main-title { font-size: 2.8rem; }
   .example-row { flex-direction: column; }
+}
+
+/* Phones: the scenario box comes straight after the hero, before status/workflow */
+@media (max-width: 768px) {
+  .dashboard-section .right-panel { order: -1; }
 }
 </style>

@@ -1,10 +1,19 @@
 <template>
-  <!-- Shown by the process pages when the backend answers 404 for the project or simulation -->
+  <!-- Shown by the process pages when the backend answers 404 for the project or simulation,
+       or when /process/new is opened with nothing to build -->
   <div class="project-unavailable" role="alert">
-    <h2 class="unavailable-title">This project is no longer available.</h2>
-    <router-link to="/dashboard" class="unavailable-link">Back to dashboard</router-link>
+    <h2 class="unavailable-title">{{ title }}</h2>
+    <router-link :to="linkTo" class="unavailable-link">{{ linkText }}</router-link>
   </div>
 </template>
+
+<script setup>
+defineProps({
+  title: { type: String, default: 'This project is no longer available.' },
+  linkTo: { type: String, default: '/dashboard' },
+  linkText: { type: String, default: 'Back to dashboard' },
+})
+</script>
 
 <style scoped>
 .project-unavailable {

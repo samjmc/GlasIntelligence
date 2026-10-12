@@ -1,5 +1,14 @@
 <template>
   <div class="landing">
+    <!-- Top bar: returning users should not have to scroll to the footer to log in -->
+    <header v-if="!isDemoMode" class="landing-topbar">
+      <router-link v-if="authState.user" to="/" class="topbar-link primary" data-test="topbar-open-app">Open app</router-link>
+      <template v-else>
+        <router-link to="/login" class="topbar-link" data-test="topbar-login">Log in</router-link>
+        <router-link to="/signup" class="topbar-link primary" data-test="topbar-signup">Sign up</router-link>
+      </template>
+    </header>
+
     <!-- Hero -->
     <section class="hero">
       <div class="hero-inner">
@@ -8,7 +17,7 @@
         <h1 class="hero-headline">Scenario Intelligence for Strategic Decision-Making</h1>
         <p class="hero-sub">
           Multi-agent AI simulation that shows you how complex stakeholder situations evolve.
-          Describe a scenario, and our engine analyses the 50 most relevant stakeholders across 25 critical decision points.
+          Describe a scenario, and our engine simulates how dozens of key stakeholders react over many rounds.
         </p>
         <div class="hero-ctas">
           <button v-if="isDemoMode" class="btn btn-primary" @click="scrollToDemos">Try a Worked Example</button>
@@ -102,6 +111,7 @@ import { isDemoMode, SESSION_KEY } from '../demo/config'
 import { encodeDemoId } from '../demo/sessionId'
 import { setActiveScenario } from '../demo/adapter'
 import { SCHEMA_VERSION } from '../demo/tape'
+import { authState } from '../store/auth'
 
 const router = useRouter()
 const demoScenarios = ref([])
@@ -179,7 +189,7 @@ const steps = [
   {
     num: '03',
     title: 'Get Your Report',
-    desc: 'Up to 50 stakeholder agents simulate reactions across 25 decision points. You get a detailed analysis report.',
+    desc: 'Dozens of stakeholder agents simulate reactions over many rounds. You get a detailed analysis report.',
   },
 ]
 
@@ -220,6 +230,42 @@ const plans = [
   background: #0a0a0a;
   color: #e0e0e0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Top bar ─────────────────────────────── */
+
+.landing-topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+}
+
+.topbar-link {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  color: #ccc;
+  border: 1px solid #333;
+  transition: all 0.2s ease;
+}
+
+.topbar-link:hover {
+  border-color: #555;
+  color: #fff;
+}
+
+.topbar-link.primary {
+  background: #00c853;
+  border-color: #00c853;
+  color: #000;
+}
+
+.topbar-link.primary:hover {
+  background: #00e676;
 }
 
 /* ── Hero ────────────────────────────────── */

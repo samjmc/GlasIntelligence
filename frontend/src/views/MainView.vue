@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">GLAS</div>
+        <router-link to="/" class="brand">GLAS</router-link>
       </div>
       
       <div class="header-center">
@@ -34,6 +34,12 @@
     </header>
 
     <ProjectUnavailable v-if="notFound" />
+    <ProjectUnavailable
+      v-else-if="nothingToBuild"
+      title="Nothing to build yet. Go back and describe your scenario."
+      link-to="/"
+      link-text="Describe a scenario"
+    />
 
     <!-- Main Content Area -->
     <div v-else class="content-area">
@@ -103,6 +109,7 @@ const loading = ref(false)
 const graphLoading = ref(false)
 const error = ref('')
 const notFound = ref(false) // backend 404: the project was deleted or expired
+const nothingToBuild = ref(false) // /process/new with no pending input (e.g. after a page reload)
 const projectData = ref(null)
 const graphData = ref(null)
 const currentPhase = ref(-1) // -1: Upload, 0: Ontology, 1: Build, 2: Complete
@@ -191,6 +198,7 @@ const initProject = async () => {
 const handleNewProject = async () => {
   const pending = getPendingUpload()
   if (!pending.isPending || pending.files.length === 0) {
+    nothingToBuild.value = true
     error.value = 'No pending files found.'
     addLog('Error: No pending files found for new project.')
     return
@@ -453,6 +461,8 @@ onUnmounted(() => {
   font-size: 18px;
   letter-spacing: 0.2em;
   cursor: pointer;
+  color: inherit;
+  text-decoration: none;
 }
 
 .view-switcher {

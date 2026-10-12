@@ -389,6 +389,34 @@ def prepare_simulation():
                     }
                 )
             else:
+                # Reopening Step 2 mid-build (reload, or the history's "Environment Setup") used to
+                # start a second, parallel persona build: double LLM cost, both writing the same files.
+                running = next(
+                    (
+                        t
+                        for t in TaskManager().list_tasks("simulation_prepare")
+                        if t["metadata"].get("simulation_id") == simulation_id
+                        and t["status"] in (TaskStatus.PENDING.value, TaskStatus.PROCESSING.value)
+                    ),
+                    None,
+                )
+                if running:
+                    logger.info(f"Simulation {simulation_id} preparation already running, attaching to it")
+                    return jsonify(
+                        {
+                            "success": True,
+                            "data": {
+                                "simulation_id": simulation_id,
+                                "task_id": running["task_id"],
+                                "status": "preparing",
+                                "message": "Preparation already running, attached to it",
+                                "already_prepared": False,
+                                "already_running": True,
+                                "expected_entities_count": state.entities_count,
+                                "entity_types": state.entity_types,
+                            },
+                        }
+                    )
                 logger.info(f"Simulation {simulation_id} not prepared, starting preparation task")
 
         project = ProjectManager.get_project(state.project_id)

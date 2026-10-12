@@ -62,6 +62,29 @@
           <router-link to="/feed" class="action-btn">View Feed</router-link>
         </section>
 
+        <!-- Recent simulations: same source as the Home history cards -->
+        <section class="dash-section" data-test="recent-runs">
+          <h2 class="section-heading">Recent simulations</h2>
+          <div v-if="recentRuns.length === 0" class="empty-block">
+            <p>No simulations yet. Run your first scenario to get started.</p>
+          </div>
+          <div v-else class="sim-list">
+            <div v-for="run in recentRuns" :key="run.simulation_id" class="sim-row run-row">
+              <div class="sim-info">
+                <span class="sim-title">{{ truncate(run.simulation_requirement || 'Unnamed simulation', 90) }}</span>
+                <span class="sim-date">{{ formatLocalDate(run.created_at) }} {{ formatLocalTime(run.created_at) }} · {{ runProgress(run) }}</span>
+              </div>
+              <div class="session-actions">
+                <template v-if="run.report_id">
+                  <router-link :to="{ name: 'Report', params: { reportId: run.report_id } }" class="step-link">Report</router-link>
+                  <router-link :to="{ name: 'Interaction', params: { reportId: run.report_id } }" class="step-link">Chat</router-link>
+                </template>
+                <router-link v-else :to="{ name: 'Simulation', params: { simulationId: run.simulation_id } }" class="step-link">Open</router-link>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Your Sessions -->
         <section v-if="recentSessions.length > 0" class="dash-section">
           <h2 class="section-heading">Your Sessions</h2>
@@ -123,28 +146,6 @@
           </div>
         </section>
 
-        <!-- Recent Simulations -->
-        <section class="dash-section">
-          <h2 class="section-heading">Recent Simulations</h2>
-          <div v-if="recentSimulations.length === 0" class="empty-block">
-            <p>No simulations yet. Run your first scenario to get started.</p>
-          </div>
-          <div v-else class="sim-list">
-            <div
-              v-for="sim in recentSimulations"
-              :key="sim.id"
-              class="sim-row"
-              @click="viewSimulation(sim)"
-            >
-              <div class="sim-info">
-                <span class="sim-title">{{ sim.title || sim.id }}</span>
-                <span class="sim-date">{{ formatDate(sim.created_at) }}</span>
-              </div>
-              <span class="sim-status" :class="'status-' + sim.status">{{ sim.status }}</span>
-            </div>
-          </div>
-        </section>
-
         <!-- Simulation History -->
         <section class="dash-section">
           <h2 class="section-heading">Simulation History</h2>
@@ -184,8 +185,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import { authState } from '../store/auth'
-import { listBundles, listReminders, getRecentSessions } from '../api/simulation'
-import { formatRelative, formatAbsolute } from '../utils/formatTime'
+import { listBundles, listReminders, getRecentSessions, getSimulationHistory } from '../api/simulation'
+import { formatRelative, formatAbsolute, formatLocalDate, formatLocalTime } from '../utils/formatTime'
 import AppNavbar from '../components/AppNavbar.vue'
 
 const router = useRouter()
@@ -200,6 +201,8 @@ const simulationsThisMonth = ref(0)
 const bundles = ref([])
 const reminders = ref([])
 const recentSessions = ref([])
+const recentRuns = ref([])
+const RECENT_RUNS_LIMIT = 5
 
 const planLabel = computed(() => {
   const labels = { free: 'Free', pro: 'Pro', business: 'Business', enterprise: 'Enterprise', payg: 'Pay-as-you-go' }
@@ -252,6 +255,11 @@ async function loadDashboard() {
       const sessRes = await getRecentSessions()
       if (sessRes?.data) recentSessions.value = sessRes.data
     } catch { /* non-critical */ }
+
+    try {
+      const runsRes = await getSimulationHistory(RECENT_RUNS_LIMIT)
+      if (runsRes?.success) recentRuns.value = (runsRes.data || []).slice(0, RECENT_RUNS_LIMIT)
+    } catch { /* non-critical */ }
   } catch (e) {
     console.error('Dashboard load failed:', e)
     dashError.value = 'Failed to load dashboard data'
@@ -260,8 +268,11 @@ async function loadDashboard() {
   }
 }
 
-function viewSimulation(sim) {
-  router.push(`/simulation/${sim.id}`)
+function runProgress(run) {
+  const current = run.current_round || 0
+  const total = run.total_rounds || 0
+  if (total === 0) return 'Not started'
+  return `${current}/${total} rounds`
 }
 
 function bundleIdOf(sess) {
@@ -586,15 +597,6 @@ onMounted(() => {
   color: #8a8a8a;
 }
 
-.sim-status {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 3px 10px;
-  border-radius: 4px;
-}
-
 .status-completed {
   background: rgba(0, 200, 83, 0.12);
   color: #00c853;
@@ -684,7 +686,18 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
+.run-row {
+  cursor: default;
+  gap: 16px;
+}
+
+.run-row .sim-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .step-link {
+  text-decoration: none;
   min-height: 24px;
   padding: 4px 10px;
   font-size: 11px;
@@ -866,7 +879,8 @@ onMounted(() => {
 
 /* Narrow phones: stack the session row so the date, badge and buttons never overlap */
 @media (max-width: 400px) {
-  .session-row {
+  .session-row,
+  .run-row {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
