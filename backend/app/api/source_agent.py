@@ -11,6 +11,7 @@ from ..config import Config
 from ..middleware.auth import optional_auth, require_auth
 from ..models.task import TaskManager, TaskStatus
 from ..services.supabase_client import SupabaseDB
+from ..utils.llm_client import no_thinking_kwargs
 from ..utils.logger import get_logger
 
 source_agent_bp = Blueprint("source_agent", __name__)
@@ -73,6 +74,7 @@ def suggest_sources():
             temperature=0.7,
             max_tokens=800,
             response_format={"type": "json_object"},
+            **no_thinking_kwargs(Config.LLM_BASE_URL),
         )
 
         if not response.choices:
@@ -119,6 +121,7 @@ def auto_research():
             ],
             temperature=0.5,
             max_tokens=2500,
+            **no_thinking_kwargs(Config.LLM_BASE_URL),
         )
 
         if not response.choices:

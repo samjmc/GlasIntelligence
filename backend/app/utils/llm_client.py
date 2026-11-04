@@ -12,6 +12,19 @@ from openai import OpenAI
 from ..config import Config
 
 
+def no_thinking_kwargs(base_url: str | None) -> dict[str, Any]:
+    """Extra create() kwargs that turn DeepSeek's default reasoning off; empty for other providers.
+
+    For callers that use the raw OpenAI client instead of LLMClient. With reasoning on,
+    the hidden thinking spends the max_tokens budget: /source/auto-research (2500) returned
+    0 characters with finish_reason=length (live, 2026-11-04), and uncapped persona calls
+    paid for the reasoning on every agent.
+    """
+    if "deepseek" in (base_url or "").lower():
+        return {"extra_body": {"thinking": {"type": "disabled"}}}
+    return {}
+
+
 class LLMClient:
     """LLM client"""
 
