@@ -472,6 +472,7 @@ const isPaidUser = computed(() => {
 
 // Set for free-plan users only: { free_run_left, free_agents, free_rounds } from /billing/can-simulate
 const freeRun = ref(null)
+const noResearchCredits = ref(false) // the last deep-research call was refused with 402
 
 // Paid users, and free users who have not used this month's free simulation
 const canRun = computed(() => isPaidUser.value || !!freeRun.value?.free_run_left)
@@ -576,10 +577,34 @@ async function runDeepResearch() {
     files.value.push(briefingFile)
 
   } catch (e) {
-    error.value = 'Failed to connect to the server'
+    const body = e.response?.data
+    if (e.response?.status === 402) noResearchCredits.value = true
+    error.value = body?.message || body?.error || (e.response ? e.message : 'Failed to connect to the server')
   } finally {
     researchLoading.value = false
     if (researchElapsedTimer) { clearInterval(researchElapsedTimer); researchElapsedTimer = null }
+  }
+}
+
+// Paid plans with no research credits left: a short LLM briefing that needs no credit.
+async function runQuickBriefing() {
+  const prompt = formData.value.simulationRequirement.trim()
+  researchLoading.value = true
+  researchStatusMessage.value = 'Writing a quick briefing...'
+  try {
+    const res = await apiPost('/source/auto-research', { prompt })
+    if (res?.success && res.data?.content_md) {
+      error.value = ''
+      briefing.value = { title: res.data.title, content_md: res.data.content_md, filename: res.data.filename }
+      const blob = new Blob([res.data.content_md], { type: 'text/markdown' })
+      files.value.push(new File([blob], res.data.filename, { type: 'text/markdown' }))
+    } else {
+      error.value = res?.error || 'Could not write a briefing'
+    }
+  } catch (e) {
+    error.value = e.message || 'Could not write a briefing'
+  } finally {
+    researchLoading.value = false
   }
 }
 
@@ -676,7 +701,15 @@ const startSimulation = async () => {
   // The build needs at least one document. With none attached, write the
   // research briefing first; if that fails its error is already on screen.
   if (files.value.length === 0) {
+    noResearchCredits.value = false
     await runDeepResearch()
+    if (files.value.length === 0 && noResearchCredits.value) {
+      if (isPaidUser.value) {
+        await runQuickBriefing()
+      } else {
+        error.value = 'No free research briefings left this month. Upload a document to start.'
+      }
+    }
     if (files.value.length === 0) return
   }
 
