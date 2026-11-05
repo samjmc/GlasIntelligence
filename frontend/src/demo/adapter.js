@@ -9,8 +9,31 @@ import { isStep5Request, loadStep5, step5Response } from './step5'
 const PRE_PICKER_PATHS = [
   '/api/billing/status',
   '/api/session/active',
-  '/api/simulation/history',
 ]
+
+// Fixed answers for calls that a demo page makes before (or outside) the tape.
+// They fire when Home mounts, so they must work with no scenario chosen.
+// - can-simulate: no tape recorded it, and it raised the "API call not recorded"
+//   overlay on the demo landing page. Every tape was recorded on the pro plan,
+//   so the stub says pro; Home.vue reads this body only when plan === 'free'.
+// - history: every tape recorded an empty list. Without a scenario the call got
+//   NOT_RECORDED, and the history panel showed "Failed to load simulation history".
+const FIXED_STUBS = {
+  'GET /api/billing/can-simulate': {
+    success: true,
+    data: { can_simulate: true, plan: 'pro', free_run_left: false },
+  },
+  'GET /api/simulation/history': { success: true, count: 0, data: [] },
+}
+
+function fixedStub(method, url) {
+  const path = String(url).split('?')[0]
+  const key = Object.keys(FIXED_STUBS).find((k) => {
+    const [m, p] = k.split(' ')
+    return m === method && (path === p || path.endsWith(p))
+  })
+  return key ? { status: 200, body: FIXED_STUBS[key] } : null
+}
 
 let activeScenario = null
 let activeSessionId = null
@@ -64,6 +87,8 @@ function announceIfMissing(body, path) {
 }
 
 async function answer(method, url, requestBody) {
+  const stub = fixedStub(method, url)
+  if (stub) return stub
   if (!activeScenario) {
     // No scenario chosen and none stored — only suppress the watchdog for the
     // small set of paths that legitimately fire on Home before the picker.

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Glas Intelligence — Scenario intelligence for strategic decisions</title>
+<meta name="description" content="Multi-agent AI simulation that shows how stakeholder situations evolve. A Shiloh Consulting product."/>
+<link rel="icon" href="/favicon.png"/>
+<style>
+:root { --bg:#0a0a0a; --fg:#e0e0e0; --muted:#999; --dim:#888; --line:#333; --green:#00c853; --green2:#00e676; }
+* { box-sizing: border-box; }
+html,body { margin:0; background:var(--bg); color:var(--fg); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+a { color: var(--green); }
+.hero { padding:100px 24px 80px; text-align:center; background: radial-gradient(ellipse at 50% 0%, #111 0%, #0a0a0a 70%); }
+.hero-inner { max-width:720px; margin:0 auto; }
+.hero-logo { height:72px; width:auto; margin-bottom:24px; border-radius:12px; }
+.brand-name { font-size:18px; letter-spacing:.2em; text-transform:uppercase; color:var(--dim); margin:0 0 32px; font-weight:600; }
+.hero-headline { font-size:clamp(32px,5vw,52px); font-weight:800; line-height:1.15; color:#fff; margin:0 0 24px; letter-spacing:-.03em; }
+.hero-sub { font-size:17px; line-height:1.7; color:var(--muted); margin:0 auto 40px; max-width:600px; }
+.hero-ctas { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; }
+.btn { display:inline-flex; align-items:center; justify-content:center; padding:14px 32px; border-radius:6px; font-size:15px; font-weight:600; text-decoration:none; letter-spacing:.01em; }
+.btn-primary { background:var(--green); color:#000; }
+.btn-primary:hover { background:var(--green2); }
+.btn-outline { background:transparent; color:#ccc; border:1px solid var(--line); }
+.btn-outline:hover { border-color:#555; color:#fff; }
+.section { padding:80px 24px; max-width:1080px; margin:0 auto; }
+.section-heading { font-size:28px; font-weight:600; color:#fff; margin:0 0 48px; text-align:center; letter-spacing:-.02em; }
+.steps-grid, .feed-grid, .pricing-grid { display:grid; gap:24px; }
+.steps-grid { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+.feed-grid, .pricing-grid { grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+.step-card, .feed-card, .pricing-card { background:#111; border:1px solid #1c1c1c; border-radius:12px; padding:28px; }
+.step-num { color:var(--green); font-weight:700; letter-spacing:.08em; font-size:13px; }
+.step-title, .feed-title, .plan-name { color:#fff; margin:12px 0 8px; font-size:18px; }
+.step-desc, .feed-excerpt, .plan-desc { color:var(--muted); line-height:1.6; margin:0; }
+.feed-tag { font-size:12px; color:var(--green); letter-spacing:.08em; text-transform:uppercase; }
+.feed-date { display:block; margin-top:16px; color:#666; font-size:13px; }
+.pricing-card.featured { border-color:var(--green); }
+.plan-price { font-size:28px; color:#fff; margin:8px 0; font-weight:700; }
+.note { max-width:720px; margin:0 auto; color:var(--muted); text-align:center; line-height:1.6; }
+footer { padding:48px 24px 64px; text-align:center; border-top:1px solid #1c1c1c; color:#777; }
+.footer-brand { letter-spacing:.2em; color:var(--dim); font-weight:600; }
+.footer-links { display:flex; gap:20px; justify-content:center; margin:16px 0; }
+.footer-links a { color:#aaa; text-decoration:none; }
+.report { max-width:760px; margin:0 auto; padding:48px 24px 80px; line-height:1.75; }
+.report h1 { color:#fff; font-size:32px; line-height:1.25; letter-spacing:-.03em; }
+.report h2 { color:#fff; margin-top:40px; }
+.report p { color:#ccc; }
+.report blockquote { border-left:3px solid var(--green); margin:20px 0; padding:8px 0 8px 16px; color:#bbb; }
+.report hr { border:0; border-top:1px solid #222; margin:32px 0; }
+.topbar { padding:20px 24px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1c1c1c; }
+.topbar a { color:#aaa; text-decoration:none; font-size:14px; }
+.badge { display:inline-block; background:#122; color:var(--green); border:1px solid #143; border-radius:999px; padding:4px 10px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+</style>
+</head>
+<body>
+  <section class="hero">
+    <div class="hero-inner">
+      <img class="hero-logo" src="/glas-logo.png" alt="Glas Intelligence"/>
+      <p class="brand-name">Glas Intelligence</p>
+      <h1 class="hero-headline">Scenario intelligence for strategic decision-making</h1>
+      <p class="hero-sub">Multi-agent AI simulation that shows how complex stakeholder situations evolve. Describe a scenario; the engine models the most relevant actors across critical decision points.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="/report.html">Read a sample report</a>
+        <a class="btn btn-outline" href="https://github.com/samjmc/GlasIntelligence">View the code</a>
+      </div>
+    </div>
+  </section>
+  <section class="section">
+    <h2 class="section-heading">How it works</h2>
+    <div class="steps-grid">
+      <div class="step-card"><div class="step-num">01</div><h3 class="step-title">Describe the scenario</h3><p class="step-desc">A regulation change, market shift, or operational shock. One prompt starts the run.</p></div>
+      <div class="step-card"><div class="step-num">02</div><h3 class="step-title">Build the knowledge graph</h3><p class="step-desc">Source documents are turned into entities and relationships the agents can reason over.</p></div>
+      <div class="step-card"><div class="step-num">03</div><h3 class="step-title">Simulate, then report</h3><p class="step-desc">Stakeholder agents react across decision rounds. You get a structured analysis, not a vibe.</p></div>
+    </div>
+  </section>
+  <section class="section">
+    <h2 class="section-heading">Sample output</h2>
+    <p class="note">This is a frozen report from a real Glas run. The live simulation stack is not on this site. You can read it without an account.</p>
+    <div class="feed-grid" style="margin-top:40px">
+      <a class="feed-card" href="/report.html" style="text-decoration:none;color:inherit">
+        <span class="feed-tag">Healthcare</span>
+        <h3 class="feed-title">NHS Pharmacy First payment-cap simulation</h3>
+        <p class="feed-excerpt">Stakeholder narratives, access risk, and system strain after a consultation payment cap. Recorded output from the engine.</p>
+        <span class="feed-date">Open the report →</span>
+      </a>
+      <div class="feed-card">
+        <span class="feed-tag">Energy</span>
+        <h3 class="feed-title">UK energy price-cap removal</h3>
+        <p class="feed-excerpt">How suppliers, regulators, and consumers react to deregulated pricing over successive rounds.</p>
+        <span class="feed-date">Example scenario</span>
+      </div>
+      <div class="feed-card">
+        <span class="feed-tag">Finance</span>
+        <h3 class="feed-title">Basel IV implementation</h3>
+        <p class="feed-excerpt">Banks, fintechs, and supervisors adapting to new capital rules over 18 months.</p>
+        <span class="feed-date">Example scenario</span>
+      </div>
+    </div>
+  </section>
+  <section class="section">
+    <h2 class="section-heading">What this is</h2>
+    <p class="note">Glas Intelligence is a <a href="https://shilohconsulting.ie">Shiloh Consulting</a> product: Vue frontend, Flask API, OASIS multi-agent simulation, a Graphiti knowledge graph on Neo4j, and Supabase for sign-in. This public site is a static demo. The full engine is in the GitHub repo. <a href="https://shilohconsulting.ie/projects/glas-intelligence/">Read the project write-up</a>.</p>
+  </section>
+  <footer>
+    <p class="footer-brand">GLAS INTELLIGENCE</p>
+    <nav class="footer-links">
+      <a href="/report.html">Sample report</a>
+      <a href="https://github.com/samjmc/GlasIntelligence">GitHub</a>
+      <a href="https://shilohconsulting.ie">Shiloh Consulting</a>
+    </nav>
+    <p>Glas Intelligence provides structured scenario analysis. It does not issue forecasts or policy recommendations.</p>
+    <p>&copy; 2026 Glas Intelligence, a Shiloh Consulting product</p>
+  </footer>
+</body>
+</html>

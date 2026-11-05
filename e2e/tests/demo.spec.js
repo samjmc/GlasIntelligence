@@ -160,3 +160,26 @@ test('demo banner is scoped to the walkthrough and skip-to-end reaches the repor
   await page.waitForLoadState('networkidle')
   await expect(page.locator('[data-test="demo-banner"]')).toHaveCount(0)
 })
+
+test('the site root opens with no demo error, before and after a scenario', async ({ page }) => {
+  // "/" is the page GitHub Pages serves first. Home.vue calls can-simulate and
+  // history on mount; neither may raise the watchdog or a "failed to load" note.
+  async function expectCleanHome() {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByText('Choose a worked example')).toBeVisible()
+    await expect(page.locator('[data-test="watchdog-not-recorded"]')).toHaveCount(0)
+    await expect(page.locator('[data-test="watchdog-tape-failed"]')).toHaveCount(0)
+    await expect(page.getByText('Failed to load simulation history')).toHaveCount(0)
+  }
+
+  // First visit: no scenario chosen yet.
+  await expectCleanHome()
+
+  // Return visit: a scenario is now active, so calls resolve against its tape.
+  await page.goto('/landing')
+  await page.waitForLoadState('networkidle')
+  await page.locator('[data-test="demo-box"][data-scenario-id="demo-e2e"]').click()
+  await expect(page.locator('[data-test="demo-banner"]')).toBeVisible()
+  await expectCleanHome()
+})
