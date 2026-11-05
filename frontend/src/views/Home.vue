@@ -590,7 +590,10 @@ async function runDeepResearch() {
 async function runQuickBriefing() {
   const prompt = formData.value.simulationRequirement.trim()
   researchLoading.value = true
+  error.value = '' // the deep-research 402 is handled by this fallback; don't show it meanwhile
+  researchElapsed.value = 0
   researchStatusMessage.value = 'Writing a quick briefing...'
+  researchElapsedTimer = setInterval(() => { researchElapsed.value++ }, 1000)
   try {
     const res = await apiPost('/source/auto-research', { prompt })
     if (res?.success && res.data?.content_md) {
@@ -605,6 +608,7 @@ async function runQuickBriefing() {
     error.value = e.message || 'Could not write a briefing'
   } finally {
     researchLoading.value = false
+    if (researchElapsedTimer) { clearInterval(researchElapsedTimer); researchElapsedTimer = null }
   }
 }
 
