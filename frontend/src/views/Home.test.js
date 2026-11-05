@@ -127,18 +127,22 @@ describe('Home start flow', () => {
       response: { status: 402, data: { error: 'no_research_credits', message: 'No research credits remaining.' } },
     })
     api.startDeepResearch.mockRejectedValue(err)
-    apiPost.mockResolvedValue({
-      success: true,
-      data: { title: 'Research Briefing', content_md: '# Quick', filename: 'briefing_x.md' },
+    let wrapper
+    let errorShownDuringFallback = null
+    apiPost.mockImplementation(async () => {
+      await wrapper.vm.$nextTick()
+      errorShownDuringFallback = wrapper.find('.research-error').exists()
+      return { success: true, data: { title: 'Research Briefing', content_md: '# Quick', filename: 'briefing_x.md' } }
     })
 
-    const wrapper = mountHome()
+    wrapper = mountHome()
     await flushPromises()
     await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
     await wrapper.find('[data-test="start-btn"]').trigger('click')
     await flushPromises()
 
     expect(apiPost).toHaveBeenCalledWith('/source/auto-research', { prompt: 'What if the US raises steel tariffs?' })
+    expect(errorShownDuringFallback).toBe(false) // the 402 is not left on screen while the fallback runs
     const [files] = pending.setPendingUpload.mock.calls[0]
     expect(files.map((f) => f.name)).toEqual(['briefing_x.md'])
     expect(push).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
