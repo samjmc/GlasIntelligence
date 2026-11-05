@@ -20,6 +20,7 @@ from typing import Any
 from openai import OpenAI
 
 from ..config import Config
+from ..utils.llm_client import no_thinking_kwargs
 from ..utils.logger import get_logger
 from .zep_entity_reader import EntityNode
 
@@ -448,6 +449,7 @@ class SimulationConfigGenerator:
                     response_format={"type": "json_object"},
                     temperature=0.7 - (attempt * 0.1),  # Lower temperature on each retry
                     # No max_tokens set, letting the LLM generate freely
+                    **no_thinking_kwargs(self.base_url),
                 )
 
                 content = response.choices[0].message.content or ""
