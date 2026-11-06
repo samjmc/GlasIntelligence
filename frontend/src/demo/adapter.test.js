@@ -77,6 +77,48 @@ describe('demoAdapter', () => {
   })
 })
 
+describe('demoAdapter fixed stubs', () => {
+  // Home.vue calls /api/billing/can-simulate on mount. No tape recorded it, so it
+  // used to raise the "API call not recorded" overlay on the demo landing page.
+  it.each([
+    ['with no scenario chosen', null],
+    ['with a scenario active', 'synthetic'],
+  ])('answers can-simulate %s without the watchdog or a tape fetch', async (_label, scenario) => {
+    const dispatched = []
+    const spy = vi.spyOn(window, 'dispatchEvent').mockImplementation((e) => {
+      dispatched.push(e)
+      return true
+    })
+    const { demoAdapter, setActiveScenario } = await import('./adapter')
+    if (scenario) setActiveScenario(scenario)
+
+    const res = await demoAdapter({ url: '/api/billing/can-simulate', method: 'get' })
+
+    expect(res.status).toBe(200)
+    expect(res.data.success).toBe(true)
+    expect(res.data.data.can_simulate).toBe(true)
+    // Every tape was recorded on the pro plan, so the stub must not switch Home
+    // into the free-plan limits (Home.vue only reads this body when plan === 'free').
+    expect(res.data.data.plan).toBe('pro')
+    expect(dispatched.map((e) => e.type)).not.toContain('demo:not-recorded')
+    expect(global.fetch).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('answers history with the empty list every tape recorded, with no scenario chosen', async () => {
+    const { demoAdapter } = await import('./adapter')
+    const res = await demoAdapter({ url: '/api/simulation/history', method: 'get', params: { limit: 20 } })
+    expect(res.data).toEqual({ success: true, count: 0, data: [] })
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('answers can-simulate through demoFetch too', async () => {
+    const { demoFetch } = await import('./adapter')
+    const res = await demoFetch('/api/billing/can-simulate')
+    expect((await res.json()).data.can_simulate).toBe(true)
+  })
+})
+
 describe('demoAdapter tape-load failure', () => {
   it('resolves (does not reject) when fetch rejects', async () => {
     makeFetchReject()

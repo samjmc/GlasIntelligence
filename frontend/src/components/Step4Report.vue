@@ -11,9 +11,17 @@
           <!-- Report Header -->
           <div class="report-header-block">
             <div class="report-meta">
-              <span class="report-tag">Prediction Report</span>
+              <span class="report-tag">Simulation Report</span>
               <span class="report-id">ID: {{ reportId || 'REF-2024-X92' }}</span>
             </div>
+            <!-- The engine writes the title and text, and may call them "predictive".
+                 This note says what they are; the engine text itself is not changed. -->
+            <p class="simulated-note" data-test="simulated-note">
+              <strong>Simulated output, not a forecast.</strong>
+              The engine wrote this report about simulated agents in one simulation run.
+              Words such as "predicts" describe what happened in the simulation, not what will happen.
+              The organisations and people named are simulated personas, not their real views.
+            </p>
             <h1 class="main-title">{{ reportOutline.title }}</h1>
             <p class="sub-title">{{ reportOutline.summary }}</p>
             <p v-if="isComplete" class="report-disclaimer">

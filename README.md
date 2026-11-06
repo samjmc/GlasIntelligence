@@ -117,7 +117,7 @@ All checks must pass before a PR can be merged to `main`:
 - The kit is in [`deploy/`](deploy/). The runbook, with costs, first setup and everyday operations, is [docs/hosting.md](docs/hosting.md).
 - Until the server is created, the backend is not deployed anywhere.
 
-**The static demo:** glasinsight.com (Cloudflare Pages), plus the GitHub Pages copy built by `deploy-pages.yml`.
+**The static demo:** glasinsight.com (Cloudflare Pages project `glasinsight`, source in [`site/glasinsight/`](site/glasinsight/), deployed by hand), plus the GitHub Pages copy built by `deploy-pages.yml`.
 
 The older Hetzner pipeline (`deploy.yml`, `docker-compose.prod.yml` / `.staging.yml`) was retired on 2026-08-10, and the new kit replaces it.
 
