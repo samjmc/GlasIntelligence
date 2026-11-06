@@ -50,7 +50,7 @@
 
           <h2 class="section-title">Ready</h2>
           <p class="section-desc">
-            Prediction engine on standby. Describe a scenario to begin.
+            Simulation engine on standby. Describe a scenario to begin.
           </p>
 
           <div class="metrics-row">
@@ -424,7 +424,7 @@ const bundleLoading = ref(false)
 const activeBundleId = ref(null)
 
 onMounted(() => {
-  const full = 'Simulate the future'
+  const full = 'Watch it unfold'
   let i = 0
   typewriterTimer = setInterval(() => {
     if (i < full.length) {

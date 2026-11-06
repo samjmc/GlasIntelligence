@@ -88,6 +88,9 @@ test('demo replays a scenario through to a rendered report', async ({ page }) =>
     page.locator('[data-test="report-complete"]'),
   ).toBeVisible({ timeout: REPLAY_TIMEOUT_MS })
 
+  // The engine may title its report "predictive"; the note above it must say it is simulated.
+  await expect(page.locator('[data-test="simulated-note"]')).toContainText('not a forecast')
+
   // Cursor-regression assertion: verify that the agent log has exactly 3
   // entries (report_start, planning_complete, report_complete) — one from the
   // from_line=0 poll and one from the from_line=2 poll. If the cursor keying
