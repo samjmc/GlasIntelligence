@@ -19,7 +19,8 @@ from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.report_agent import ReportManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
-from ..services.supabase_client import SupabaseDB
+from ..services.spend_guards import free_runs_paused_reason
+from ..services.supabase_client import FREE_RUN_DESCRIPTION, SupabaseDB
 from ..services.zep_entity_reader import ZepEntityReader
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
@@ -1333,6 +1334,16 @@ def start_simulation():
         if not state:
             return jsonify({"success": False, "error": f"Simulation not found: {simulation_id}"}), 404
 
+        # Before anything is stopped or charged. A restart replaces this simulation's own run.
+        if SimulationRunner.count_active_runs(exclude_simulation_id=simulation_id) >= Config.MAX_CONCURRENT_SIMULATIONS:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "server_busy",
+                    "message": "The simulation server is busy. Please try again in a few minutes.",
+                }
+            ), 429
+
         force_restarted = False
 
         if state.status != SimulationStatus.READY:
@@ -1417,6 +1428,14 @@ def start_simulation():
                             "message": "You need at least 1 simulation remaining to run",
                         }
                     ), 402
+                if free_runs_paused_reason():
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": "free_runs_paused",
+                            "message": "Free simulations are paused for today. Please try again tomorrow, or choose a plan.",
+                        }
+                    ), 429
                 charge = "free"
 
         profile = SupabaseDB.get_profile(g.user_id)
@@ -1435,7 +1454,7 @@ def start_simulation():
         # Recorded once the run has started, so a failed start does not use up the free run.
         if charge == "free":
             try:
-                SupabaseDB.insert_credit_tx(g.user_id, 0, "usage", "Free monthly simulation")
+                SupabaseDB.insert_credit_tx(g.user_id, 0, "usage", FREE_RUN_DESCRIPTION)
             except Exception as e:
                 # The run is already going; failing the request here would hide it from the user.
                 logger.error(f"Free run started for {g.user_id} but its usage row failed: {e}")

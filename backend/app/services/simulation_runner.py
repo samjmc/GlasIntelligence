@@ -1521,6 +1521,24 @@ class SimulationRunner:
         _cleanup_registered = True
 
     @classmethod
+    def count_active_runs(cls, exclude_simulation_id: str | None = None) -> int:
+        """Runs using the server now (starting/running/paused/stopping), for MAX_CONCURRENT_SIMULATIONS.
+
+        Past "starting", a run counts only while this server holds its process: a run state read
+        from disk after a crash can still say "running" with nothing behind it.
+        """
+        active = (RunnerStatus.RUNNING, RunnerStatus.PAUSED, RunnerStatus.STOPPING)
+        return sum(
+            1
+            for sim_id, state in list(cls._run_states.items())
+            if sim_id != exclude_simulation_id
+            and (
+                state.runner_status == RunnerStatus.STARTING
+                or (state.runner_status in active and sim_id in cls._processes)
+            )
+        )
+
+    @classmethod
     def get_running_simulations(cls) -> list[str]:
         """
         Get list of all running simulation IDs

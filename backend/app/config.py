@@ -261,6 +261,22 @@ class Config:
         env_key="ENTERPRISE_SIMULATION_ROUNDS",
     )
 
+    # Spend and load guards (services/spend_guards.py). The API is one process on one small
+    # server, and every run spends the owner's LLM balance.
+    # Runs at once (starting/running/paused/stopping); a start past this gets 429 server_busy.
+    MAX_CONCURRENT_SIMULATIONS = _safe_int(
+        os.environ.get("MAX_CONCURRENT_SIMULATIONS", "2"), 2, env_key="MAX_CONCURRENT_SIMULATIONS"
+    )
+    # Free-plan runs a UTC day, across all users; past this, free starts pause until tomorrow.
+    FREE_RUNS_PER_DAY = _safe_int(os.environ.get("FREE_RUNS_PER_DAY", "5"), 5, env_key="FREE_RUNS_PER_DAY")
+    # Free runs and free briefings pause while the LLM provider balance is known to be below this.
+    LLM_MIN_BALANCE_FOR_FREE_USD = _safe_float(
+        os.environ.get("LLM_MIN_BALANCE_FOR_FREE_USD", "5.0"), 5.0, env_key="LLM_MIN_BALANCE_FOR_FREE_USD"
+    )
+    LLM_BALANCE_CACHE_SECONDS = _safe_int(
+        os.environ.get("LLM_BALANCE_CACHE_SECONDS", "600"), 600, env_key="LLM_BALANCE_CACHE_SECONDS"
+    )
+
     @classmethod
     def normalize_plan(cls, plan: str | None) -> str:
         """Lowercase/strip profiles.plan for comparisons (e.g. 'Enterprise' stored in Supabase)."""

@@ -5,6 +5,7 @@ from flask import Blueprint, g, jsonify, request
 
 from ..config import Config
 from ..middleware.auth import require_auth
+from ..services.spend_guards import free_runs_paused_reason
 from ..services.supabase_client import SupabaseDB
 from ..utils.logger import get_logger
 
@@ -322,15 +323,19 @@ def can_simulate():
 
     free_run_left = plan == "free" and SupabaseDB.has_free_simulation_remaining(g.user_id)
     free_agents, free_rounds = Config.simulation_limits("free")
+    # Paid plans are never paused, so they skip the checks.
+    paused_reason = free_runs_paused_reason() if plan == "free" else None
 
     return jsonify(
         {
             "success": True,
             "data": {
-                "can_simulate": credits > 0 or free_run_left,
+                "can_simulate": credits > 0 or (free_run_left and paused_reason is None),
                 "credits": credits,
                 "plan": plan,
                 "free_run_left": free_run_left,
+                "free_runs_paused": paused_reason is not None,
+                "paused_reason": paused_reason,
                 "free_agents": free_agents,
                 "free_rounds": free_rounds,
             },

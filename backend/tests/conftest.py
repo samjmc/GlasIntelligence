@@ -181,6 +181,18 @@ def _mock_supabase_http(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_llm_balance_call(monkeypatch):
+    """Never ask the LLM provider for its balance (a developer env may point at DeepSeek).
+
+    Unknown balance never blocks free usage. Tests of the balance check patch it back.
+    """
+    from app.services import spend_guards
+
+    monkeypatch.setattr(spend_guards, "_fetch_llm_balance_usd", lambda: None)
+    monkeypatch.setattr(spend_guards, "_balance_cache", None)
+
+
+@pytest.fixture(autouse=True)
 def _fresh_fake_graph_store(monkeypatch):
     """Each test starts with an empty in-memory graph store, and cannot build a real Zep client.
 

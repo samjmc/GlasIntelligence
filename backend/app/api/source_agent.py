@@ -10,6 +10,7 @@ from openai import OpenAI
 from ..config import Config
 from ..middleware.auth import optional_auth, require_auth
 from ..models.task import TaskManager, TaskStatus
+from ..services.spend_guards import llm_balance_low
 from ..services.supabase_client import SupabaseDB
 from ..utils.llm_client import no_thinking_kwargs
 from ..utils.logger import get_logger
@@ -180,6 +181,14 @@ def start_deep_research():
                     "error": "no_research_credits",
                     "research_credits": profile.get("research_credits", 0) if profile else 0,
                     "message": "No research credits remaining.",
+                }
+            ), 402
+        if llm_balance_low():
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "free_research_paused",
+                    "message": "Free research briefings are paused right now. Please try again later, or choose a plan.",
                 }
             ), 402
 
