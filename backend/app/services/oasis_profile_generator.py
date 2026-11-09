@@ -10,6 +10,7 @@ Improvements:
 
 import json
 import random
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -22,9 +23,62 @@ from ..config import Config
 from ..utils.llm_client import no_thinking_kwargs
 from ..utils.logger import get_logger
 from .graph_store import get_graph_store, graph_store_available
+from .ontology_generator import entity_type_words
 from .zep_entity_reader import EntityNode
 
 logger = get_logger("glas.oasis_profile")
+
+# Real individual people are never simulated under their real names (owner's rule, 2026-11-09:
+# a vape-pricing run quoted and characterised named TDs). They become anonymous roles;
+# organisations keep their real names. An entity type whose head noun (last PascalCase word,
+# e.g. "OppositionTD" -> "td") is one of these denotes one person.
+_INDIVIDUAL_TYPE_HEADS = frozenset(
+    {
+        "person", "individual", "citizen", "resident", "consumer", "customer", "patient", "voter",
+        "politician", "minister", "td", "mp", "mep", "senator", "councillor", "councilor", "president",
+        "chairperson", "chairman", "chairwoman", "spokesperson", "spokesman", "spokeswoman", "candidate",
+        "diplomat", "ambassador", "official", "servant", "executive", "ceo", "cfo", "cto", "founder",
+        "entrepreneur", "journalist", "reporter", "columnist", "editor", "commentator", "presenter",
+        "analyst", "economist", "expert", "academic", "professor", "scholar", "researcher", "scientist",
+        "student", "alumni", "alumnus", "activist", "campaigner", "advocate", "lobbyist", "celebrity",
+        "influencer", "figure", "lawyer", "solicitor", "barrister", "judge", "doctor", "physician", "nurse",
+        "pharmacist", "employee", "worker", "member",
+    }
+)  # fmt: skip
+
+
+def _plain_name(name: str) -> str:
+    """The person's name without a trailing descriptor: "Jack Chambers (Politician)" -> "Jack Chambers"."""
+    return re.sub(r"\s*\([^)]*\)", "", name or "").strip()
+
+
+def _name_parts(name: str) -> list[str]:
+    """Name words long enough to identify someone (single letters/initials are skipped)."""
+    return re.findall(r"[^\W\d_]{3,}", _plain_name(name))
+
+
+def _mentions_name(text: str, name: str) -> bool:
+    return any(re.search(rf"\b{re.escape(part)}\b", text or "", re.IGNORECASE) for part in _name_parts(name))
+
+
+def _scrub_name(text: str, name: str, role_label: str) -> str:
+    """Replace a real person's full name, then each remaining name word, with their role."""
+    if not text:
+        return text
+    stand_in = "the " + re.sub(r"^(a|an|the)\s+", "", role_label, flags=re.IGNORECASE)
+    full = _plain_name(name)
+    if full:
+        text = re.sub(re.escape(full), lambda _m: stand_in, text, flags=re.IGNORECASE)
+    for part in _name_parts(full):
+        # Case-sensitive, so a name word like "Will" does not eat the word "will"
+        text = re.sub(rf"\b{re.escape(part)}\b", lambda _m: stand_in, text)
+    return text
+
+
+def _default_role_label(entity_type: str) -> str:
+    words = [w if w.isupper() else w.lower() for w in entity_type_words(entity_type)] or ["individual"]
+    phrase = " ".join(words)
+    return f"{'An' if phrase[0].lower() in 'aeiou' else 'A'} {phrase}"
 
 
 @dataclass
@@ -259,7 +313,6 @@ class OasisProfileGenerator:
 
         # Basic information
         name = entity.name
-        user_name = self._generate_username(name)
 
         # Build context information
         context = self._build_entity_context(entity)
@@ -282,9 +335,9 @@ class OasisProfileGenerator:
                 entity_attributes=entity.attributes,
             )
 
-        return OasisAgentProfile(
+        profile = OasisAgentProfile(
             user_id=user_id,
-            user_name=user_name,
+            user_name=self._generate_username(name),
             name=name,
             bio=profile_data.get("bio", f"{entity_type}: {name}"),
             persona=profile_data.get("persona", entity.summary or f"A {entity_type} named {name}."),
@@ -301,6 +354,39 @@ class OasisProfileGenerator:
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
         )
+        if self._is_individual_entity(entity_type):
+            self._anonymise_profile(profile, name, profile_data.get("role_label"))
+        return profile
+
+    def _anonymise_profile(self, profile: OasisAgentProfile, real_name: str, role_label: Any = None) -> None:
+        """Give a real person's agent a role instead of their name, everywhere the agent shows it."""
+        entity_type = profile.source_entity_type or "Person"
+        label = str(role_label or "").strip()
+        if not label or _mentions_name(label, real_name):
+            label = _default_role_label(entity_type)
+        profile.name = label
+        profile.user_name = self._generate_username(label)
+        profile.bio = _scrub_name(profile.bio, real_name, label)
+        profile.persona = _scrub_name(profile.persona, real_name, label)
+        if profile.profession:
+            profile.profession = _scrub_name(str(profile.profession), real_name, label)
+        profile.interested_topics = [_scrub_name(str(t), real_name, label) for t in profile.interested_topics or []]
+
+    def _fallback_profile(self, idx: int, entity: EntityNode) -> OasisAgentProfile:
+        """Minimal profile when persona generation raised; still anonymises real people."""
+        entity_type = entity.get_entity_type() or "Entity"
+        profile = OasisAgentProfile(
+            user_id=idx,
+            user_name=self._generate_username(entity.name),
+            name=entity.name,
+            bio=f"{entity_type}: {entity.name}",
+            persona=entity.summary or "A participant in social discussions.",
+            source_entity_uuid=entity.uuid,
+            source_entity_type=entity_type,
+        )
+        if self._is_individual_entity(entity_type):
+            self._anonymise_profile(profile, entity.name)
+        return profile
 
     def _generate_username(self, name: str) -> str:
         """Generate a username"""
@@ -505,8 +591,11 @@ class OasisProfileGenerator:
         return "\n\n".join(context_parts)
 
     def _is_individual_entity(self, entity_type: str) -> bool:
-        """Check if entity is an individual type"""
-        return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
+        """Check if entity is an individual type (exact known type, or a type whose head noun is a person)"""
+        if entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES:
+            return True
+        words = entity_type_words(entity_type)
+        return bool(words) and words[-1].lower() in _INDIVIDUAL_TYPE_HEADS
 
     def _is_group_entity(self, entity_type: str) -> bool:
         """Check if entity is a group/organisation type"""
@@ -688,6 +777,8 @@ class OasisProfileGenerator:
     def _get_system_prompt(self, is_individual: bool) -> str:
         """Get the system prompt"""
         base_prompt = "You are a social media persona generation expert. Generate detailed, realistic personas for public opinion simulation, maximally reflecting known real-world circumstances. You must return valid JSON format. All string values must not contain unescaped newline characters. All output MUST be in English."
+        if is_individual:
+            base_prompt += " Real individual people are never simulated under their real names: describe them only by an anonymous role, and never output their name or details that single them out."
         return base_prompt
 
     def _build_individual_persona_prompt(
@@ -698,9 +789,12 @@ class OasisProfileGenerator:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "None"
         context_str = context[:3000] if context else "No additional context"
 
-        return f"""Generate a detailed social media user persona for this entity, maximally reflecting known real-world circumstances.
+        return f"""Generate a detailed social media user persona for this entity.
 
-Entity name: {entity_name}
+This entity is a real individual person. Real people are NEVER simulated under their real names.
+The agent is an anonymous holder of this person's ROLE: write about the role, never the person.
+
+Real name (context only - never output it): {entity_name}
 Entity type: {entity_type}
 Entity summary: {entity_summary}
 Entity attributes: {attrs_str}
@@ -710,15 +804,16 @@ Context information:
 
 Generate JSON with the following fields:
 
-1. bio: Social media bio, ~200 words
-2. persona: Detailed persona description (2000 words of plain text), must include:
-   - Basic information (age, profession, education, location)
-   - Background (key experiences, connection to the events, social relationships)
+0. role_label: Short, non-identifying role label, e.g. "An opposition TD", "A Government minister", "A consumer-advocacy spokesperson". Party, office or sector may be kept only at a level that does not single the person out. Never their name.
+1. bio: Social media bio, ~200 words, written for the role
+2. persona: Detailed persona description (2000 words of plain text) of a typical holder of this role, must include:
+   - Basic information (profession, general location)
+   - Background (role's connection to the events, social relationships)
    - Personality traits (MBTI type, core personality, emotional expression style)
    - Social media behaviour (posting frequency, content preferences, interaction style, language characteristics)
-   - Positions and views (attitude toward the topic, what angers/moves them)
-   - Unique features (catchphrases, special experiences, personal interests)
-   - Personal memory (critical part of the persona: describe this individual's connection to events, and their known actions and reactions)
+   - Positions and views (the role's attitude toward the topic, what angers/moves them)
+   - Role memory (critical part of the persona: the role's connection to events and plausible actions and reactions)
+   Never include the person's name, constituency, exact age, family, or any detail or quote that identifies them.
 3. age: Age as an integer
 4. gender: Must be English: "male" or "female"
 5. mbti: MBTI type (e.g. INTJ, ENFP)
@@ -934,17 +1029,7 @@ Important:
 
             except Exception as e:
                 logger.error(f"Failed to generate persona for entity {entity.name}: {str(e)}")
-                # Create a fallback profile
-                fallback_profile = OasisAgentProfile(
-                    user_id=idx,
-                    user_name=self._generate_username(entity.name),
-                    name=entity.name,
-                    bio=f"{entity_type}: {entity.name}",
-                    persona=entity.summary or "A participant in social discussions.",
-                    source_entity_uuid=entity.uuid,
-                    source_entity_type=entity_type,
-                )
-                return idx, fallback_profile, str(e)
+                return idx, self._fallback_profile(idx, entity), str(e)
 
         logger.info(f"Starting parallel generation of {total} Agent personas (parallelism: {parallel_count})...")
         print(f"\n{'=' * 60}")
@@ -989,23 +1074,36 @@ Important:
                     logger.error(f"Exception while processing entity {entity.name}: {str(e)}")
                     with lock:
                         completed_count[0] += 1
-                    profiles[idx] = OasisAgentProfile(
-                        user_id=idx,
-                        user_name=self._generate_username(entity.name),
-                        name=entity.name,
-                        bio=f"{entity_type}: {entity.name}",
-                        persona=entity.summary or "A participant in social discussions.",
-                        source_entity_uuid=entity.uuid,
-                        source_entity_type=entity_type,
-                    )
+                    profiles[idx] = self._fallback_profile(idx, entity)
                     # Write to file in real time (even for fallback personas)
                     save_profiles_realtime()
+
+        self._carry_roles_to_entities(entities, profiles)
 
         print(f"\n{'=' * 60}")
         print(f"Persona generation complete! Generated {len([p for p in profiles if p])} Agents")
         print(f"{'=' * 60}\n")
 
         return profiles
+
+    def _carry_roles_to_entities(self, entities: list[EntityNode], profiles: list) -> None:
+        """Make role labels unique, and replace real people's names on the entities too.
+
+        The simulation config is generated from these same entity objects afterwards, and its
+        agent_configs[].entity_name is the name written into every action log and report, so a
+        real person's name must not survive on the entity either.
+        """
+        seen: dict[str, int] = {}
+        for entity, profile in zip(entities, profiles, strict=False):
+            if profile is None:
+                continue
+            if self._is_individual_entity(entity.get_entity_type() or "Entity"):
+                base = profile.name
+                seen[base] = seen.get(base, 0) + 1
+                if seen[base] > 1:
+                    profile.name = f"{base} ({seen[base]})"
+                entity.summary = _scrub_name(entity.summary, entity.name, profile.name)
+                entity.name = profile.name
 
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
         """Output generated persona to console in real time (full content, not truncated)"""

@@ -49,6 +49,15 @@ CHINA_TIMEZONE_CONFIG = {
 }
 
 
+def _describe_hours(hours: float) -> str:
+    """Readable span for reasoning text: 4320 -> '6 months', 432 -> '18 days', 10 -> '10 hours'."""
+    for unit, size, min_hours in (("month", 720, 1440), ("day", 24, 48), ("hour", 1, 0)):
+        if hours >= min_hours:
+            value = round(hours / size, 1)
+            return f"{value:g} {unit}{'' if value == 1 else 's'}"
+    return f"{hours:g} hours"
+
+
 @dataclass
 class AgentActivityConfig:
     """Activity configuration for a single Agent"""
@@ -86,11 +95,17 @@ class AgentActivityConfig:
 class TimeSimulationConfig:
     """Time simulation configuration (based on China timezone activity patterns)"""
 
-    # Total simulation duration (in simulated hours)
+    # Total simulation duration (in simulated hours); OASIS runs total * 60 / minutes_per_round rounds
     total_simulation_hours: int = 72  # Default: simulate 72 hours (3 days)
 
     # Time per round (simulated minutes) - default 60 minutes (1 hour), accelerated time flow
     minutes_per_round: int = 60
+
+    # The horizon the scenario asks about (e.g. six months = 4320), before the round budget
+    # clamps total_simulation_hours. hours_represented_per_round = horizon / rounds run, so a
+    # long horizon compressed into few rounds says how much scenario time each round stands for.
+    scenario_horizon_hours: int = 72
+    hours_represented_per_round: float = 1.0
 
     # Range of Agents activated per hour
     agents_per_hour_min: int = 5
@@ -295,21 +310,12 @@ class SimulationConfigGenerator:
         num_entities = len(entities)
         time_config_result = self._generate_time_config(context, num_entities)
         time_config = self._parse_time_config(time_config_result, num_entities)
-        # Honor OASIS_DEFAULT_MAX_ROUNDS: clamp the LLM's chosen duration so
-        # the run stays within a bounded round budget. total_rounds derives
-        # from total_simulation_hours * 60 / minutes_per_round.
-        from ..config import Config
-
-        max_rounds = Config.OASIS_DEFAULT_MAX_ROUNDS
-        minutes_per_round = max(int(time_config.minutes_per_round or 60), 30)
-        hours_for_max = max_rounds * minutes_per_round / 60
-        if int(time_config.total_simulation_hours or 72) > hours_for_max:
-            # Mutate in place: asdict() rebuild would demote the nested
-            # TimeScale/ScenarioPhase dataclasses to plain dicts, breaking
-            # attribute access (time_config.time_scale.unit) downstream.
-            time_config.total_simulation_hours = int(hours_for_max)
-            reasoning_parts.append(f"Capped to {max_rounds} rounds (OASIS_DEFAULT_MAX_ROUNDS={max_rounds})")
-        reasoning_parts.append(f"Time config: {time_config_result.get('reasoning', 'Success')}")
+        horizon_note, compressed = self._fit_horizon_to_rounds(time_config, Config.OASIS_DEFAULT_MAX_ROUNDS)
+        reasoning_parts.append(horizon_note)
+        if not compressed:
+            # When compressed, the LLM's own rationale describes the full horizon
+            # ("spans six months") as if the run covered it hour by hour; leave it out.
+            reasoning_parts.append(f"Time config: {time_config_result.get('reasoning', 'Success')}")
 
         # ========== Step 2: Generate event configuration ==========
         report_progress(2, "Generating event configuration and hot topics...")
@@ -534,6 +540,39 @@ class SimulationConfigGenerator:
 
         return None
 
+    @staticmethod
+    def _fit_horizon_to_rounds(time_config: TimeSimulationConfig, max_rounds: int) -> tuple[str, bool]:
+        """Keep the scenario's horizon as data and fit the run into at most ``max_rounds`` rounds.
+
+        The LLM's total_simulation_hours is the horizon the scenario asks about. A horizon
+        longer than the round budget allows is clamped (OASIS_DEFAULT_MAX_ROUNDS), so each
+        round then stands for horizon / rounds of scenario time. Mutates time_config in place
+        and returns (reasoning line, whether the horizon was compressed).
+        """
+        horizon = max(int(time_config.total_simulation_hours or 72), 1)
+        minutes_per_round = max(int(time_config.minutes_per_round or 60), 30)
+        time_config.minutes_per_round = minutes_per_round
+        hours_for_max = max_rounds * minutes_per_round / 60
+        compressed = horizon > hours_for_max
+        if compressed:
+            time_config.total_simulation_hours = int(hours_for_max)
+        rounds = max(1, int(time_config.total_simulation_hours * 60 / minutes_per_round))
+        per_round = horizon / rounds
+
+        time_config.scenario_horizon_hours = horizon
+        time_config.hours_represented_per_round = round(per_round, 2)
+
+        if compressed:
+            note = (
+                f"Scenario horizon: {_describe_hours(horizon)}; run as {rounds} rounds, each standing for "
+                f"about {_describe_hours(per_round)} (compressed time, OASIS_DEFAULT_MAX_ROUNDS={max_rounds})"
+            )
+        else:
+            note = (
+                f"Scenario horizon: {_describe_hours(horizon)}; run as {rounds} rounds of {minutes_per_round} minutes"
+            )
+        return note, compressed
+
     def _generate_time_config(self, context: str, num_entities: int) -> dict[str, Any]:
         """Generate time configuration"""
         # Use configured context truncation length
@@ -576,7 +615,7 @@ Example:
 }}
 
 Field descriptions:
-- total_simulation_hours (int): Total simulation duration, 24-168 hours
+- total_simulation_hours (int): The time horizon the scenario asks about, in hours (e.g. 72 for three days, 720 for one month, 4320 for six months). Use the horizon stated in the simulation requirement; if none is stated, use 24-168 hours. A long horizon is compressed into a fixed number of rounds, each round standing for a longer stretch of time
 - minutes_per_round (int): Duration per round, 30-120 minutes, recommend 60
 - agents_per_hour_min (int): Minimum agents activated per hour (range: 1-{max_agents_allowed})
 - agents_per_hour_max (int): Maximum agents activated per hour (range: 1-{max_agents_allowed})
