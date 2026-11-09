@@ -66,6 +66,7 @@ $settings = @(
     @('STRIPE_PRICE_RESEARCH_1', $false, $false, 'optional'),
     @('STRIPE_PRICE_RESEARCH_5', $false, $false, 'optional'),
     @('RESEND_API_KEY', $true, $false, 'optional'),
+    @('TAVILY_API_KEY', $true, $false, 'optional; web sources for research briefings'),
     @('SENTRY_DSN', $true, $false, 'optional')
 )
 
