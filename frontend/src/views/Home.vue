@@ -175,15 +175,18 @@
 
             <!-- Starter Scenario Cards (shown when textarea is empty) -->
             <div v-if="!formData.simulationRequirement.trim()" class="starter-scenarios">
-              <div class="starter-header">Try an example</div>
-              <div class="starter-cards">
+              <div class="starter-header" id="starter-examples-label">Try an example</div>
+              <div class="starter-cards" role="group" aria-labelledby="starter-examples-label">
                 <button
                   v-for="(ex, i) in starterExamples"
                   :key="i"
+                  type="button"
                   class="starter-card"
+                  data-test="starter-card"
+                  :aria-label="`Use example: ${ex.label}`"
                   @click="formData.simulationRequirement = ex.scenario"
                 >
-                  <span class="starter-icon">{{ ex.icon }}</span>
+                  <span class="starter-icon" aria-hidden="true">{{ ex.icon }}</span>
                   <span class="starter-text">{{ ex.label }}</span>
                 </button>
               </div>
@@ -244,7 +247,7 @@
                     <button class="briefing-toggle" @click="briefingExpanded = !briefingExpanded">
                       {{ briefingExpanded ? 'Collapse' : 'Read' }}
                     </button>
-                    <button class="remove-btn" @click="removeBriefing">&times;</button>
+                    <button type="button" class="remove-btn" aria-label="Remove briefing" @click="removeBriefing">&times;</button>
                   </div>
                   <div
                     class="briefing-content"
@@ -267,7 +270,12 @@
                   @dragover.prevent="handleDragOver"
                   @dragleave.prevent="handleDragLeave"
                   @drop.prevent="handleDrop"
+                  :role="files.length === 0 ? 'button' : null"
+                  :tabindex="files.length === 0 ? 0 : null"
+                  :aria-label="files.length === 0 ? 'Upload documents' : null"
                   @click="triggerFileInput"
+                  @keydown.enter.self.prevent="triggerFileInput"
+                  @keydown.space.self.prevent="triggerFileInput"
                 >
                   <input
                     ref="fileInput"
@@ -291,7 +299,7 @@
                     <div v-for="(file, index) in files" :key="index" class="file-item">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
                       <span class="file-name">{{ file.name }}</span>
-                      <button @click.stop="removeFile(index)" class="remove-btn">&times;</button>
+                      <button type="button" @click.stop="removeFile(index)" class="remove-btn" :aria-label="`Remove ${file.name}`">&times;</button>
                     </div>
                   </div>
                 </div>
@@ -356,7 +364,7 @@
     <Teleport to="body">
       <div v-if="showUpgradeModal" class="modal-overlay" @click.self="showUpgradeModal = false">
         <div class="upgrade-modal">
-          <button class="modal-close" @click="showUpgradeModal = false">&times;</button>
+          <button type="button" class="modal-close" aria-label="Close" @click="showUpgradeModal = false">&times;</button>
           <div class="modal-icon">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
@@ -1158,6 +1166,10 @@ function onDemoScenarioSelected({ scenarioId, prompt }) {
   color: var(--text-secondary, #aaa);
   font-size: 13px; text-align: left; cursor: pointer;
   transition: all 0.2s;
+}
+.starter-card:focus-visible {
+  outline: 2px solid var(--accent, #00c853);
+  outline-offset: 2px;
 }
 .starter-card:hover {
   border-color: var(--accent, #00c853);

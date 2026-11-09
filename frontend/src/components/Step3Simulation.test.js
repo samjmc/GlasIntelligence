@@ -153,6 +153,41 @@ describe('Step3Simulation opening an existing run', () => {
   })
 })
 
+// The "Generate Report" button must be announced and focused when a live run finishes.
+describe('Step3Simulation when the run finishes', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('announces it, asks the page to show the panel, and focuses Generate Report', async () => {
+    api.startSimulation.mockResolvedValue({ success: true, data: { process_pid: 1, reddit_running: true } })
+    api.getRunStatus.mockResolvedValue({ success: true, data: { runner_status: 'completed', reddit_completed: true } })
+    api.getRunStatusDetail.mockResolvedValue({ success: true, data: { all_actions: [] } })
+    const wrapper = mount(Step3Simulation, {
+      props: { simulationId: 'sim_x', maxRounds: 2, startOnMount: true },
+      global: { stubs: { 'router-link': true } },
+      attachTo: document.body,
+    })
+    const live = wrapper.find('[data-test="step-ready-message"]')
+    expect(live.attributes('aria-live')).toBe('polite')
+    await flushPromises()
+    expect(live.text()).toBe('')
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(live.text()).toBe('Simulation finished. Next: generate the report.')
+    expect(wrapper.emitted('step-ready')).toHaveLength(1)
+    const btn = wrapper.find('[data-test="simulation-complete"]')
+    expect(btn.element.tagName).toBe('BUTTON')
+    expect(document.activeElement).toBe(btn.element)
+    wrapper.unmount()
+  })
+})
+
 // A busy server or paused free runs answer 429 with a message for the user.
 describe('Step3Simulation when the start is refused with 429', () => {
   afterEach(() => vi.clearAllMocks())
