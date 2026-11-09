@@ -93,6 +93,24 @@ Steps marked **(you)** need your accounts or payment. Claude must not create acc
 - `deploy.sh` pulls fresh base images on every build.
 - Reboot the server after kernel updates. The stack comes back by itself, because every service has `restart: unless-stopped`.
 
+## Going public: email and payments
+
+Both need Sam's own accounts; the scripts read keys from the Windows user environment and print no secret.
+
+**Sign-up email (Resend).** Supabase's built-in mailer sends only a few emails an hour, so sign-ups wait for their link. The Supabase project is shared with GlasApp, so this changes its emails too (sender `Glas <noreply@glasinsight.com>`).
+1. **(you)** Create a Resend account and an API key with "Sending access". Save it as the user env var `RESEND_API_KEY`. Also have `SUPABASE_ACCESS_TOKEN`.
+2. From `backend/`: `uv run --frozen python ../deploy/email_setup.py domain`. Add the printed records in Cloudflare (glasinsight.com, Proxy status DNS only).
+3. A few minutes later: `... email_setup.py verify`, then `... email_setup.py domain` until every record says `verified`.
+4. `... email_setup.py smtp`. It points Supabase auth email at Resend and allows 30 emails an hour.
+
+**Payments (Stripe).**
+1. **(you)** Create the Stripe account and finish its checks. Save the secret key as the user env var `STRIPE_SECRET_KEY` (start with the TEST key, `sk_test_...`).
+2. From `backend/`: `uv run --frozen python ../deploy/stripe_setup.py`. It creates the 9 prices from the Pricing page and the webhook `https://app.glasinsight.com/api/billing/webhook`, and saves `STRIPE_PRICE_*` and `STRIPE_WEBHOOK_SECRET` to your user environment. Safe to run again.
+3. In a new PowerShell window: `deploy/push-secrets.ps1`, then `deploy.sh` on the server.
+4. Buy a pack with Stripe's test card `4242 4242 4242 4242`; the dashboard credits must go up by the pack size. Then repeat steps 1-3 with the LIVE key.
+
+**Spend and load guards** (env, defaults in `backend/app/config.py`): `FREE_RUNS_PER_DAY` (site-wide free runs a day), `LLM_MIN_BALANCE_FOR_FREE_USD` (free runs and briefings pause below this DeepSeek balance), `MAX_CONCURRENT_SIMULATIONS` (runs at once; more get "busy, try again").
+
 ## Known limits
 
 - **One API process.** Simulation state lives in memory (the gunicorn worker count is 1, with 4 threads). Do not raise the worker count. Scale up with a bigger server, not more processes.
