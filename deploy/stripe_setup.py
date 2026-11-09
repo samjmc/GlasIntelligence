@@ -71,7 +71,10 @@ def main() -> int:
 
     hooks = [h for h in stripe.WebhookEndpoint.list(limit=100).data if h.url == WEBHOOK_URL]
     if hooks:
-        print(f"Webhook exists for {WEBHOOK_URL} ({hooks[0].id}); its secret was saved when it was created.")
+        print(
+            f"Webhook exists for {WEBHOOK_URL} ({hooks[0].id}). If STRIPE_WEBHOOK_SECRET is not set yet, copy its"
+            " signing secret from Stripe > Workbench > Webhooks into that user environment variable."
+        )
     else:
         hook = stripe.WebhookEndpoint.create(url=WEBHOOK_URL, enabled_events=WEBHOOK_EVENTS)
         save_user_env("STRIPE_WEBHOOK_SECRET", hook.secret)
