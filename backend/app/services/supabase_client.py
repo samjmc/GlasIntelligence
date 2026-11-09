@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from functools import lru_cache
 
+from postgrest.types import CountMethod
 from supabase import Client, create_client
 
 from ..config import Config
@@ -16,6 +17,8 @@ logger = get_logger("glas.supabase")
 # free research briefings to feed them.
 FREE_MONTHLY_SIMULATIONS = 1
 FREE_MONTHLY_BRIEFINGS = 2
+# The ledger row (0-amount "usage") that records a free run; FREE_RUNS_PER_DAY counts these.
+FREE_RUN_DESCRIPTION = "Free monthly simulation"
 
 
 @lru_cache(maxsize=1)
@@ -241,6 +244,22 @@ class SupabaseDB:
         except Exception as e:
             logger.warning(f"Free simulation check failed for {user_id}: {e}")
             return False
+
+    @classmethod
+    def count_free_runs_today(cls) -> int:
+        """Free runs started today (UTC), across all users."""
+        day_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        result = (
+            cls.client()
+            .table("credit_transactions")
+            .select("id", count=CountMethod.exact)
+            .eq("type", "usage")
+            .eq("amount", 0)
+            .eq("description", FREE_RUN_DESCRIPTION)
+            .gte("created_at", day_start)
+            .execute()
+        )
+        return result.count if result.count is not None else len(result.data or [])
 
     @classmethod
     def has_free_briefing_remaining(cls, user_id: str) -> bool:
