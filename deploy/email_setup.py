@@ -10,7 +10,8 @@ Intelligence) at Resend's SMTP server.
     uv run --frozen python ../deploy/email_setup.py verify     # 2. ask Resend to check the records
     uv run --frozen python ../deploy/email_setup.py smtp       # 3. point Supabase auth email at Resend
 
-Needs in the environment: RESEND_API_KEY (Resend > API Keys, "Sending access") and, for step 3,
+Needs in the environment: RESEND_API_KEY (Resend > API Keys; steps 1-2 need "Full access", step 3
+works with a "Sending access" key, which is the safer one to leave in Supabase) and, for step 3,
 SUPABASE_ACCESS_TOKEN (Supabase > Account > Access Tokens). Keys are read from the environment
 only; nothing secret is printed.
 """
@@ -85,9 +86,14 @@ def verify() -> None:
 def smtp() -> None:
     key = _env("RESEND_API_KEY")
     token = _env("SUPABASE_ACCESS_TOKEN")
-    d = _resend_domain(key)
-    if not d or d.get("status") != "verified":
-        sys.exit(f"{DOMAIN} is not verified in Resend yet (status: {d and d.get('status')}). Run 'verify' first.")
+    code, body = _call("GET", "https://api.resend.com/domains", key)
+    if code == 401 and "restricted_api_key" in str(body):
+        # A "Sending access" key (the right kind for SMTP) cannot list domains: check it in the dashboard.
+        print(f"Key is send-only, so it cannot check {DOMAIN}; make sure Resend shows it as Verified.")
+    else:
+        d = _resend_domain(key)
+        if not d or d.get("status") != "verified":
+            sys.exit(f"{DOMAIN} is not verified in Resend yet (status: {d and d.get('status')}). Run 'verify' first.")
     config = {
         "smtp_host": "smtp.resend.com",
         "smtp_port": "465",
