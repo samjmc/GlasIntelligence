@@ -76,11 +76,37 @@
             <strong>Resend</strong> — Transactional email delivery. Subject to
             <a href="https://resend.com/legal/privacy-policy" target="_blank" rel="noopener">Resend's Privacy Policy</a>.
           </li>
+          <li>
+            <strong>DeepSeek</strong> — AI model provider. To run a simulation, we
+            send your scenario text and uploaded documents to DeepSeek. Its servers
+            may be outside the European Economic Area.
+          </li>
         </ul>
       </section>
 
       <section>
-        <h2>6. Your Rights (GDPR)</h2>
+        <h2>6. Simulated Output and What Not to Upload</h2>
+        <ul>
+          <li>
+            Simulations and reports are simulated output. They are not forecasts,
+            and they are not financial, legal or other advice.
+          </li>
+          <li>
+            People and organisations named in a run are simulated personas. The
+            engine writes their words. Their words are not the real views of those
+            people or organisations.
+          </li>
+          <li>
+            Do not put personal data about private individuals, or sensitive
+            personal data (for example about health, religion or ethnic origin),
+            in your scenarios or uploaded documents. Third-party AI providers
+            process this text to run the simulation.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>7. Your Rights (GDPR)</h2>
         <p>If you are located in the European Economic Area, you have the right to:</p>
         <ul>
           <li><strong>Access</strong> the personal data we hold about you.</li>
@@ -94,7 +120,7 @@
       </section>
 
       <section>
-        <h2>7. Data Deletion</h2>
+        <h2>8. Data Deletion</h2>
         <p>
           You may request deletion of your account and all associated data at any
           time by contacting support. Upon receiving a verified request, we will
@@ -105,7 +131,7 @@
       </section>
 
       <section>
-        <h2>8. Changes to This Policy</h2>
+        <h2>9. Changes to This Policy</h2>
         <p>
           We may update this Privacy Policy periodically. Material changes will be
           communicated via email or in-app notice. The "Last updated" date at the
@@ -114,14 +140,14 @@
       </section>
 
       <section>
-        <h2>9. Contact</h2>
+        <h2>10. Contact</h2>
         <p>
           For privacy-related inquiries, contact us at
           <a href="mailto:privacy@glasinsight.com">privacy@glasinsight.com</a>.
         </p>
       </section>
 
-      <footer class="privacy-footer">Last updated: March 2026</footer>
+      <footer class="privacy-footer">Last updated: November 2026</footer>
     </div>
   </div>
 </template>

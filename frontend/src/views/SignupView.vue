@@ -68,11 +68,23 @@
           required
         />
 
-        <button type="submit" class="auth-btn" :disabled="submitting">
+        <label class="auth-consent">
+          <input v-model="agreed" type="checkbox" required data-test="consent" />
+          <span>
+            I agree to the
+            <router-link to="/terms" class="auth-link">Terms of Service</router-link>
+            and
+            <router-link to="/privacy" class="auth-link">Privacy Policy</router-link>
+          </span>
+        </label>
+
+        <button type="submit" class="auth-btn" :disabled="submitting || !agreed" data-test="signup-submit">
           <span v-if="!submitting">Create Account</span>
           <span v-else>Creating…</span>
           <span class="btn-arrow">→</span>
         </button>
+
+        <p class="auth-hint">We will email you a link to confirm your address. It can take a few minutes.</p>
       </form>
 
       <p v-if="!successMsg" class="auth-footer">
@@ -91,12 +103,18 @@ const displayName = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const agreed = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
 const submitting = ref(false)
 
 async function handleSignup() {
   errorMsg.value = ''
+
+  if (!agreed.value) {
+    errorMsg.value = 'Please agree to the Terms of Service and Privacy Policy'
+    return
+  }
 
   if (password.value !== confirmPassword.value) {
     errorMsg.value = 'Passwords do not match'
@@ -250,6 +268,28 @@ async function handleSignup() {
 
 .btn-arrow {
   font-size: 1.1rem;
+}
+
+.auth-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #b0b0b0;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.auth-consent input {
+  margin-top: 3px;
+  accent-color: #22c55e;
+}
+
+.auth-hint {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  color: #8a8a8a;
+  line-height: 1.5;
 }
 
 .auth-error {

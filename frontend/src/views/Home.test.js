@@ -37,10 +37,10 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => ({ q
 
 import Home from './Home.vue'
 
-function mountHome() {
+function mountHome(stubs = {}) {
   return mount(Home, {
     global: {
-      stubs: { AppNavbar: true, HistoryDatabase: true, DemoScenarioPicker: true, teleport: true, RouterLink: true },
+      stubs: { AppNavbar: true, HistoryDatabase: true, DemoScenarioPicker: true, teleport: true, RouterLink: true, ...stubs },
     },
   })
 }
@@ -213,6 +213,32 @@ describe('Home for a free-plan user', () => {
     expect(push).not.toHaveBeenCalled()
     expect(wrapper.find('.research-error').text()).toBe(
       'No free research briefings left this month. Upload a document to start.',
+    )
+    wrapper.unmount()
+  })
+
+  // The backend pauses free runs (daily cap or low balance) even when the user still has one left.
+  it('with free runs paused: says so, and start runs no research and does not start', async () => {
+    freeUser(true)
+    billing.canSimulate = { ...billing.canSimulate, free_runs_paused: true, paused_reason: 'daily_cap' }
+
+    const wrapper = mountHome({ RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } })
+    await flushPromises()
+    const note = wrapper.find('[data-test="free-plan-note"]')
+    expect(note.text().replace(/\s+/g, ' ')).toBe(
+      'Free simulations are paused for now. Please try again later, or see plans.',
+    )
+    expect(note.find('a').attributes('href')).toBe('/pricing')
+
+    await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
+    await wrapper.find('[data-test="start-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(api.startDeepResearch).not.toHaveBeenCalled()
+    expect(pending.setPendingUpload).not.toHaveBeenCalled()
+    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.find('.research-error').text()).toBe(
+      'Free simulations are paused for now. Please try again later, or see plans.',
     )
     wrapper.unmount()
   })

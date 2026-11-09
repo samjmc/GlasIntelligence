@@ -23,7 +23,32 @@
       </section>
 
       <section>
-        <h2>2. User Responsibilities</h2>
+        <h2>2. Simulated Output and Your Content</h2>
+        <ul>
+          <li>
+            Simulations and reports are simulated output. They are not forecasts,
+            and they are not financial, legal or other advice.
+          </li>
+          <li>
+            People and organisations named in a run are simulated personas. The
+            engine writes their words. Their words are not the real views of those
+            people or organisations.
+          </li>
+          <li>
+            Do not put personal data about private individuals, or sensitive
+            personal data (for example about health, religion or ethnic origin),
+            in your scenarios or uploaded documents.
+          </li>
+          <li>
+            To run a simulation, we send your scenario text and uploaded documents
+            to third-party AI providers, including DeepSeek. See our
+            <router-link to="/privacy">Privacy Policy</router-link>.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. User Responsibilities</h2>
         <p>By using Glas Intelligence, you agree to:</p>
         <ul>
           <li>Provide accurate information when creating an account.</li>
@@ -35,7 +60,7 @@
       </section>
 
       <section>
-        <h2>3. Intellectual Property</h2>
+        <h2>4. Intellectual Property</h2>
         <p>
           All platform code, models, user interface designs, and branding are the
           intellectual property of Glas Intelligence. Simulation outputs generated
@@ -45,7 +70,7 @@
       </section>
 
       <section>
-        <h2>4. Payment Terms</h2>
+        <h2>5. Payment Terms</h2>
         <p>
           Glas Intelligence offers subscription plans, pay-as-you-go simulation
           purchases, and simulation packs. All payments are processed securely
@@ -56,7 +81,7 @@
       </section>
 
       <section>
-        <h2>5. Limitation of Liability</h2>
+        <h2>6. Limitation of Liability</h2>
         <p>
           Glas Intelligence is provided "as is" without warranties of any kind,
           express or implied. We do not guarantee the accuracy, completeness, or
@@ -67,7 +92,7 @@
       </section>
 
       <section>
-        <h2>6. Data Handling</h2>
+        <h2>7. Data Handling</h2>
         <p>
           We collect and process personal data in accordance with our
           <router-link to="/privacy">Privacy Policy</router-link>. Simulation data,
@@ -77,7 +102,7 @@
       </section>
 
       <section>
-        <h2>7. Termination</h2>
+        <h2>8. Termination</h2>
         <p>
           You may close your account at any time by contacting support. We reserve
           the right to suspend or terminate accounts that violate these terms,
@@ -88,7 +113,7 @@
       </section>
 
       <section>
-        <h2>8. Changes to These Terms</h2>
+        <h2>9. Changes to These Terms</h2>
         <p>
           We may update these terms from time to time. Material changes will be
           communicated via email or an in-app notice. Continued use of the service
@@ -97,14 +122,14 @@
       </section>
 
       <section>
-        <h2>9. Contact</h2>
+        <h2>10. Contact</h2>
         <p>
           For questions about these terms, contact us at
           <a href="mailto:support@glasinsight.com">support@glasinsight.com</a>.
         </p>
       </section>
 
-      <footer class="terms-footer">Last updated: March 2026</footer>
+      <footer class="terms-footer">Last updated: November 2026</footer>
     </div>
   </div>
 </template>
