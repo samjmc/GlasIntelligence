@@ -465,6 +465,10 @@ const doStartSimulation = async () => {
       showCreditModal.value = true
       trackEvent('upgrade_prompt_shown', { trigger: 'insufficient_credits' })
       addLog('✗ Insufficient simulations remaining')
+    } else if (err.response?.status === 429) {
+      // server_busy or free_runs_paused: the server's message says what to do
+      startError.value = respData?.message || 'The server is busy. Please try again in a few minutes.'
+      addLog(`✗ Start refused: ${respData?.error || 'busy'}`)
     } else {
       startError.value = err.message
       addLog(`✗ Start exception: ${err.message}`)

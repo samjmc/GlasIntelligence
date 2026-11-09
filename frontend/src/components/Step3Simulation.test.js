@@ -152,3 +152,27 @@ describe('Step3Simulation opening an existing run', () => {
     wrapper.unmount()
   })
 })
+
+// A busy server or paused free runs answer 429 with a message for the user.
+describe('Step3Simulation when the start is refused with 429', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it.each([
+    ['server_busy', 'The server is busy. Please try again in a few minutes.'],
+    ['free_runs_paused', 'Free simulations are paused for now. Please try again later, or see plans.'],
+  ])('shows the server message for %s, not the credit modal', async (code, message) => {
+    api.startSimulation.mockRejectedValue(Object.assign(new Error('Request failed with status code 429'), {
+      response: { status: 429, data: { success: false, error: code, message } },
+    }))
+    const wrapper = mount(Step3Simulation, {
+      props: { simulationId: 'sim_x', startOnMount: true },
+      global: { stubs: { 'router-link': true, teleport: true } },
+    })
+    await flushPromises()
+
+    expect(api.startSimulation).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="run-error"] .run-error-msg').text()).toBe(message)
+    expect(wrapper.find('.credit-modal').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

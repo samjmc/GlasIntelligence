@@ -157,7 +157,11 @@
                 <div class="model-badge">Engine: GLAS v1.0</div>
               </div>
               <p v-if="!isDemoMode && freeRun" class="free-plan-note" data-test="free-plan-note">
-                <template v-if="freeRun.free_run_left">
+                <template v-if="freeRun.free_runs_paused">
+                  Free simulations are paused for now. Please try again later, or
+                  <router-link to="/pricing">see plans</router-link>.
+                </template>
+                <template v-else-if="freeRun.free_run_left">
                   Free plan: 1 simulation this month (up to {{ freeRun.free_agents }} agents, {{ freeRun.free_rounds }} rounds).
                 </template>
                 <template v-else>
@@ -470,12 +474,13 @@ const isPaidUser = computed(() => {
   return ['pro', 'business', 'enterprise', 'payg'].includes(userPlan.value)
 })
 
-// Set for free-plan users only: { free_run_left, free_agents, free_rounds } from /billing/can-simulate
+// Set for free-plan users only: { free_run_left, free_agents, free_rounds, free_runs_paused } from /billing/can-simulate
 const freeRun = ref(null)
 const noResearchCredits = ref(false) // the last deep-research call was refused with 402
+const FREE_RUNS_PAUSED_MSG = 'Free simulations are paused for now. Please try again later, or see plans.'
 
-// Paid users, and free users who have not used this month's free simulation
-const canRun = computed(() => isPaidUser.value || !!freeRun.value?.free_run_left)
+// Paid users, and free users who have not used this month's free simulation (unless free runs are paused)
+const canRun = computed(() => isPaidUser.value || (!!freeRun.value?.free_run_left && !freeRun.value?.free_runs_paused))
 
 const planLimits = computed(() => {
   if (userPlan.value === 'business') return { agents: 75, rounds: 30 }
@@ -698,7 +703,9 @@ const startSimulation = async () => {
   }
 
   if (!canRun.value) {
-    showUpgradeModal.value = true
+    // Paused free runs are not a plan problem, so say what is happening instead of the upgrade modal
+    if (freeRun.value?.free_runs_paused) error.value = FREE_RUNS_PAUSED_MSG
+    else showUpgradeModal.value = true
     return
   }
 
