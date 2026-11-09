@@ -55,6 +55,16 @@ $settings = @(
     @('SUPABASE_ANON_KEY', $true, $true, 'Supabase anon (public) key'),
     @('STRIPE_SECRET_KEY', $true, $false, 'optional'),
     @('STRIPE_WEBHOOK_SECRET', $true, $false, 'optional'),
+    # Price IDs (not secret); deploy/stripe_setup.py saves them to your user environment
+    @('STRIPE_PRICE_PAYG', $false, $false, 'optional'),
+    @('STRIPE_PRICE_PRO', $false, $false, 'optional'),
+    @('STRIPE_PRICE_BUSINESS', $false, $false, 'optional'),
+    @('STRIPE_PRICE_PACK_5', $false, $false, 'optional'),
+    @('STRIPE_PRICE_PACK_10', $false, $false, 'optional'),
+    @('STRIPE_PRICE_OVERAGE_PRO', $false, $false, 'optional'),
+    @('STRIPE_PRICE_OVERAGE_BUSINESS', $false, $false, 'optional'),
+    @('STRIPE_PRICE_RESEARCH_1', $false, $false, 'optional'),
+    @('STRIPE_PRICE_RESEARCH_5', $false, $false, 'optional'),
     @('RESEND_API_KEY', $true, $false, 'optional'),
     @('SENTRY_DSN', $true, $false, 'optional')
 )
