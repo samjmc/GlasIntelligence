@@ -65,6 +65,7 @@
           :systemLogs="systemLogs"
           @go-back="handleGoBack"
           @next-step="handleNextStep"
+          @step-ready="revealWorkbench"
           @add-log="addLog"
           @update-status="updateStatus"
         />
@@ -157,6 +158,11 @@ const toggleMaximize = (target) => {
   } else {
     viewMode.value = target
   }
+}
+
+// A step finished: its next-step button lives in the right panel, which the Graph view hides
+const revealWorkbench = () => {
+  if (viewMode.value === 'graph') viewMode.value = 'split'
 }
 
 const handleGoBack = async () => {

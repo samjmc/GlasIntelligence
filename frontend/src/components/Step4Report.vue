@@ -250,7 +250,15 @@
 
           <!-- Sources and Assumptions (from payload grounding, shown after report completes) -->
           <div v-if="isComplete && groundingData" class="grounding-panel">
-            <div class="grounding-header" @click="groundingExpanded = !groundingExpanded">
+            <div
+              class="grounding-header"
+              role="button"
+              tabindex="0"
+              :aria-expanded="groundingExpanded"
+              @click="groundingExpanded = !groundingExpanded"
+              @keydown.enter.self.prevent="groundingExpanded = !groundingExpanded"
+              @keydown.space.self.prevent="groundingExpanded = !groundingExpanded"
+            >
               <h3 class="grounding-title">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 Sources and Assumptions
@@ -654,7 +662,16 @@
                 'is-pending': !isSectionCompleted(idx + 1) && currentSectionIndex !== idx + 1
               }"
             >
-              <div class="section-header-row" @click="toggleSectionCollapse(idx)" :class="{ 'clickable': isSectionCompleted(idx + 1) }">
+              <div
+                class="section-header-row"
+                :role="isSectionCompleted(idx + 1) ? 'button' : null"
+                :tabindex="isSectionCompleted(idx + 1) ? 0 : null"
+                :aria-expanded="isSectionCompleted(idx + 1) ? !collapsedSections.has(idx) : null"
+                @click="toggleSectionCollapse(idx)"
+                @keydown.enter.self.prevent="toggleSectionCollapse(idx)"
+                @keydown.space.self.prevent="toggleSectionCollapse(idx)"
+                :class="{ 'clickable': isSectionCompleted(idx + 1) }"
+              >
                 <span class="section-number">{{ String(idx + 1).padStart(2, '0') }}</span>
                 <h3 class="section-title">{{ section.title }}</h3>
                 <svg 
@@ -702,7 +719,11 @@
               v-for="(s, i) in followUpSuggestions"
               :key="i"
               class="followup-card"
+              role="button"
+              tabindex="0"
               @click="runFollowUp(s)"
+              @keydown.enter.self.prevent="runFollowUp(s)"
+              @keydown.space.self.prevent="runFollowUp(s)"
             >
               <div class="followup-card-body">
                 <div class="followup-card-top">

@@ -1,6 +1,15 @@
 <template>
   <div class="workbench-panel">
     <div class="scroll-container">
+      <!-- Announces that a step finished; also a visible banner so the next action is easy to find -->
+      <div
+        class="step-ready-banner"
+        :class="{ 'has-message': readyMessage }"
+        role="status"
+        aria-live="polite"
+        data-test="step-ready-message"
+      >{{ readyMessage }}</div>
+
       <!-- Step 01: Ontology -->
       <div class="step-card" :class="{ 'active': currentPhase === 0, 'completed': currentPhase > 0 }">
         <div class="card-header">
@@ -34,7 +43,7 @@
                   <span class="detail-type-badge">{{ selectedOntologyItem.itemType === 'entity' ? 'ENTITY' : 'RELATION' }}</span>
                   <span class="detail-name">{{ selectedOntologyItem.name }}</span>
                </div>
-               <button class="close-btn" @click="selectedOntologyItem = null">×</button>
+               <button type="button" class="close-btn" aria-label="Close details" @click="selectedOntologyItem = null">×</button>
             </div>
             <div class="detail-body">
                <div class="detail-desc">{{ selectedOntologyItem.description }}</div>
@@ -77,14 +86,15 @@
           <div v-if="projectData?.ontology?.entity_types" class="tags-container" :class="{ 'dimmed': selectedOntologyItem }">
             <span class="tag-label">GENERATED ENTITY TYPES</span>
             <div class="tags-list">
-              <span 
-                v-for="entity in projectData.ontology.entity_types" 
-                :key="entity.name" 
+              <button
+                type="button"
+                v-for="entity in projectData.ontology.entity_types"
+                :key="entity.name"
                 class="entity-tag clickable"
                 @click="selectOntologyItem(entity, 'entity')"
               >
                 {{ entity.name }}
-              </span>
+              </button>
             </div>
           </div>
 
@@ -92,14 +102,15 @@
           <div v-if="projectData?.ontology?.edge_types" class="tags-container" :class="{ 'dimmed': selectedOntologyItem }">
             <span class="tag-label">GENERATED RELATION TYPES</span>
             <div class="tags-list">
-              <span 
-                v-for="rel in projectData.ontology.edge_types" 
-                :key="rel.name" 
+              <button
+                type="button"
+                v-for="rel in projectData.ontology.edge_types"
+                :key="rel.name"
                 class="entity-tag clickable"
                 @click="selectOntologyItem(rel, 'relation')"
               >
                 {{ rel.name }}
-              </span>
+              </button>
             </div>
           </div>
         </div>
@@ -158,8 +169,11 @@
         <div class="card-content">
           <p class="api-note">POST /api/simulation/create</p>
           <p class="description">Graph build complete. Proceed to environment setup.</p>
-          <button 
-            class="action-btn" 
+          <button
+            ref="nextBtn"
+            type="button"
+            class="action-btn"
+            data-test="proceed-env-setup"
             :disabled="currentPhase < 2 || creatingSimulation"
             @click="handleEnterEnvSetup"
           >
@@ -190,6 +204,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { createSimulation } from '../api/simulation'
+import { focusNextStepButton } from '../composables/useStepReady'
 
 const router = useRouter()
 
@@ -202,7 +217,19 @@ const props = defineProps({
   systemLogs: { type: Array, default: () => [] }
 })
 
-defineEmits(['next-step'])
+const emit = defineEmits(['next-step', 'step-ready'])
+
+const nextBtn = ref(null)
+const readyMessage = ref('')
+
+// The build just finished: tell the user, reveal the panel, and put focus on the next button
+watch(() => props.currentPhase, (phase, prev) => {
+  if (phase >= 2 && prev < 2) {
+    readyMessage.value = 'Graph built. Next: environment setup.'
+    emit('step-ready')
+    focusNextStepButton(nextBtn.value)
+  }
+})
 
 const selectedOntologyItem = ref(null)
 const logContent = ref(null)
@@ -397,6 +424,31 @@ watch(() => props.systemLogs.length, () => {
 
 .entity-tag.clickable {
     cursor: pointer;
+}
+
+.entity-tag.clickable:focus-visible,
+.action-btn:focus-visible,
+.close-btn:focus-visible {
+    outline: 3px solid #FF5722;
+    outline-offset: 2px;
+}
+
+/* Visible status strip: stays at the top of the scrolled panel once a step is done */
+.step-ready-banner {
+  display: none;
+}
+
+.step-ready-banner.has-message {
+  display: block;
+  position: sticky;
+  top: -24px; /* sits flush with the top edge of the scroll container's padding */
+  z-index: 5;
+  margin: -24px -24px 0;
+  padding: 12px 24px;
+  background: #FF5722;
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .entity-tag.clickable:hover {

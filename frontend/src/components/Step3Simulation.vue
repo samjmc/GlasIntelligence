@@ -89,15 +89,23 @@
       </div>
 
       <div class="action-controls">
-        <button 
+        <span
+          class="step-ready-message"
+          role="status"
+          aria-live="polite"
+          data-test="step-ready-message"
+        >{{ readyMessage }}</span>
+        <button
+          ref="reportBtn"
+          type="button"
           class="action-btn primary"
           data-test="simulation-complete"
           :disabled="phase !== 2 || isGeneratingReport"
           @click="handleNextStep"
         >
           <span v-if="isGeneratingReport" class="loading-spinner-small"></span>
-          {{ isGeneratingReport ? 'Starting...' : 'Generate Report' }} 
-          <span v-if="!isGeneratingReport" class="arrow-icon">→</span>
+          {{ isGeneratingReport ? 'Starting...' : 'Generate Report' }}
+          <span v-if="!isGeneratingReport" class="arrow-icon" aria-hidden="true">→</span>
         </button>
       </div>
     </div>
@@ -300,7 +308,7 @@
     <Teleport to="body">
       <div v-if="showCreditModal" class="credit-modal-overlay" @click.self="showCreditModal = false">
         <div class="credit-modal">
-          <button class="credit-modal-close" @click="showCreditModal = false">&times;</button>
+          <button type="button" class="credit-modal-close" aria-label="Close" @click="showCreditModal = false">&times;</button>
           <div class="credit-modal-icon">0</div>
           <h3 class="credit-modal-title">No Simulations Remaining</h3>
           <p class="credit-modal-desc">
@@ -327,6 +335,7 @@ import {
 } from '../api/simulation'
 import { generateReport } from '../api/report'
 import { trackEvent } from '../lib/analytics'
+import { focusNextStepButton } from '../composables/useStepReady'
 
 const props = defineProps({
   simulationId: String,
@@ -343,13 +352,24 @@ const props = defineProps({
   startOnMount: Boolean
 })
 
-const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
+const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status', 'step-ready'])
 
 const router = useRouter()
 
 // State
 const isGeneratingReport = ref(false)
 const phase = ref(0)
+const reportBtn = ref(null)
+const readyMessage = ref('')
+
+// The run finished: tell the user, reveal the panel, and put focus on "Generate Report"
+watch(phase, (value, prev) => {
+  if (value === 2 && prev !== 2) {
+    readyMessage.value = 'Simulation finished. Next: generate the report.'
+    emit('step-ready')
+    focusNextStepButton(reportBtn.value)
+  }
+})
 const isStarting = ref(false)
 const isStopping = ref(false)
 const startError = ref(null)
@@ -957,6 +977,18 @@ onUnmounted(() => {
   color: #1A936F;
   display: flex;
   align-items: center;
+}
+
+.step-ready-message {
+  font-size: 12px;
+  font-weight: 600;
+  color: #FF5722;
+  margin-right: 12px;
+}
+
+.action-btn:focus-visible {
+  outline: 3px solid #FF5722;
+  outline-offset: 2px;
 }
 
 /* Action Button */

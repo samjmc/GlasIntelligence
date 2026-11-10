@@ -150,6 +150,46 @@ describe('Home start flow', () => {
   })
 })
 
+// The example chips were missing from the accessibility tree. They must be real buttons
+// (reachable by Tab, operable with Enter and Space) with a name that says what they do.
+describe('Home example chips', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('are native buttons with an accessible name', async () => {
+    const wrapper = mountHome()
+    await flushPromises()
+    const chips = wrapper.findAll('[data-test="starter-card"]')
+    expect(chips).toHaveLength(6)
+    for (const chip of chips) {
+      expect(chip.element.tagName).toBe('BUTTON')
+      expect(chip.attributes('type')).toBe('button')
+      expect(chip.attributes('aria-label')).toMatch(/^Use example: \S/)
+    }
+    expect(chips[0].attributes('aria-label')).toBe('Use example: US raises tariffs on EU steel by 25%')
+    wrapper.unmount()
+  })
+
+  it('fill the scenario when clicked (a native button also fires click on Enter and Space)', async () => {
+    const wrapper = mountHome()
+    await flushPromises()
+    await wrapper.findAll('[data-test="starter-card"]')[0].trigger('click')
+    expect(wrapper.find('textarea.code-input').element.value)
+      .toBe('What happens if the US raises tariffs on EU steel by 25%?')
+    wrapper.unmount()
+  })
+
+  it('leave the empty upload area reachable and operable from the keyboard', async () => {
+    const wrapper = mountHome()
+    await flushPromises()
+    await wrapper.find('textarea.code-input').setValue('What if the US raises steel tariffs?')
+    const zone = wrapper.find('.upload-zone')
+    expect(zone.attributes('role')).toBe('button')
+    expect(zone.attributes('tabindex')).toBe('0')
+    expect(zone.attributes('aria-label')).toBe('Upload documents')
+    wrapper.unmount()
+  })
+})
+
 describe('Home for a free-plan user', () => {
   afterEach(() => {
     billing.status = { plan: 'pro' }
