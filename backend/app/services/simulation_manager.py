@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 
 from ..config import Config
+from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .oasis_profile_generator import OasisProfileGenerator
 from .ontology_generator import is_agent_entity_type
@@ -29,9 +30,66 @@ def drop_non_actor_entities(filtered: FilteredEntities) -> None:
     if len(actors) == len(filtered.entities):
         return
     logger.info(f"Dropping {len(filtered.entities) - len(actors)} non-actor entities from agents")
-    filtered.entities = actors
-    filtered.filtered_count = len(actors)
-    filtered.entity_types = {t for t in (e.get_entity_type() for e in actors) if t}
+    _keep_entities(filtered, actors)
+
+
+def _keep_entities(filtered: FilteredEntities, kept: list) -> None:
+    filtered.entities = kept
+    filtered.filtered_count = len(kept)
+    filtered.entity_types = {t for t in (e.get_entity_type() for e in kept) if t}
+
+
+AGENT_RELEVANCE_PROMPT = """You choose which entities become agents in a simulation of this scenario:
+
+{requirement}
+
+An agent must be able to act or speak in THIS scenario. DROP an entity when it is:
+- a rule, law, regulation, policy, framework, standard, product, plan, programme, scheme, event or place;
+- an organisation that is NOT active in the scenario's market or country and is only an example, analogue or precedent from elsewhere.
+KEEP companies active in the market, regulators, governments, public bodies, NGOs, consumer groups, unions, media and the public.
+When unsure, KEEP.
+
+Entities (index | name | type | summary):
+{entities}
+
+Return JSON: {{"drop": [{{"index": <int>, "reason": "<short reason>"}}]}}"""
+
+
+def drop_irrelevant_agents(filtered: FilteredEntities, simulation_requirement: str, llm: Any = None) -> None:
+    """Ask the LLM which entities cannot act in this scenario (rules named like organisations, foreign
+    analogues) and drop them. Fails open: on any error, or if it would drop more than half, keep all."""
+    entities = filtered.entities
+    if len(entities) < 3 or not simulation_requirement.strip():
+        return
+    lines = "\n".join(
+        f"{i} | {e.name} | {e.get_entity_type() or 'Entity'} | {(e.summary or '')[:200]}"
+        for i, e in enumerate(entities)
+    )
+    try:
+        client = llm or LLMClient()
+        result = client.chat_json(
+            messages=[
+                {
+                    "role": "user",
+                    "content": AGENT_RELEVANCE_PROMPT.format(requirement=simulation_requirement[:2000], entities=lines),
+                }
+            ],
+            temperature=0.0,
+            max_tokens=1500,
+        )
+        drop = {int(d["index"]): str(d.get("reason", "")) for d in result.get("drop", []) if "index" in d}
+    except Exception as e:
+        logger.warning(f"Agent relevance check failed, keeping all {len(entities)} entities: {type(e).__name__}")
+        return
+    drop = {i: r for i, r in drop.items() if 0 <= i < len(entities)}
+    if not drop:
+        return
+    if len(drop) > len(entities) // 2:
+        logger.warning(f"Agent relevance check wanted to drop {len(drop)} of {len(entities)}; keeping all")
+        return
+    for i, reason in sorted(drop.items()):
+        logger.info(f"Not an agent in this scenario: {entities[i].name} ({reason})")
+    _keep_entities(filtered, [e for i, e in enumerate(entities) if i not in drop])
 
 
 class SimulationStatus(str, Enum):
@@ -296,6 +354,7 @@ class SimulationManager:
                 graph_id=state.graph_id, defined_entity_types=defined_entity_types, enrich_with_edges=True
             )
             drop_non_actor_entities(filtered)
+            drop_irrelevant_agents(filtered, simulation_requirement)
 
             max_agents, _ = Config.simulation_limits(user_plan)
             if len(filtered.entities) > max_agents:
