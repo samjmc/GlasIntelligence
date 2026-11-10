@@ -1542,6 +1542,7 @@ const fetchAgentLog = async () => {
             currentSectionIndex.value = null
             emit('update-status', 'completed')
             stopPolling()
+            fetchConsoleLog() // one last read, so the final log lines are not cut off
             fetchReportPayload()
             fetchFollowUps()
             // Scroll logic handled in nextTick after loop
