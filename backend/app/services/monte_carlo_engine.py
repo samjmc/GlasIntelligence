@@ -148,6 +148,29 @@ def from_probability_estimate(low: float, mid: float, high: float) -> dict[str, 
     }
 
 
+def normalise_exclusive_ranges(ranges: list[tuple[float, float, float]]) -> list[tuple[int, int, int]] | None:
+    """Rescale low/mid/high percentage triplets of mutually exclusive outcomes to whole percents.
+
+    Exactly one of the outcomes happens, so their midpoints must sum to 100. Each midpoint is
+    scaled by the same factor and rounded by largest remainder (so the rounded midpoints still
+    sum to exactly 100); each low/high is scaled by that factor too and kept around its midpoint.
+    Returns None when the midpoints sum to zero, as there is nothing to scale.
+    """
+    total = sum(max(mid, 0.0) for _low, mid, _high in ranges)
+    if total <= 0:
+        return None
+    factor = 100.0 / total
+    scaled = [max(mid, 0.0) * factor for _low, mid, _high in ranges]
+    mids = [math.floor(s) for s in scaled]
+    by_remainder = sorted(range(len(scaled)), key=lambda i: scaled[i] - mids[i], reverse=True)
+    for i in by_remainder[: 100 - sum(mids)]:
+        mids[i] += 1
+    return [
+        (max(0, min(mid, round(low * factor))), mid, min(100, max(mid, round(high * factor))))
+        for (low, _mid, high), mid in zip(ranges, mids, strict=True)
+    ]
+
+
 def from_score_estimate(low: float, mid: float, high: float) -> dict[str, Any]:
     """Convert a low/mid/high score triplet into a triangular distribution."""
     return {

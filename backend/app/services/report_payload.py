@@ -4,7 +4,10 @@ Versioned structured report payload (v1) + scenario ladder generation.
 
 from __future__ import annotations
 
+import copy
 import json
+import os
+from types import SimpleNamespace
 from typing import Any
 
 from ..config import Config
@@ -12,10 +15,20 @@ from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from . import opinion_dynamics
 from .grounding_bundle import grounding_summary_text
+from .monte_carlo_engine import normalise_exclusive_ranges
+from .quantitative_analysis_service import NO_DATA_NOTE, UNKNOWN_ENTITY_TYPE
 
 logger = get_logger("glas.report_payload")
 
 REPORT_PAYLOAD_VERSION = 1
+
+# The app writes its own research briefing (api/source_agent.py) and uploads it like a user
+# file. It is LLM output nobody checked against sources, so it must not read as user evidence.
+AUTO_BRIEFING_PREFIXES = ("briefing_", "deep_research_")
+AUTO_BRIEFING_LABEL = "AI-written research briefing (not checked against web sources)"
+AUTO_BRIEFING_CLASSIFICATION = "ai_research_briefing"
+
+HOURS_PER_MONTH = 24 * 365 / 12
 
 REPORT_DISCLAIMER_MD = (
     "**Disclaimer:** Probability ranges and risk scores below are **simulation-derived** "
@@ -50,7 +63,10 @@ Return ONLY valid JSON:
 }
 Rules:
 - Provide exactly 3 scenarios: base, upside, stress (or de-escalation).
-- probability_range is a subjective simulation-derived bracket; low < mid < high (percentages 0-100).
+- The scenarios are mutually exclusive and together cover every outcome: exactly one plays out,
+  so the three "mid" values must sum to 100.
+- probability_range is a subjective simulation-derived bracket; low < mid < high (whole percentages 0-100).
+- This is a simulated rehearsal, not a forecast: do not call any scenario a forecast or prediction.
 - Do not claim real stock prices or legal facts not in the provided summaries.
 - Write in English.
 """
@@ -71,10 +87,35 @@ Rules:
         scenarios = data.get("scenarios") or []
         if len(scenarios) < 2:
             return _placeholder_scenarios()
-        return scenarios[:5]
+        return normalise_scenario_ladder(scenarios[:5])
     except Exception as e:
         logger.warning(f"Scenario ladder LLM failed: {e}")
         return _placeholder_scenarios()
+
+
+def _pct(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def normalise_scenario_ladder(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Scale the ladder so its midpoints sum to 100% (whole percents), in place.
+
+    Base / upside / stress are mutually exclusive paths, so midpoints of 60 / 35 / 20 (115%)
+    cannot all hold. Each low/high is scaled by the same factor so it stays around its midpoint.
+    """
+    ranges = []
+    for s in scenarios:
+        pr = s.get("probability_range") or {}
+        ranges.append((_pct(pr.get("low")), _pct(pr.get("mid")), _pct(pr.get("high"))))
+    scaled = normalise_exclusive_ranges(ranges)
+    if scaled is None:
+        return scenarios
+    for s, (low, mid, high) in zip(scenarios, scaled, strict=True):
+        s["probability_range"] = {"low": low, "mid": mid, "high": high}
+    return scenarios
 
 
 def _placeholder_scenarios() -> list[dict[str, Any]]:
@@ -103,22 +144,137 @@ def _placeholder_scenarios() -> list[dict[str, Any]]:
     ]
 
 
-def render_grounding_markdown(project, staleness_warnings: list[dict[str, Any]], claims: list[dict[str, Any]]) -> str:
+def is_auto_research_briefing(label: Any) -> bool:
+    """True for the app's own auto-written research briefing, uploaded as briefing_<topic>.md."""
+    return os.path.basename(str(label or "")).lower().startswith(AUTO_BRIEFING_PREFIXES)
+
+
+def _auto_briefing_labels(project) -> dict[str, str]:
+    """source_id -> file label, for the project's uploads that are auto-written briefings."""
+    return {
+        s.get("source_id"): s.get("label", "")
+        for s in getattr(project, "grounding_sources", None) or []
+        if s.get("kind") == "upload" and is_auto_research_briefing(s.get("label"))
+    }
+
+
+def label_auto_briefing_claims(project, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Relabel claim-ledger entries for auto-written briefings, which the ledger calls user-provided."""
+    briefings = _auto_briefing_labels(project)
+    return [
+        {
+            **c,
+            "text": f"{AUTO_BRIEFING_LABEL}: {briefings[c['source_id']]}",
+            "classification": AUTO_BRIEFING_CLASSIFICATION,
+        }
+        if c.get("source_id") in briefings
+        else c
+        for c in claims
+    ]
+
+
+def grounding_summary(project) -> str:
+    """grounding_summary_text, with the app's auto-written briefings labelled as such."""
+    if project is None:
+        return "(No project context)"
+    briefings = _auto_briefing_labels(project)
+    sources = [
+        {**s, "kind": "ai_briefing", "label": f"{AUTO_BRIEFING_LABEL}: {s.get('label', '')}"}
+        if s.get("source_id") in briefings
+        else s
+        for s in getattr(project, "grounding_sources", None) or []
+    ]
+    return grounding_summary_text(
+        SimpleNamespace(
+            knowledge_as_of=getattr(project, "knowledge_as_of", None),
+            updated_at=getattr(project, "updated_at", None),
+            grounding_sources=sources,
+        )
+    )
+
+
+def _duration(hours: float, adjective: bool = False) -> str:
+    """Hours as a plain duration: '10 hours', '18 days', '6 months' (adjective: '6-month')."""
+    if hours < 48:
+        n, unit = round(hours), "hour"
+    elif hours < 24 * 61:
+        n, unit = round(hours / 24), "day"
+    else:
+        n, unit = round(hours / HOURS_PER_MONTH), "month"
+    n = max(1, n)
+    return f"{n}-{unit}" if adjective else f"{n} {unit}{'' if n == 1 else 's'}"
+
+
+def _positive(value: Any) -> float | None:
+    number = _pct(value)
+    return number if number > 0 else None
+
+
+def simulation_basis(rounds: int, agent_count: int, time_config: Any) -> dict[str, Any]:
+    """What the run actually covered, for the report's basis line and the writers' prompts.
+
+    ``time_config`` may carry scenario_horizon_hours (the period the scenario asks about) and
+    hours_represented_per_round. Older simulations have neither, and then the report must not
+    claim any calendar horizon: the rounds are compressed time only.
+    """
+    tc = time_config if isinstance(time_config, dict) else {}
+    horizon = _positive(tc.get("scenario_horizon_hours"))
+    per_round = _positive(tc.get("hours_represented_per_round")) or (
+        horizon / rounds if horizon and rounds > 0 else None
+    )
+    if horizon and per_round:
+        statement = (
+            f"{agent_count} simulated agents over {rounds} rounds, each round standing for about "
+            f"{_duration(per_round)} of the {_duration(horizon, adjective=True)} horizon the scenario asks about "
+            "(compressed time)."
+        )
+    else:
+        statement = (
+            f"{agent_count} simulated agents over {rounds} rounds of compressed simulated time. "
+            "The run does not map onto a calendar period, so it says nothing about any specific "
+            "horizon such as weeks or months."
+        )
+    return {
+        "executed_rounds": rounds,
+        "agent_count": agent_count,
+        "scenario_horizon_hours": horizon,
+        "hours_represented_per_round": per_round if horizon else None,
+        "statement": statement,
+    }
+
+
+def render_grounding_markdown(
+    project,
+    staleness_warnings: list[dict[str, Any]],
+    claims: list[dict[str, Any]],
+    basis: dict[str, Any] | None = None,
+) -> str:
     lines = [
         "**Grounding and assumptions**",
         "",
-        grounding_summary_text(project) if project else "(No project context)",
+        grounding_summary(project),
         "",
     ]
+    if basis:
+        lines.extend([f"**Simulation basis:** {basis['statement']}", ""])
     if staleness_warnings:
         lines.append("**Freshness notices:**")
         for w in staleness_warnings:
             lines.append(f"- {w.get('message', w)}")
         lines.append("")
-    if claims:
+    briefing_claims = [c for c in claims if c.get("classification") == AUTO_BRIEFING_CLASSIFICATION]
+    document_claims = [c for c in claims if c.get("classification") != AUTO_BRIEFING_CLASSIFICATION]
+    if document_claims:
         lines.append("**Document-backed context (user-provided):**")
-        for c in claims[:12]:
+        for c in document_claims[:12]:
             lines.append(f"- {c.get('text', '')} _(source: {c.get('source_id', 'n/a')})_")
+        lines.append("")
+    if briefing_claims:
+        lines.append(
+            f"**{AUTO_BRIEFING_LABEL}:** used as background for the simulation only; its claims are not verified facts."
+        )
+        for c in briefing_claims[:12]:
+            lines.append(f"- {c.get('text', '')}")
         lines.append("")
     lines.append(
         "Hard facts about the real world outside the simulation should only be stated when "
@@ -128,13 +284,17 @@ def render_grounding_markdown(project, staleness_warnings: list[dict[str, Any]],
 
 
 def render_scenarios_markdown(scenarios: list[dict[str, Any]]) -> str:
-    lines = ["**Scenario ladder** (simulation-derived brackets)", ""]
+    lines = [
+        "**Scenario ladder** (simulation-derived brackets; the paths are mutually exclusive, "
+        "so their midpoints sum to 100%)",
+        "",
+    ]
     for s in scenarios:
         name = s.get("name", "Scenario")
         pr = s.get("probability_range") or {}
         lo, mid, hi = pr.get("low"), pr.get("mid"), pr.get("high")
-        rng = f"{lo}–{mid}–{hi}%" if lo is not None else "n/a"
-        lines.append(f"**{name}** _(indicative range {rng})_")
+        rng = f"midpoint {_pct(mid):.0f}%, range {_pct(lo):.0f}–{_pct(hi):.0f}%" if lo is not None else "n/a"
+        lines.append(f"**{name}** _({rng})_")
         for a in s.get("assumptions") or []:
             lines.append(f"- {a}")
         lines.append("")
@@ -188,9 +348,10 @@ def render_causal_chain_markdown(causal_chain: list[dict[str, Any]] | None) -> s
 
 
 def render_decision_markdown(decision_payload: dict[str, Any] | None) -> str:
-    """Render the decision framework as a report section in markdown."""
+    """Render the decision framework as a report section in markdown ("" when there is none;
+    the report then leaves the section out, heading included)."""
     if not decision_payload:
-        return "*Decision recommendation not available for this simulation.*"
+        return ""
 
     conf_rationale = decision_payload.get("confidence_rationale", "")
     conf_line = f"(Confidence: {decision_payload.get('confidence', 'N/A')})"
@@ -417,8 +578,9 @@ def build_report_payload_v1(
     staleness_warnings: list[dict[str, Any]],
     claims: list[dict[str, Any]],
     decision_payload: dict[str, Any] | None = None,
+    basis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    grounding_text = grounding_summary_text(project) if project else ""
+    grounding_text = grounding_summary(project) if project else ""
 
     monte_carlo = None
     if risks_payload and risks_payload.get("monte_carlo"):
@@ -435,6 +597,7 @@ def build_report_payload_v1(
         "simulation_id": simulation_id,
         "graph_id": graph_id,
         "project_id": getattr(project, "project_id", None) if project else None,
+        "simulation_basis": basis,
         "grounding": {
             "summary_text": grounding_text,
             "staleness_warnings": staleness_warnings,
@@ -480,10 +643,44 @@ def build_report_payload_v1(
     return payload
 
 
+def _prompt_view(payload: dict[str, Any]) -> dict[str, Any]:
+    """The payload as the section writers see it.
+
+    Drops what reads as false precision in prose (Monte Carlo composite, convergence and
+    histograms; scenario bookkeeping) and replaces empty or degenerate quant tables with a
+    no-data note, so writers leave them out rather than narrate zeros. The saved payload keeps
+    everything for the UI.
+    """
+    view = copy.deepcopy(payload)
+    view.pop("monte_carlo", None)
+    for s in view.get("scenarios") or []:
+        if isinstance(s, dict):
+            s.pop("_meta", None)
+    quant = view.get("quant")
+    if isinstance(quant, dict):
+        risks = quant.get("risks")
+        if isinstance(risks, dict):
+            risks.pop("monte_carlo", None)
+        positions = quant.get("positions")
+        if isinstance(positions, dict) and not (positions.get("stance_analysis") or {}).get("stances"):
+            quant["positions"] = NO_DATA_NOTE
+        matrix = quant.get("stakeholder_matrix")
+        if isinstance(matrix, dict) and all(
+            r.get("entity_type") == UNKNOWN_ENTITY_TYPE for r in matrix.get("rows") or []
+        ):
+            quant["stakeholder_matrix"] = NO_DATA_NOTE
+        sim_metrics = (quant.get("metrics") or {}).get("simulation_metrics")
+        if isinstance(sim_metrics, dict) and all(
+            t == UNKNOWN_ENTITY_TYPE for t in sim_metrics.get("agent_type_activity") or {}
+        ):
+            sim_metrics["agent_type_activity"] = NO_DATA_NOTE
+    return view
+
+
 def payload_preamble_for_prompt(payload: dict[str, Any], max_chars: int = 12000) -> str:
     """Inject into section system prompt — model must not contradict these tables."""
     try:
-        s = json.dumps(payload, ensure_ascii=False, indent=2)
+        s = json.dumps(_prompt_view(payload), ensure_ascii=False, indent=2)
     except Exception:
         s = str(payload)
     if len(s) > max_chars:

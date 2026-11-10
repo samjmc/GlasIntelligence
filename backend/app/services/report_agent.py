@@ -9,6 +9,7 @@ Features:
 4. Supports conversation with users, autonomously invoking retrieval tools during dialogue
 """
 
+import contextlib
 import json
 import os
 import re
@@ -32,10 +33,12 @@ from .report_payload import (
     REPORT_DISCLAIMER_MD,
     build_report_payload_v1,
     generate_scenario_ladder_json,
+    label_auto_briefing_claims,
     payload_preamble_for_prompt,
     render_decision_markdown,
     render_grounding_markdown,
     render_scenarios_markdown,
+    simulation_basis,
 )
 from .zep_tools import ZepToolsService
 
@@ -489,9 +492,10 @@ A lightweight quick retrieval tool suited for simple, direct information queries
 - List of facts most relevant to the query"""
 
 TOOL_DESC_INTERVIEW_AGENTS = """\
-[Deep Interview - Real Agent Interviews]
-Calls the OASIS simulation environment's interview API to conduct real interviews with running simulation agents!
-This is not LLM simulation -- it calls the actual interview interface to get simulation agents' original responses.
+[Deep Interview - Simulated Agent Interviews]
+Calls the OASIS simulation environment's interview API to interview the running simulation agents.
+The agents are synthetic personas: their answers are SIMULATED responses, not statements by any real
+person or organisation, and never real-world evidence.
 Interviews run on every platform the simulation used (Reddit; older runs also Twitter).
 
 Workflow:
@@ -504,13 +508,12 @@ Workflow:
 [Use Cases]
 - Need to understand event perspectives from different roles (What do pharmacists think? What does the media say? What is the official position?)
 - Need to collect multi-party opinions and positions
-- Need to get simulation agents' real responses (from the OASIS simulation environment)
-- Want to make the report more vivid with "interview transcripts"
+- Need the simulation agents' own responses (from the OASIS simulation environment)
 
 [Returns]
 - Identity information of interviewed agents
 - Each agent's interview responses, per platform that answered
-- Key quotes (can be directly cited)
+- Key quotes (quote only as labelled simulated responses)
 - Interview summary and viewpoint comparison
 
 [Important] Requires the OASIS simulation environment to be running!"""
@@ -518,21 +521,22 @@ Workflow:
 # ── Outline Planning Prompt ──
 
 PLAN_SYSTEM_PROMPT = """\
-You are a "Predictive Analysis Report" writing expert with a "god's-eye view" of the simulation world -- you can observe every agent's behaviour, statements, and interactions.
+You are a "Simulation Rehearsal Report" writing expert with a "god's-eye view" of the simulation world -- you can observe every agent's behaviour, statements, and interactions.
 
 [Core Concept]
-We have built a simulation world and injected a specific "simulation requirement" as a variable. The evolution of the simulation world represents a prediction of what could happen in the future. You are observing not "experimental data" but "a rehearsal of the future".
+We have built a simulation world and injected a specific "simulation requirement" as a variable. The evolution of the simulation world is a rehearsal of how things could play out. It is a simulated rehearsal, NOT a forecast or prediction.
 
 [Your Task]
-Write a "Predictive Analysis Report" that answers:
-1. Under the conditions we set, what happened in the future?
+Write a "Simulation Rehearsal Report" that answers:
+1. Under the conditions we set, what happened in the simulated world?
 2. How did different types of agents (stakeholder groups) react and act?
-3. What notable future trends and risks did this simulation reveal?
+3. What notable trends and risks did this rehearsal reveal?
 
 [Report Positioning]
-- This is a simulation-based predictive analysis report, revealing "if this happens, what follows"
-- Focus on prediction outcomes: event trajectories, group reactions, emergent phenomena, potential risks
-- Agent statements and actions in the simulation world are predictions of future group behaviour
+- This is a simulation-based rehearsal report, exploring "if this happens, what could follow"
+- Focus on what the rehearsal showed: event trajectories, group reactions, emergent phenomena, potential risks
+- Agent statements and actions are simulated behaviour of synthetic personas, not real statements
+- Never call the report or its findings a forecast or prediction (title and summary included)
 - This is NOT an analysis of the current real-world situation
 - This is NOT a generic sentiment overview
 
@@ -544,13 +548,13 @@ Write a "Predictive Analysis Report" that answers:
 [Section Limits]
 - Minimum 2 sections, maximum 5 sections
 - No sub-sections needed; each section contains complete content
-- Content should be concise, focused on core predictive findings
-- Section structure is designed by you based on prediction results
+- Content should be concise, focused on core findings of the rehearsal
+- Section structure is designed by you based on the simulation results
 
 Output a JSON report outline in the following format:
 {
     "title": "Report title",
-    "summary": "Report summary (one sentence summarising core predictive findings)",
+    "summary": "Report summary (one sentence summarising the core findings of the rehearsal)",
     "sections": [
         {
             "title": "Section title",
@@ -563,29 +567,36 @@ IMPORTANT: The title, summary, section titles, and all content MUST be in Englis
 Note: the sections array must have minimum 2, maximum 5 elements!"""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
-[Prediction Scenario]
+[Simulated Scenario]
 Variable injected into the simulation world (simulation requirement): {simulation_requirement}
 
-[Simulation World Scale]
-- Number of entities in simulation: {total_nodes}
-- Number of relationships between entities: {total_edges}
+[Simulation Scale]
+- Simulated agents: {agent_count}
+- Rounds executed: {executed_rounds}
+- Simulation basis: {basis_statement}
+- Knowledge-graph nodes (background entities, NOT agents): {total_nodes}
+- Knowledge-graph relationships: {total_edges}
 - Entity type distribution: {entity_types}
-- Number of active agents: {total_entities}
 
-[Sample of Predicted Future Facts from Simulation]
+[Sample of Simulated Facts from the Rehearsal]
 {related_facts_json}
 
-Examine this future rehearsal from a god's-eye perspective:
-1. Under the conditions we set, what state did the future present?
+Examine this rehearsal from a god's-eye perspective:
+1. Under the conditions we set, what did the simulated world show?
 2. How did different stakeholder groups (agents) react and act?
-3. What notable future trends did this simulation reveal?
+3. What notable trends and risks did this rehearsal reveal?
 
-Design the most appropriate report section structure based on prediction results.
+Design the most appropriate report section structure based on the simulation results.
 
-[Reminder] Report sections: minimum 2, maximum 5. Content must be concise and focused on core predictive findings. ALL content MUST be in English."""
+[Reminder] Report sections: minimum 2, maximum 5. Content must be concise and focused on the core findings of the rehearsal.
+If the title or summary states the scale, use the simulated agent count and rounds above, never the knowledge-graph node count.
+Call it a simulation or rehearsal, never a forecast or prediction, and do not claim a time horizon the simulation basis does not support.
+ALL content MUST be in English."""
 
 PLAN_SYSTEM_PROMPT_V1 = """\
-You are a "Predictive Analysis Report" expert planning section structure for a simulation rehearsal.
+You are a "Simulation Rehearsal Report" expert planning section structure for a simulation rehearsal.
+The output is a simulated rehearsal, NOT a forecast: the title and summary must describe it as a rehearsal
+or simulation and must never use the words forecast, prediction or predictive.
 
 Each section has a fixed machine **role** (use exactly these role values) plus a user-facing **title** you choose to match the scenario.
 
@@ -616,11 +627,11 @@ Rules: exactly 6 sections; roles must match the list above; ALL text in English.
 # ── Section Generation Prompt ──
 
 SECTION_SYSTEM_PROMPT_TEMPLATE = """\
-You are a "Predictive Analysis Report" writing expert, currently writing one section of the report.
+You are a "Simulation Rehearsal Report" writing expert, currently writing one section of the report.
 
 Report title: {report_title}
 Report summary: {report_summary}
-Prediction scenario (simulation requirement): {simulation_requirement}
+Simulated scenario (simulation requirement): {simulation_requirement}
 
 Current section to write: {section_title}
 Section role (machine): {section_role}
@@ -631,15 +642,15 @@ Section role (machine): {section_role}
 [Core Concept]
 ===============================================================
 
-The simulation world is a rehearsal of the future. We injected specific conditions (simulation requirement) into the simulation world. Agent behaviour and interactions in the simulation are predictions of future group behaviour.
+The simulation world is a rehearsal. We injected specific conditions (simulation requirement) into the simulation world. Agent behaviour and interactions are the simulated behaviour of synthetic personas.
 
 Your task is to:
-- Reveal what happened in the future under the set conditions
-- Predict how different stakeholder groups (agents) reacted and acted
-- Discover notable future trends, risks, and opportunities
+- Show what happened in the simulated world under the set conditions
+- Describe how different stakeholder groups (agents) reacted and acted in the rehearsal
+- Discover notable trends, risks, and opportunities the rehearsal reveals
 
 DO NOT write this as an analysis of the current real-world situation.
-DO focus on "what will happen" -- simulation results ARE the predicted future.
+This is a simulated rehearsal, NOT a forecast: never call results a forecast, a prediction or "the predicted future".
 
 ===============================================================
 [Most Important Rules - Must Follow]
@@ -657,16 +668,20 @@ DO focus on "what will happen" -- simulation results ARE the predicted future.
    - Format: "**Actionable Insight:** [specific recommendation backed by simulation data]"
 
 3. [Must Call Tools to Observe the Simulation World]
-   - You are observing the future rehearsal from a god's-eye perspective
+   - You are observing the rehearsal from a god's-eye perspective
    - All content must come from events and agent statements/actions in the simulation world
    - Do NOT use your own knowledge to write report content
    - Each section must call tools at least 3 times (maximum 5) to observe the simulation world
 
-4. [Must Quote Agents' Original Statements and Actions]
-   - Agent statements and behaviours are predictions of future group behaviour
-   - Use quotation format in the report to present these predictions, e.g.:
-     > "A group of stakeholders expressed: original content..."
-   - These quotes are the core evidence of simulation predictions
+4. [Quote Agents - Every Quote Labelled as Simulated]
+   - Agent statements are simulated responses from synthetic personas: NOT real statements, NOT real-world evidence
+   - Put each quote in a > blockquote that begins "Simulated response from <organisation or role> (agent):", e.g.:
+     > Simulated response from a consumer-advocacy group (agent): "original content..."
+   - Organisations may be named. NEVER name a real individual person (politician, executive, official,
+     journalist, etc.): refer to them by role only, e.g. "an opposition TD", "a consumer-advocacy spokesperson"
+   - Never present a simulated statement as a legal, regulatory or court finding, or as what a real
+     organisation actually said or will do
+   - Use > blockquotes ONLY for agent statements, never for statistics
 
 5. [Language Consistency - WRITE EVERYTHING IN ENGLISH]
    - The entire report MUST be written in English
@@ -675,10 +690,23 @@ DO focus on "what will happen" -- simulation results ARE the predicted future.
    - Maintain the original meaning when translating, ensure natural expression
    - This rule applies to both body text and quote blocks (> format)
 
-6. [Faithfully Present Prediction Results]
-   - Report content must reflect the simulation results representing the future
+6. [Faithfully Present the Simulation Results]
+   - Report content must reflect the simulation results
    - Do not add information that does not exist in the simulation
    - If information is insufficient on some aspect, state this honestly
+
+7. [Probabilities]
+   - Quote each probability as the tools give it, in whole percent
+   - NEVER add, sum, average or combine probabilities (no "combined chance"); independent outcomes do not sum to 100%
+   - Do not report Monte Carlo composite means, convergence or relative error
+
+8. [Missing Data]
+   - If a tool or the payload says NO DATA for a metric, leave that metric out entirely
+   - Never interpret zero counts, empty results or "Unknown" entity types as a finding
+
+9. [Time Horizon]
+   - Describe the run's time span only as the simulation basis in the payload states (rounds of compressed time)
+   - Never claim the simulation covered a calendar period (e.g. "the six-month reaction") the basis does not support
 
 ===============================================================
 [Format Rules - Extremely Important!]
@@ -697,9 +725,9 @@ This section analyses the trajectory of public discourse around the policy. Thro
 
 **Initial Reaction Phase**
 
-Opening posts drew the first wave of reactions, carrying the core information-sharing function:
+Opening posts drew the first wave of reactions, carrying 68% of first-round discourse volume:
 
-> "Opening posts drew 68% of first-round discourse volume..."
+> Simulated response from a regional newspaper (agent): "Readers want to know who pays for this..."
 
 **Sentiment Amplification Phase**
 
@@ -759,7 +787,7 @@ STRICTLY FORBIDDEN:
 ===============================================================
 
 1. Content must be based on simulation data retrieved through tools
-2. Extensively quote original statements to demonstrate simulation findings
+2. Quote agents' statements to show simulation findings, each labelled as a simulated response (rule 4)
 3. Use Markdown format (but NO headings):
    - Use **bold text** to mark key points (instead of sub-headings)
    - Use lists (- or 1.2.3.) to organise key points
@@ -772,9 +800,9 @@ STRICTLY FORBIDDEN:
    ```
    The official response was seen as lacking substance.
 
-   > "The response appeared rigid and slow in the fast-moving social media environment."
+   > Simulated response from a consumer-advocacy group (agent): "The response appeared rigid and slow."
 
-   This assessment reflected widespread public dissatisfaction.
+   This assessment reflected widespread dissatisfaction among simulated agents.
    ```
 
    INCORRECT format:
@@ -823,7 +851,7 @@ Observation (retrieval results):
 
 ===============================================================
 Tools called {tool_calls_count}/{max_tool_calls} times (used: {used_tools_str}){unused_hint}
-- If information is sufficient: output section content starting with "Final Answer:" (must quote original statements above). Write in English.
+- If information is sufficient: output section content starting with "Final Answer:" (quote statements above, each labelled as a simulated response). Write in English.
 - If more information is needed: call another tool to continue retrieval
 ==============================================================="""
 
@@ -856,13 +884,168 @@ REACT_FORCE_FINAL_MSG = (
     "Tool call limit reached. Please output Final Answer: and generate section content now. Write in English."
 )
 
+REACT_TOOL_MARKUP_MSG = (
+    "[Format Error] Your response contained raw tool-call markup, which must never appear in the report. "
+    'To call a tool, output only one <tool_call>{"name": "...", "parameters": {...}}</tool_call> block. '
+    'To finish, output the section text starting with "Final Answer:" and no tool-call markup.'
+)
+
+SECTION_UNAVAILABLE_MSG = (
+    "(This section could not be generated: the model returned a tool call instead of text. "
+    "Please regenerate the report.)"
+)
+
+# Prefixed to every interview_agents result, the source of the quotes in the report.
+SIMULATED_INTERVIEW_HEADER = (
+    "[SIMULATED AGENT RESPONSES] The answers below come from synthetic personas in the simulation. "
+    "They are not statements by any real person or organisation, and they are not real-world "
+    "evidence, legal findings or regulatory facts.\n"
+    'To quote one, use a > blockquote that begins "Simulated response from <organisation or role> (agent):". '
+    "Organisations may be named. Never name a real individual person: refer to them by role only "
+    '(e.g. "an opposition TD", "a consumer-advocacy spokesperson").\n\n'
+)
+
+SIMULATED_QUOTE_LABEL = "_(simulated agent response)_"
+
+# ── Tool-call markup ──
+# DeepSeek sometimes answers in its native "DSML" tool-call syntax instead of the
+# <tool_call>{json}</tool_call> format the prompt asks for, e.g.
+#   <｜｜DSML｜｜ invoke name="interview_agents">
+#   <｜｜DSML｜｜ parameter name="topic" string="true">...</｜｜DSML｜｜ parameter>
+# string="true" marks a raw string value; string="false" a JSON value.
+_DSML = r"[｜|]+\s*DSML\s*[｜|]+\s*"
+_DSML_INVOKE_RE = re.compile(rf'<{_DSML}invoke\s+name="([^"]+)"\s*>(.*?)</{_DSML}invoke\s*>', re.DOTALL)
+_DSML_PARAM_RE = re.compile(
+    rf'<{_DSML}parameter\s+name="([^"]+)"(?:\s+string="(true|false)")?\s*>(.*?)</{_DSML}parameter\s*>', re.DOTALL
+)
+# Any tool-call markup at all; text matching this is never adopted as section content.
+_TOOL_MARKUP_RE = re.compile(rf"{_DSML}|</?tool_call\b|</?(?:invoke|function_calls|parameter)\b", re.IGNORECASE)
+_TOOL_BLOCK_RES = (
+    re.compile(r"<tool_call>.*?(?:</tool_call>|$)", re.DOTALL),
+    re.compile(rf"<{_DSML}(?:function_)?calls\s*>.*?(?:</{_DSML}(?:function_)?calls\s*>|$)", re.DOTALL),
+    re.compile(rf"<{_DSML}invoke\b.*?(?:</{_DSML}invoke\s*>|$)", re.DOTALL),
+)
+# The "Let me get ..." line a model writes before a tool call.
+_TOOL_PREAMBLE_RE = re.compile(
+    r"^\s*(?:(?:now|next|first),?\s+)?(?:let me|let's|i'll|i will|i need to)\b[^\n]*$", re.IGNORECASE | re.MULTILINE
+)
+
+
+def contains_tool_markup(text: str) -> bool:
+    return bool(_TOOL_MARKUP_RE.search(text or ""))
+
+
+def strip_tool_markup(text: str) -> str:
+    """Remove tool-call blocks, stray tool tags and the "Let me ..." preamble before them."""
+    for pattern in _TOOL_BLOCK_RES:
+        text = pattern.sub("", text)
+    text = "\n".join(line for line in text.split("\n") if not _TOOL_MARKUP_RE.search(line))
+    text = _TOOL_PREAMBLE_RE.sub("", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def label_simulated_quotes(content: str) -> str:
+    """Mark every blockquote in a written section as a simulated agent response.
+
+    Blockquotes in sections hold agent statements only (the prompt forbids them for anything
+    else). A block already carrying the label, or introduced by a "Simulated response from ..."
+    line, is left alone; any other gets SIMULATED_QUOTE_LABEL on its last line.
+    """
+    out: list[str] = []
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines):
+        if not lines[i].lstrip().startswith(">"):
+            out.append(lines[i])
+            i += 1
+            continue
+        end = i
+        while end < len(lines) and lines[end].lstrip().startswith(">"):
+            end += 1
+        block = lines[i:end]
+        lead = next((line for line in reversed(out) if line.strip()), "")
+        if not any("simulated" in line.lower() for line in block) and "simulated response" not in lead.lower():
+            block[-1] = f"{block[-1].rstrip()} {SIMULATED_QUOTE_LABEL}"
+        out.extend(block)
+        i = end
+    return "\n".join(out)
+
+
+# ── Outline wording guards ──
+# The app's disclaimer and Terms say the output is a simulated rehearsal, not a forecast.
+_FORECAST_WORDS = {
+    "forecasting": "simulation",
+    "forecasted": "simulated",
+    "forecasts": "rehearsals",
+    "forecast": "rehearsal",
+    "predictive": "simulated",
+    "predictions": "simulations",
+    "prediction": "simulation",
+    "predicted": "simulated",
+    "predicts": "simulates",
+    "predict": "simulate",
+}
+# "...is not a forecast" already says the right thing; leave it.
+_FORECAST_RE = re.compile(r"(?<!not a )(?<!not an )\b(" + "|".join(_FORECAST_WORDS) + r")\b", re.IGNORECASE)
+_ENTITY_COUNT_RE = re.compile(r"\b(?:(?P<article>an?)\s+)?\d[\d,]*(?P<sep>[- ])entit(?P<suffix>y|ies)\b", re.IGNORECASE)
+
+
+def neutralise_forecast_wording(text: str) -> str:
+    """Replace forecast/prediction wording with rehearsal/simulation wording, keeping case."""
+
+    def _swap(match: re.Match[str]) -> str:
+        word = match.group(0)
+        new = _FORECAST_WORDS[word.lower()]
+        if word.isupper():
+            return new.upper()
+        return new[0].upper() + new[1:] if word[0].isupper() else new
+
+    return _FORECAST_RE.sub(_swap, text)
+
+
+def _use_agent_count(text: str, agent_count: int) -> str:
+    """'A 105-entity simulation' -> 'An 83-agent simulation': the summary counts agents, like the body."""
+
+    def _swap(match: re.Match[str]) -> str:
+        noun = "agents" if match["suffix"].lower() == "ies" else "agent"
+        out = f"{agent_count}{match['sep']}{noun}"
+        if match["article"]:
+            vowel_sound = str(agent_count).startswith("8") or agent_count in (11, 18)
+            article = "an" if vowel_sound else "a"
+            out = f"{article.capitalize() if match['article'][0].isupper() else article} {out}"
+        return out
+
+    return _ENTITY_COUNT_RE.sub(_swap, text)
+
+
+def sanitise_outline(outline: ReportOutline, basis: dict[str, Any] | None) -> ReportOutline:
+    """Deterministic last word on the outline's wording, whatever the planning LLM wrote."""
+    outline.title = neutralise_forecast_wording(outline.title)
+    outline.summary = neutralise_forecast_wording(outline.summary)
+    if basis and basis.get("agent_count"):
+        outline.summary = _use_agent_count(outline.summary, basis["agent_count"])
+    for section in outline.sections:
+        section.title = neutralise_forecast_wording(section.title)
+    return outline
+
+
+def omit_empty_decision_section(outline: ReportOutline, decision_payload: dict[str, Any] | None) -> bool:
+    """Drop the decision section when there is no decision to show. True when it was dropped."""
+    if decision_payload:
+        return False
+    kept = [s for s in outline.sections if s.role != "decision_recommendation"]
+    dropped = len(kept) != len(outline.sections)
+    outline.sections = kept
+    return dropped
+
+
 # ── Chat Prompt ──
 
 CHAT_SYSTEM_PROMPT_TEMPLATE = """\
-You are a concise and efficient simulation prediction assistant. Answer in English.
+You are a concise and efficient simulation rehearsal assistant. Answer in English.
 
 [Background]
-Prediction conditions: {simulation_requirement}
+Simulation conditions: {simulation_requirement}
 
 [Generated Analysis Report]
 {report_content}
@@ -872,6 +1055,8 @@ Prediction conditions: {simulation_requirement}
 2. Answer directly; avoid lengthy deliberation
 3. Only call tools for more data when the report content is insufficient
 4. Answers should be concise, clear, and well-structured
+5. The report is a simulated rehearsal, not a forecast. Agent statements are simulated responses:
+   label any quote as simulated, and never name a real individual person (use their role)
 
 [Available Tools] (use only when needed, maximum 1-2 calls)
 {tools_description}
@@ -970,6 +1155,7 @@ class ReportAgent:
         self._staleness_warnings: list[dict[str, Any]] = []
         self._claims_ledger: list[dict[str, Any]] = []
         self._grounding_project = None
+        self._simulation_basis: dict[str, Any] | None = None
 
         logger.info(f"ReportAgent initialized: graph_id={graph_id}, simulation_id={simulation_id}")
 
@@ -1156,7 +1342,9 @@ class ReportAgent:
 
             elif tool_name == "interview_agents":
                 # Deep interview - call real OASIS interview API to get simulation agent responses (dual platform)
-                interview_topic = parameters.get("interview_topic", parameters.get("query", ""))
+                interview_topic = (
+                    parameters.get("interview_topic") or parameters.get("topic") or parameters.get("query", "")
+                )
                 max_agents = parameters.get("max_agents", 5)
                 if isinstance(max_agents, str):
                     max_agents = int(max_agents)
@@ -1167,7 +1355,7 @@ class ReportAgent:
                     simulation_requirement=self.simulation_requirement,
                     max_agents=max_agents,
                 )
-                return result.to_text()
+                return SIMULATED_INTERVIEW_HEADER + result.to_text()
 
             # ========== Backward-compatible legacy tools (internally redirected to new tools) ==========
 
@@ -1226,6 +1414,11 @@ class ReportAgent:
         if tool_calls:
             return tool_calls
 
+        # Format 1b: DeepSeek's native DSML invoke blocks
+        tool_calls = self._parse_dsml_tool_calls(response)
+        if tool_calls:
+            return tool_calls
+
         # Format 2: Fallback - LLM directly outputs bare JSON (without <tool_call> tags)
         # Only attempted when format 1 doesn't match, to avoid false matches in body text
         stripped = response.strip()
@@ -1249,6 +1442,22 @@ class ReportAgent:
             except json.JSONDecodeError:
                 pass
 
+        return tool_calls
+
+    def _parse_dsml_tool_calls(self, response: str) -> list[dict[str, Any]]:
+        """Tool calls written in DSML, as the same {"name", "parameters"} dicts as Format 1."""
+        tool_calls = []
+        for name, body in _DSML_INVOKE_RE.findall(response):
+            parameters: dict[str, Any] = {}
+            for param, is_string, raw in _DSML_PARAM_RE.findall(body):
+                value: Any = raw.strip()
+                if is_string == "false":
+                    with contextlib.suppress(json.JSONDecodeError):
+                        value = json.loads(value)
+                parameters[param] = value
+            call = {"name": name.strip(), "parameters": parameters}
+            if self._is_valid_tool_call(call):
+                tool_calls.append(call)
         return tool_calls
 
     def _is_valid_tool_call(self, data: dict) -> bool:
@@ -1276,8 +1485,8 @@ class ReportAgent:
 
     def _default_outline_v1(self) -> ReportOutline:
         return ReportOutline(
-            title="Predictive Analysis Report",
-            summary="Simulation-derived forecast with quantitative stakeholders, scenarios, risk framing, and decision recommendation.",
+            title="Simulation Rehearsal Report",
+            summary="Simulated rehearsal with quantitative stakeholders, scenarios, risk framing, and decision recommendation.",
             sections=[
                 ReportSection(
                     title="Grounding and assumptions",
@@ -1331,7 +1540,31 @@ class ReportAgent:
             return False
         return set(roles) == set(OUTLINE_REQUIRED_ROLES)
 
+    def _load_time_config(self) -> dict[str, Any] | None:
+        """The simulation's time_config, or None when the config is missing or malformed."""
+        path = os.path.join(self.quant_service._sim_dir(self.simulation_id), "simulation_config.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                time_config = json.load(f).get("time_config")
+        except (OSError, ValueError, AttributeError):
+            return None
+        return time_config if isinstance(time_config, dict) else None
+
+    def _compute_simulation_basis(self) -> dict[str, Any] | None:
+        """Agents, executed rounds and time span of the run (see report_payload.simulation_basis)."""
+        try:
+            metrics = self.quant_service.simulation_metrics(self.simulation_id)
+        except Exception as e:
+            logger.warning(f"Simulation basis unavailable: {e}")
+            return None
+        return simulation_basis(metrics.total_rounds, metrics.total_agents, self._load_time_config())
+
     def plan_outline(self, progress_callback: Callable | None = None) -> ReportOutline:
+        """Plan the outline, then apply the deterministic wording guards to it."""
+        self._simulation_basis = self._compute_simulation_basis()
+        return sanitise_outline(self._draft_outline(progress_callback), self._simulation_basis)
+
+    def _draft_outline(self, progress_callback: Callable | None = None) -> ReportOutline:
         """
         Plan report outline
 
@@ -1355,12 +1588,15 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 30, "Generating report outline...")
 
+        basis = self._simulation_basis or {}
         user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
             simulation_requirement=self.simulation_requirement,
+            agent_count=basis.get("agent_count", "unknown"),
+            executed_rounds=basis.get("executed_rounds", "unknown"),
+            basis_statement=basis.get("statement", "unknown"),
             total_nodes=context.get("graph_statistics", {}).get("total_nodes", 0),
             total_edges=context.get("graph_statistics", {}).get("total_edges", 0),
             entity_types=list(context.get("graph_statistics", {}).get("entity_types", {}).keys()),
-            total_entities=context.get("total_entities", 0),
             related_facts_json=json.dumps(context.get("related_facts", [])[:10], ensure_ascii=False, indent=2),
         )
 
@@ -1397,11 +1633,11 @@ class ReportAgent:
             except Exception as e:
                 logger.error(f"Outline planning failed: {str(e)}")
                 return ReportOutline(
-                    title="Future Prediction Report",
-                    summary="Future trends and risk analysis based on simulation predictions",
+                    title="Simulation Rehearsal Report",
+                    summary="Trends and risks seen in the simulated rehearsal",
                     sections=[
-                        ReportSection(title="Prediction Scenarios and Core Findings", role="general"),
-                        ReportSection(title="Population Behaviour Prediction Analysis", role="general"),
+                        ReportSection(title="Rehearsal Scenario and Core Findings", role="general"),
+                        ReportSection(title="Simulated Group Behaviour", role="general"),
                         ReportSection(title="Trend Outlook and Risk Alerts", role="general"),
                     ],
                 )
@@ -1650,6 +1886,11 @@ class ReportAgent:
 
                 # Normal completion
                 final_answer = response.split("Final Answer:")[-1].strip()
+                if contains_tool_markup(final_answer):
+                    logger.warning(f"Section {section.title}: Final Answer contained tool-call markup, reprompting")
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({"role": "user", "content": REACT_TOOL_MARKUP_MSG})
+                    continue
                 jev_hint = self._jev_section_rejection(section, final_answer, previous_sections, jev_gate_state)
                 if jev_hint:
                     messages.append({"role": "assistant", "content": response})
@@ -1735,6 +1976,12 @@ class ReportAgent:
             # ── Case 3: Neither tool call nor Final Answer ──
             messages.append({"role": "assistant", "content": response})
 
+            # Tool-call markup we could not parse (or an unknown tool): never adopt it as content.
+            if contains_tool_markup(response):
+                logger.warning(f"Section {section.title}: unparsed tool-call markup in response, reprompting")
+                messages.append({"role": "user", "content": REACT_TOOL_MARKUP_MSG})
+                continue
+
             if tool_calls_count < min_tool_calls:
                 # Insufficient tool calls, recommend unused tools
                 unused_tools = all_tools - used_tools
@@ -1808,6 +2055,11 @@ class ReportAgent:
             final_answer = response.split("Final Answer:")[-1].strip()
         else:
             final_answer = response
+
+        # Out of retries: strip the markup rather than ship it.
+        if contains_tool_markup(final_answer):
+            logger.warning(f"Section {section.title}: stripping tool-call markup from the forced final content")
+            final_answer = strip_tool_markup(final_answer) or SECTION_UNAVAILABLE_MSG
 
         # Log section content generation complete
         if self.report_logger:
@@ -1947,7 +2199,9 @@ class ReportAgent:
                         )
                 else:
                     self._staleness_warnings = []
-                self._claims_ledger = build_claim_ledger_from_project(project) if project else []
+                self._claims_ledger = (
+                    label_auto_briefing_claims(project, build_claim_ledger_from_project(project)) if project else []
+                )
 
                 pre_m = self.quant_service.analyze_metrics(self.simulation_id)
                 pos = self.quant_service.assess_positions(
@@ -2012,10 +2266,15 @@ class ReportAgent:
                     staleness_warnings=self._staleness_warnings,
                     claims=self._claims_ledger,
                     decision_payload=decision_payload,
+                    basis=self._simulation_basis,
                 )
                 ReportManager.save_payload_v1(report_id, self._payload_dict)
                 payload_preamble = payload_preamble_for_prompt(self._payload_dict)
                 logger.info(f"Report payload v1 saved for {report_id}")
+
+                # No decision recommendation: leave the section out, heading included.
+                if omit_empty_decision_section(outline, decision_payload):
+                    ReportManager.save_outline(report_id, outline)
             else:
                 self._quant_tool_cache = {}
                 self._payload_dict = None
@@ -2056,23 +2315,26 @@ class ReportAgent:
                         self._grounding_project,
                         self._staleness_warnings,
                         self._claims_ledger,
+                        self._simulation_basis,
                     )
                 elif Config.ENABLE_REPORT_PAYLOAD_V1 and section.role == "scenarios":
                     section_content = render_scenarios_markdown(self._scenarios_list)
                 elif Config.ENABLE_REPORT_PAYLOAD_V1 and section.role == "decision_recommendation":
                     section_content = render_decision_markdown(self._decision_payload)
                 else:
-                    section_content = self._generate_section_react(
-                        section=section,
-                        outline=outline,
-                        previous_sections=generated_sections,
-                        progress_callback=lambda stage, prog, msg, _base=base_progress: (
-                            progress_callback(stage, _base + int(prog * 0.7 / total_sections), msg)
-                            if progress_callback
-                            else None
-                        ),
-                        section_index=section_num,
-                        payload_preamble=payload_preamble,
+                    section_content = label_simulated_quotes(
+                        self._generate_section_react(
+                            section=section,
+                            outline=outline,
+                            previous_sections=generated_sections,
+                            progress_callback=lambda stage, prog, msg, _base=base_progress: (
+                                progress_callback(stage, _base + int(prog * 0.7 / total_sections), msg)
+                                if progress_callback
+                                else None
+                            ),
+                            section_index=section_num,
+                            payload_preamble=payload_preamble,
+                        )
                     )
 
                 section.content = section_content
@@ -2238,7 +2500,7 @@ class ReportAgent:
 
             if not tool_calls:
                 # No tool calls, return response directly
-                clean_response = re.sub(r"<tool_call>.*?</tool_call>", "", response, flags=re.DOTALL)
+                clean_response = strip_tool_markup(response) if contains_tool_markup(response) else response
                 clean_response = re.sub(r"\[TOOL_CALL\].*?\)", "", clean_response)
 
                 return {
@@ -2270,7 +2532,7 @@ class ReportAgent:
         final_response = self.llm.chat(messages=messages, temperature=0.5)
 
         # Clean response
-        clean_response = re.sub(r"<tool_call>.*?</tool_call>", "", final_response, flags=re.DOTALL)
+        clean_response = strip_tool_markup(final_response) if contains_tool_markup(final_response) else final_response
         clean_response = re.sub(r"\[TOOL_CALL\].*?\)", "", clean_response)
 
         return {

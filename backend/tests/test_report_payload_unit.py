@@ -106,9 +106,9 @@ class TestRenderCausalChain:
 
 
 class TestRenderDecision:
-    def test_none_returns_fallback(self):
-        md = render_decision_markdown(None)
-        assert "not available" in md
+    def test_none_returns_empty(self):
+        # No placeholder text: the report omits the section, heading included.
+        assert render_decision_markdown(None) == ""
 
     def test_renders_verdict(self):
         md = render_decision_markdown({"verdict": "Go", "confidence": "Medium"})
