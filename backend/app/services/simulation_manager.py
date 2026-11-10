@@ -15,10 +15,23 @@ from typing import Any
 from ..config import Config
 from ..utils.logger import get_logger
 from .oasis_profile_generator import OasisProfileGenerator
+from .ontology_generator import is_agent_entity_type
 from .simulation_config_generator import SimulationConfigGenerator
-from .zep_entity_reader import ZepEntityReader
+from .zep_entity_reader import FilteredEntities, ZepEntityReader
 
 logger = get_logger("glas.simulation")
+
+
+def drop_non_actor_entities(filtered: FilteredEntities) -> None:
+    """Keep only entities that can act. Things (precedents, programmes, products, policies) stay graph
+    context, never agents. Also covers graphs whose ontology was built before such types were dropped."""
+    actors = [e for e in filtered.entities if is_agent_entity_type(e.get_entity_type() or "")]
+    if len(actors) == len(filtered.entities):
+        return
+    logger.info(f"Dropping {len(filtered.entities) - len(actors)} non-actor entities from agents")
+    filtered.entities = actors
+    filtered.filtered_count = len(actors)
+    filtered.entity_types = {t for t in (e.get_entity_type() for e in actors) if t}
 
 
 class SimulationStatus(str, Enum):
@@ -282,6 +295,7 @@ class SimulationManager:
             filtered = reader.filter_defined_entities(
                 graph_id=state.graph_id, defined_entity_types=defined_entity_types, enrich_with_edges=True
             )
+            drop_non_actor_entities(filtered)
 
             max_agents, _ = Config.simulation_limits(user_plan)
             if len(filtered.entities) > max_agents:

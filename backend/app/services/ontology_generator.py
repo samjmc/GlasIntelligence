@@ -3,12 +3,39 @@ Ontology generation service
 API 1: Analyze text content and generate entity and relationship type definitions for social simulation
 """
 
+import re
 from typing import Any
 
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.ontology_generator")
+
+# Every typed graph node becomes a simulated agent (zep_entity_reader.filter_defined_entities
+# keeps any node with a custom label). A type whose head noun (last PascalCase word) is one of
+# these names a thing, not an actor: live run 2026-11-09 made "Iliad/Free" (ForeignEntrantPrecedent)
+# and a loyalty programme "speak". Without a type, such nodes stay plain "Entity" graph context.
+_NON_ACTOR_TYPE_HEADS = frozenset(
+    {
+        "precedent", "analogue", "analog", "programme", "program", "product", "scheme", "initiative",
+        "event", "policy", "law", "legislation", "regulation", "plan", "tariff", "offer", "concept",
+        "topic", "trend", "case",
+    }
+)  # fmt: skip
+
+
+def entity_type_words(entity_type: str) -> list[str]:
+    """Split a type name into words: "OppositionTD" -> ["Opposition", "TD"]."""
+    return re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+", entity_type or "")
+
+
+def is_agent_entity_type(entity_type: str) -> bool:
+    """False for a type that names a thing (product, programme, precedent, policy...), not an actor."""
+    words = entity_type_words(entity_type)
+    if not words:
+        return True
+    head = words[-1].lower()
+    return head not in _NON_ACTOR_TYPE_HEADS and not (head.endswith("s") and head[:-1] in _NON_ACTOR_TYPE_HEADS)
 
 
 # System prompt for ontology generation
@@ -38,6 +65,14 @@ Therefore, **entities must be real-world subjects that can post and interact on 
 - Abstract concepts (e.g., "public opinion", "sentiment", "trend")
 - Topics/themes (e.g., "academic integrity", "education reform")
 - Viewpoints/attitudes (e.g., "supporters", "opponents")
+- Products, plans, tariffs, offers, loyalty/points programmes, schemes and initiatives
+- Events, policies, laws and regulations
+- Historical precedents or analogues (e.g., a past market entry in another country): they are context, not participants
+- Entities merely mentioned that could not plausibly act or speak in THIS scenario (e.g., an unrelated utility in a telecoms scenario)
+
+Only entities that can plausibly act or speak in the scenario become agents. Do not create entity types for the things above; they stay in the knowledge graph as plain context.
+
+**Real individual people** are simulated as anonymous roles (e.g., "An opposition TD", "A Government minister"), never under their real names. Design person types by role (Politician, Journalist, Executive...). Organisations keep their real names.
 
 ## Output Format
 
@@ -227,13 +262,15 @@ class OntologyGenerator:
             "- NGOs, advocacy groups, unions, industry bodies\n"
             "- Media outlets\n"
             "- International organizations\n"
-            "- Named community groups or coalitions\n"
-            "- Specific projects, programs, or initiatives that have an organizational identity\n\n"
+            "- Named community groups or coalitions\n\n"
             "Do NOT include:\n"
             "- Abstract concepts, topics, or themes\n"
             "- Generic unnamed groups ('some people', 'critics')\n"
-            "- Policies or laws unless they have an organizational body behind them\n\n"
-            "Be exhaustive. It is better to include a borderline entity than to miss one.\n\n"
+            "- Products, plans, tariffs, loyalty/points programmes, schemes, initiatives\n"
+            "- Events, policies, laws or regulations (list the body behind them instead)\n"
+            "- Historical precedents or analogues, e.g. a past market entry in another country\n"
+            "- Entities that are only mentioned and could not plausibly act or speak in this scenario\n\n"
+            "Be exhaustive about the stakeholders who could act or speak in this scenario.\n\n"
             "Return JSON:\n"
             '{"entities": [\n'
             '  {"name": "Entity name", "category": "individual|company|government|regulator|ngo|media|international_org|industry_body|other", '
@@ -308,7 +345,7 @@ class OntologyGenerator:
             message += f"""
 ## Entity Inventory (pre-scanned from document)
 
-The following {len(entity_inventory)} concrete entities were identified in the document. Your entity types MUST be designed so that EVERY entity below can be classified into one of your 10 types.
+The following {len(entity_inventory)} concrete entities were identified in the document. Your entity types MUST be designed so that every entity below that can act or speak in this scenario can be classified into one of your 10 types. Leave out products, programmes, schemes, events, policies, precedents and unrelated entities.
 
 {inventory_text}
 
@@ -323,7 +360,7 @@ Based on the above content, design entity types and relationship types suitable 
 1. Must output exactly 10 entity types
 2. The last 2 must be fallback types: Person (individual fallback) and Organization (organization fallback)
 3. The first 8 are specific types designed based on text content
-4. All entity types must be real-world subjects that can post and interact, not abstract concepts
+4. All entity types must be real-world subjects that can post and interact in this scenario: no abstract concepts, products, programmes, schemes, events, policies, laws or historical precedents
 5. Attribute names cannot use name, uuid, group_id and other reserved words; use full_name, org_name, etc. instead
 6. The `examples` field for each entity type must use real entity names from the Entity Inventory above
 """
@@ -340,6 +377,18 @@ Based on the above content, design entity types and relationship types suitable 
             result["edge_types"] = []
         if "analysis_summary" not in result:
             result["analysis_summary"] = ""
+
+        # Drop types that name things rather than actors; their nodes stay untyped graph context
+        dropped = {e.get("name", "") for e in result["entity_types"] if not is_agent_entity_type(e.get("name", ""))}
+        if dropped:
+            logger.info(f"Dropped non-actor entity types (kept as graph context, not agents): {sorted(dropped)}")
+            result["entity_types"] = [e for e in result["entity_types"] if e.get("name", "") not in dropped]
+            for edge in result["edge_types"]:
+                edge["source_targets"] = [
+                    st
+                    for st in edge.get("source_targets") or []
+                    if st.get("source") not in dropped and st.get("target") not in dropped
+                ]
 
         # Validate entity types
         for entity in result["entity_types"]:
@@ -377,7 +426,7 @@ Based on the above content, design entity types and relationship types suitable 
 
         organization_fallback = {
             "name": "Organization",
-            "description": "Any organization not fitting other specific organization types.",
+            "description": "Any organization able to act or speak; not a product, programme or precedent.",
             "attributes": [
                 {"name": "org_name", "type": "text", "description": "Name of the organization"},
                 {"name": "org_type", "type": "text", "description": "Type of organization"},

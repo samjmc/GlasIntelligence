@@ -1,5 +1,6 @@
 from unittest.mock import patch, MagicMock
 
+from app.services.llm_research_agent import UNVERIFIED_BRIEFING_HEADER, UNVERIFIED_FACT_PREFIX, mark_unverified
 from app.services.search_research_agent import SearchResearchAgent
 
 _SYNTHESIS_MD = (
@@ -43,7 +44,8 @@ def test_run_returns_correct_dossier_schema(MockLLM, MockTavily):
     agent = SearchResearchAgent()
     result = agent.run("test scenario about trade wars")
 
-    assert result["summary_md"] == _SYNTHESIS_MD
+    assert result["summary_md"].startswith("## Background & Context\nSome background.")
+    assert "## Sources\n- Article A: https://example.com/a" in result["summary_md"]
     assert isinstance(result["sources"], list)
     assert result["sources"][0]["url"] == "https://example.com/a"
     assert isinstance(result["key_facts"], list)
@@ -78,7 +80,7 @@ def test_iterates_when_score_below_threshold(MockLLM, MockTavily):
 
     # Tavily must have been called for both the initial query AND the gap query
     assert mock_tavily.search.call_count >= 2
-    assert result["summary_md"] == _SYNTHESIS_MD
+    assert result["summary_md"].startswith("## Background & Context\nSome background.")
 
 
 @patch("app.services.search_research_agent.TavilyClient")
@@ -198,7 +200,10 @@ def test_verification_skipped_when_no_sources(MockLLM, MockTavily):
 
     assert result["verification"] == {}
     assert "## Verification Notes" not in result["summary_md"]
-    assert result["summary_md"] == _SYNTHESIS_MD
+    # No web source behind any of it: the dossier says so on its first line, facts are flagged.
+    assert result["summary_md"] == mark_unverified(_SYNTHESIS_MD)
+    assert result["summary_md"].startswith(UNVERIFIED_BRIEFING_HEADER)
+    assert result["key_facts"] == [UNVERIFIED_FACT_PREFIX + "Fact one: 42%", UNVERIFIED_FACT_PREFIX + "Fact two: 100bn"]
 
 
 @patch("app.services.search_research_agent.TavilyClient")
@@ -223,4 +228,22 @@ def test_verification_failure_does_not_fail_run(MockLLM, MockTavily):
     result = agent.run("scenario")
 
     assert result["verification"] == {}
-    assert result["summary_md"] == _SYNTHESIS_MD
+    assert "## Verification Notes" not in result["summary_md"]
+    assert result["summary_md"].startswith("## Background & Context\nSome background.")
+
+
+def test_every_section_lists_sources_or_says_none_were_cited():
+    md = (
+        "Intro line.\n\n"
+        "## Background & Context\nSome background.\nSources: https://example.com/a\n\n"
+        "## Key Facts Summary\n- Fact one: 42%\n\n"
+        "## Quantitative Anchors\n- 42% share\n**Sources:** https://example.com/b\n"
+    )
+
+    out = SearchResearchAgent._ensure_section_sources(md)
+
+    assert out.count("Sources: https://example.com/a") == 1
+    assert out.count("**Sources:** https://example.com/b") == 1
+    assert "- Fact one: 42%\nSources: none cited in this section (unverified)." in out
+    assert out.count("none cited") == 1
+    assert out.startswith("Intro line.")

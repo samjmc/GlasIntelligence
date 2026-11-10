@@ -10,6 +10,7 @@ from openai import OpenAI
 from ..config import Config
 from ..middleware.auth import optional_auth, require_auth
 from ..models.task import TaskManager, TaskStatus
+from ..services.llm_research_agent import mark_unverified
 from ..services.spend_guards import llm_balance_low
 from ..services.supabase_client import SupabaseDB
 from ..utils.llm_client import no_thinking_kwargs
@@ -42,7 +43,11 @@ The user will describe a scenario. You must produce a comprehensive markdown bri
 
 Write 800-1200 words. Use specific names, dates, and figures where possible; flag uncertain or contested claims.
 This briefing will be fed into a multi-agent simulation engine, so focus on information that helps
-model stakeholder behavior and reactions: incentives, constraints, audiences, and plausible if–then reactions."""
+model stakeholder behavior and reactions: incentives, constraints, audiences, and plausible if–then reactions.
+
+You have NO web access, so nothing here is checked against a source. Phrase every specific number
+(price, share, count, date) as unverified, e.g. "reportedly around €10 (unverified)", and never
+present it as a retrieved or current fact."""
 
 
 def _get_llm_client():
@@ -127,7 +132,10 @@ def auto_research():
 
         if not response.choices:
             return jsonify({"success": False, "error": "No response from LLM"}), 502
+        # One LLM call, no web search: the document itself must say its figures are unchecked
         content_md = response.choices[0].message.content
+        if content_md:
+            content_md = mark_unverified(content_md)
         safe_title = re.sub(r"[^\w\-]", "_", prompt[:60])
         filename = f"briefing_{safe_title}.md"
 
@@ -135,7 +143,7 @@ def auto_research():
             {
                 "success": True,
                 "data": {
-                    "title": f"Research Briefing: {prompt[:80]}",
+                    "title": f"AI Background Briefing (not web-checked): {prompt[:80]}",
                     "content_md": content_md,
                     "filename": filename,
                 },

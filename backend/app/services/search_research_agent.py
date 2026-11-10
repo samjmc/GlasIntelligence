@@ -9,6 +9,7 @@ Anthropic via LLMClient.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from ..config import Config
@@ -30,7 +31,7 @@ from .jev_research_gates import (
     screen_search_results,
     verdicts_to_verification,
 )
-from .llm_research_agent import LLMResearchAgent
+from .llm_research_agent import LLMResearchAgent, mark_facts_unverified, mark_unverified
 from .research_angles import RESEARCH_ANGLES
 
 logger = get_logger("glas.search_research")
@@ -103,8 +104,15 @@ with plausible ranges or discrete options.
 This heading MUST contain the words "Key Facts".
 
 Write 3000-6000 words. Be specific: name actors, cite search sources where relevant, \
-describe incentives. Note when a claim is from the search results vs. your reasoned inference.\
+describe incentives. Note when a claim is from the search results vs. your reasoned inference.
+
+End EVERY ## section with one line "Sources: <url>, <url>" listing the search-result URLs that \
+section relies on, or "Sources: none (background knowledge, unverified)" if it uses none. \
+Only use URLs that appear in the search results.\
 """
+
+# "Sources: ...", "**Sources:** ...", "Source: ..."
+_SECTION_SOURCES_LINE = re.compile(r"^\W*sources?\W*:", re.IGNORECASE)
 
 _ANGLE_HEADER = "\nThe following research angles are particularly relevant. Include dedicated sections for each:\n"
 
@@ -226,22 +234,29 @@ class SearchResearchAgent:
         if not summary_md.strip():
             raise RuntimeError("SearchResearchAgent returned empty summary_md")
 
-        verification: dict = {}
-        if all_sources:
-            verification = self._verify_gated(llm, scenario, summary_md, search_context, all_sources)
-            summary_md = self._append_verification_notes(summary_md, verification)
-
-        key_facts = LLMResearchAgent._extract_key_facts(summary_md)
-        historical_precedents = LLMResearchAgent._extract_section(summary_md, "Historical Precedents")
-        quantitative_anchors = LLMResearchAgent._extract_section(summary_md, "Quantitative Anchors")
-        structured_precedents = LLMResearchAgent._structure_precedents(historical_precedents, quantitative_anchors)
-
         seen_urls: set[str] = set()
         unique_sources: list[dict] = []
         for s in all_sources:
             if s["url"] not in seen_urls:
                 seen_urls.add(s["url"])
                 unique_sources.append(s)
+
+        verification: dict = {}
+        if all_sources:
+            summary_md = self._ensure_section_sources(summary_md)
+            verification = self._verify_gated(llm, scenario, summary_md, search_context, all_sources)
+            summary_md = self._append_verification_notes(summary_md, verification)
+            summary_md = self._append_source_list(summary_md, unique_sources)
+        else:
+            # Search returned nothing usable: the dossier is training knowledge only.
+            summary_md = mark_unverified(summary_md)
+
+        key_facts = LLMResearchAgent._extract_key_facts(summary_md)
+        if not all_sources:
+            key_facts = mark_facts_unverified(key_facts)
+        historical_precedents = LLMResearchAgent._extract_section(summary_md, "Historical Precedents")
+        quantitative_anchors = LLMResearchAgent._extract_section(summary_md, "Quantitative Anchors")
+        structured_precedents = LLMResearchAgent._structure_precedents(historical_precedents, quantitative_anchors)
 
         return {
             "sources": unique_sources,
@@ -461,6 +476,22 @@ class SearchResearchAgent:
             lines.append("### Verified against search results")
             for v in verified:
                 lines.append(f"- {v.get('claim', '')} — {v.get('source_url', '')}")
+        return f"{summary_md}\n{chr(10).join(lines)}".strip()
+
+    @staticmethod
+    def _ensure_section_sources(summary_md: str) -> str:
+        """Every ## section carries a Sources line; one the LLM left out says none were cited."""
+        sections = re.split(r"(?m)^(?=## )", summary_md)
+        for i, section in enumerate(sections):
+            body = section.splitlines()[1:]
+            if section.startswith("## ") and not any(_SECTION_SOURCES_LINE.match(line.strip()) for line in body):
+                sections[i] = section.rstrip("\n") + "\nSources: none cited in this section (unverified).\n\n"
+        return "".join(sections).strip()
+
+    @staticmethod
+    def _append_source_list(summary_md: str, sources: list[dict]) -> str:
+        """Append every web source the dossier was written from."""
+        lines = ["", "## Sources"] + [f"- {s.get('title') or s['url']}: {s['url']}" for s in sources]
         return f"{summary_md}\n{chr(10).join(lines)}".strip()
 
     @staticmethod

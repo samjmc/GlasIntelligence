@@ -22,6 +22,25 @@ _MAX_RETRIES = 3
 _RETRY_BACKOFFS = [5, 15, 45]
 _TRANSIENT_STATUS_CODES = {500, 502, 503, 504}
 
+# A briefing written without any web search (live server 2026-11-09: TAVILY_API_KEY unset) was
+# later treated as "retrieved facts". It now says what it is, on its first line.
+UNVERIFIED_BRIEFING_HEADER = (
+    "> **AI-written background briefing — not checked against web sources. Treat figures as unverified.**"
+)
+UNVERIFIED_FACT_PREFIX = "Unverified (AI background, no web source): "
+
+
+def mark_unverified(md: str) -> str:
+    """Put the unverified-briefing header on the first line of a briefing (idempotent)."""
+    if md.lstrip().startswith(UNVERIFIED_BRIEFING_HEADER):
+        return md
+    return f"{UNVERIFIED_BRIEFING_HEADER}\n\n{md.lstrip()}"
+
+
+def mark_facts_unverified(facts: list[str]) -> list[str]:
+    return [f if f.startswith(UNVERIFIED_FACT_PREFIX) else UNVERIFIED_FACT_PREFIX + f for f in facts]
+
+
 # Adapted version of the base research prompt — same output structure but
 # framed for training-knowledge reasoning rather than live web search.
 _SYSTEM_PREAMBLE = """\
@@ -91,6 +110,10 @@ This heading MUST contain the words "Key Facts".
 
 Write 3000-6000 words. Be specific: name actors, quote known positions, describe incentives. \
 Note when a claim is well-established vs. your reasoned inference.
+
+You have NO web access, so nothing you write is checked against a source. Phrase every \
+specific number (price, share, count, date) as unverified, e.g. "reportedly around €10 \
+(unverified)", and never present it as a retrieved or current fact.
 """
 
 _ANGLE_HEADER = (
@@ -135,8 +158,9 @@ class LLMResearchAgent:
 
         if not summary_md.strip():
             raise RuntimeError("LLM research returned empty response")
+        summary_md = mark_unverified(summary_md)
 
-        key_facts = self._extract_key_facts(summary_md)
+        key_facts = mark_facts_unverified(self._extract_key_facts(summary_md))
         historical_precedents = self._extract_section(summary_md, "Historical Precedents")
         quantitative_anchors = self._extract_section(summary_md, "Quantitative Anchors")
         structured_precedents = self._structure_precedents(historical_precedents, quantitative_anchors)
