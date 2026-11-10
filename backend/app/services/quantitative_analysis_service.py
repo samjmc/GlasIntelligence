@@ -21,8 +21,53 @@ from ..utils.jev_metrics import LEDGER
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from .calibration_guardrails import apply_estimate_guardrails
+from .monte_carlo_engine import normalise_exclusive_ranges
 
 logger = get_logger("glas.quantitative_analysis")
+
+# What a tool tells the report writer when a metric came back empty or degenerate, so the
+# report leaves the metric out instead of narrating zeros as a finding.
+NO_DATA_NOTE = "NO DATA - do not draw conclusions from this metric; leave it out of the report."
+UNKNOWN_ENTITY_TYPE = "Unknown"
+
+
+def _all_types_unknown(types) -> bool:
+    """True when no agent has a known entity type, so any by-type breakdown is meaningless."""
+    return all(t == UNKNOWN_ENTITY_TYPE for t in types)
+
+
+def _group_label(value: Any) -> str | None:
+    """The LLM's exclusive_group, or None for an independent outcome (JSON null, or null as text)."""
+    label = str(value or "").strip()
+    return None if label.lower() in ("", "null", "none") else label
+
+
+def _normalise_exclusive_groups(estimates: list["ProbabilityEstimate"]) -> None:
+    """Make each group of mutually exclusive outcomes sum to 100% at the midpoint, in place.
+
+    A group with one member is not a set of alternatives, so that outcome becomes independent.
+    """
+    groups: dict[str, list[ProbabilityEstimate]] = {}
+    for est in estimates:
+        if est.exclusive_group:
+            groups.setdefault(est.exclusive_group, []).append(est)
+    for members in groups.values():
+        if len(members) < 2:
+            members[0].exclusive_group = None
+            continue
+        scaled = normalise_exclusive_ranges(
+            [(e.probability_low, e.probability_mid, e.probability_high) for e in members]
+        )
+        if scaled is None:
+            continue
+        for est, (low, mid, high) in zip(members, scaled, strict=True):
+            est.probability_low, est.probability_mid, est.probability_high = float(low), float(mid), float(high)
+
+
+def executed_rounds(timeline: list[dict[str, Any]]) -> int:
+    """Rounds the simulation ran. Round 0 holds only the opening posts and is not a round,
+    so a 10-round run (rounds 0..10 in the timeline) is 10, not 11."""
+    return max((r["round_num"] for r in timeline), default=0)
 
 
 def _safe_int(val, lo: int, hi: int, default: int) -> int:
@@ -141,7 +186,10 @@ class SimulationMetrics:
                 )
                 lines.append(f"  {agent['agent_name']}: {agent['total_actions']} actions{split}")
 
-        if self.agent_type_activity:
+        if self.agent_type_activity and _all_types_unknown(self.agent_type_activity):
+            lines.append("")
+            lines.append(f"Activity by Entity Type: {NO_DATA_NOTE} (agent types are unknown for this run)")
+        elif self.agent_type_activity:
             lines.append("")
             lines.append("Activity by Entity Type:")
             for etype, data in sorted(self.agent_type_activity.items(), key=lambda x: -x[1].get("total_actions", 0)):
@@ -255,6 +303,14 @@ class StanceAnalysis:
         }
 
     def to_text(self) -> str:
+        if not self.stances:
+            return "\n".join(
+                [
+                    "=== Stakeholder Position Analysis ===",
+                    f"Topic: {self.topic}",
+                    f"Stance analysis: {NO_DATA_NOTE} No agent stances could be classified for this run.",
+                ]
+            )
         lines = [
             "=== Stakeholder Position Analysis ===",
             f"Topic: {self.topic}",
@@ -314,6 +370,8 @@ class ConsensusMetrics:
         }
 
     def to_text(self) -> str:
+        if self.faction_count == 0:
+            return f"=== Consensus & Polarization Metrics ===\nConsensus and polarization: {NO_DATA_NOTE}"
         pol_label = "Low"
         if self.polarization_index > 0.7:
             pol_label = "High"
@@ -407,10 +465,14 @@ class ProbabilityEstimate:
     raw_high: float = 0.0
     # None = guardrails not applied (disabled or error); list = applied (may be empty).
     guardrail_corrections: list[str] | None = None
+    # Label shared by mutually exclusive alternatives (their midpoints are normalised to sum
+    # to 100); None = an independent outcome, never to be added to any other.
+    exclusive_group: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "outcome": self.outcome,
+            "exclusive_group": self.exclusive_group,
             "probability_range": {
                 "low": self.probability_low,
                 "mid": self.probability_mid,
@@ -448,27 +510,53 @@ class ProbabilityAssessment:
             "=== Probability Assessment ===",
             f"Scenario: {self.scenario}",
             "",
-            "Key Outcome Probabilities:",
+            "Key Outcome Probabilities (simulation-derived, whole percent):",
         ]
 
+        groups: dict[str, list[ProbabilityEstimate]] = {}
+        independent: list[ProbabilityEstimate] = []
         for est in self.estimates:
-            conf_marker = {"high": "★★★", "moderate": "★★☆", "low": "★☆☆", "speculative": "☆☆☆"}.get(
-                est.confidence, "★★☆"
-            )
-            lines.append(f"\n  {est.outcome}")
+            if est.exclusive_group:
+                groups.setdefault(est.exclusive_group, []).append(est)
+            else:
+                independent.append(est)
+
+        for group, members in groups.items():
             lines.append(
-                f"    Probability: {est.probability_low:.0f}% - {est.probability_high:.0f}% "
-                f"(midpoint: {est.probability_mid:.0f}%)"
+                f"\n  Mutually exclusive alternatives ({group}): exactly one of these happens; "
+                "their midpoints sum to 100%."
             )
-            lines.append(f"    Confidence: {est.confidence} {conf_marker}")
-            if est.supporting_evidence:
-                lines.append(f"    Evidence: {'; '.join(est.supporting_evidence[:3])}")
-            if est.key_drivers:
-                lines.append(f"    Key drivers: {'; '.join(est.key_drivers[:3])}")
+            lines.extend(self._estimate_lines(est) for est in members)
+        if independent:
+            lines.append(
+                "\n  Independent outcomes: each is a separate chance of that one thing happening. "
+                "They are NOT alternatives and do not sum to 100%."
+            )
+            lines.extend(self._estimate_lines(est) for est in independent)
+        if self.estimates:
+            lines.append(
+                "\n  Rule: never add, sum or combine these probabilities into a 'combined chance' "
+                "or an average; quote each one on its own."
+            )
 
         if self.methodology_note:
             lines.append(f"\nMethodology: {self.methodology_note}")
 
+        return "\n".join(lines)
+
+    @staticmethod
+    def _estimate_lines(est: ProbabilityEstimate) -> str:
+        conf_marker = {"high": "★★★", "moderate": "★★☆", "low": "★☆☆", "speculative": "☆☆☆"}.get(est.confidence, "★★☆")
+        lines = [
+            f"\n  {est.outcome}",
+            f"    Probability: {est.probability_low:.0f}% - {est.probability_high:.0f}% "
+            f"(midpoint: {est.probability_mid:.0f}%)",
+            f"    Confidence: {est.confidence} {conf_marker}",
+        ]
+        if est.supporting_evidence:
+            lines.append(f"    Evidence: {'; '.join(est.supporting_evidence[:3])}")
+        if est.key_drivers:
+            lines.append(f"    Key drivers: {'; '.join(est.key_drivers[:3])}")
         return "\n".join(lines)
 
 
@@ -609,36 +697,16 @@ class RisksToolResult:
             parts.append(self.probabilities.to_text())
         if self.risk_matrix:
             parts.append(self.risk_matrix.to_text())
-        if self.monte_carlo:
-            mc = self.monte_carlo
-            per_outcome = mc.get("per_outcome", [])
-            composite = mc.get("composite")
-            if per_outcome or composite:
-                lines = ["=== Monte Carlo Analysis ==="]
-                for item in per_outcome:
-                    if item is None:
-                        continue
-                    mc_data = item.get("monte_carlo", {})
-                    cis = mc_data.get("confidence_intervals", {})
-                    ci95 = cis.get("95%", [0, 0])
-                    lines.append(
-                        f"  {item.get('outcome', '')}: "
-                        f"mean={mc_data.get('mean', 0):.1f}%, "
-                        f"95% CI=[{ci95[0]:.1f}%, {ci95[1]:.1f}%]"
-                    )
-                if composite:
-                    c_cis = composite.get("confidence_intervals", {})
-                    c_ci95 = c_cis.get("95%", [0, 0])
-                    lines.append(
-                        f"\n  Composite: mean={composite.get('mean', 0):.1f}%, "
-                        f"95% CI=[{c_ci95[0]:.1f}%, {c_ci95[1]:.1f}%]"
-                    )
-                    conv = composite.get("convergence", {})
-                    lines.append(
-                        f"  Converged: {conv.get('converged', False)} "
-                        f"(relative error: {conv.get('relative_error', 0):.4f})"
-                    )
-                parts.append("\n".join(lines))
+        # Only the per-outcome spread reaches the report writer. The composite (an average of
+        # unrelated outcomes) and the convergence statistics stay in to_dict() for the UI; in
+        # prose they read as precision the estimates do not have.
+        per_outcome = [item for item in (self.monte_carlo or {}).get("per_outcome", []) if item is not None]
+        if per_outcome:
+            lines = ["=== Uncertainty spread per outcome (95% interval, whole percent) ==="]
+            for item in per_outcome:
+                ci95 = item.get("monte_carlo", {}).get("confidence_intervals", {}).get("95%", [0, 0])
+                lines.append(f"  {item.get('outcome', '')}: {ci95[0]:.0f}% to {ci95[1]:.0f}%")
+            parts.append("\n".join(lines))
         return "\n\n".join(parts)
 
 
@@ -691,6 +759,11 @@ class StakeholderImpactMatrix:
         return {"rows": [r.to_dict() for r in self.rows]}
 
     def to_text(self) -> str:
+        if _all_types_unknown(r.entity_type for r in self.rows):
+            return (
+                "=== Stakeholder impact matrix (by entity type) ===\n"
+                f"Stakeholder impact matrix: {NO_DATA_NOTE} (agent types are unknown for this run)"
+            )
         lines = [
             "=== Stakeholder impact matrix (by entity type) ===",
             "| Type | Stance mix | Majority | Avg intensity | Activity index* | Escalation exposure** | Voice share |",
@@ -836,7 +909,7 @@ class QuantitativeAnalysisService:
 
         result = SimulationMetrics()
         result.total_agents = len(agent_stats)
-        result.total_rounds = len(timeline)
+        result.total_rounds = executed_rounds(timeline)
 
         action_types: dict[str, int] = {}
         for agent in agent_stats:
@@ -1167,7 +1240,7 @@ class QuantitativeAnalysisService:
         from .simulation_runner import SimulationRunner
 
         timeline = SimulationRunner.get_timeline(simulation_id)
-        result = EscalationAnalysis(total_rounds=len(timeline))
+        result = EscalationAnalysis(total_rounds=executed_rounds(timeline))
 
         if not timeline:
             return result
@@ -1242,11 +1315,12 @@ class QuantitativeAnalysisService:
     ) -> ProbabilityAssessment:
         evidence_parts = [f"Scenario: {scenario}"]
 
-        if stance:
+        # Empty stance/consensus results are left out: their zeros are not evidence.
+        if stance and stance.stances:
             evidence_parts.append(f"Stakeholder stance distribution: {json.dumps(stance.position_distribution)}")
             evidence_parts.append(f"Average stance intensity: {stance.average_intensity}/5")
 
-        if consensus:
+        if consensus and consensus.faction_count:
             evidence_parts.append(f"Polarization index: {consensus.polarization_index}")
             evidence_parts.append(f"Agreement ratio: {consensus.agreement_ratio:.1f}%")
             evidence_parts.append(
@@ -1273,6 +1347,7 @@ class QuantitativeAnalysisService:
             '  "estimates": [\n'
             "    {\n"
             '      "outcome": "clear description of the outcome",\n'
+            '      "exclusive_group": "implementation_status or null",\n'
             '      "probability_low": 10,\n'
             '      "probability_mid": 25,\n'
             '      "probability_high": 40,\n'
@@ -1290,6 +1365,10 @@ class QuantitativeAnalysisService:
             "- Ground estimates in the provided evidence, not general knowledge\n"
             "- Be honest about uncertainty; avoid false precision\n"
             "- Identify 3-5 distinct, non-overlapping outcomes\n"
+            "- exclusive_group: outcomes that are alternative answers to the same question (exactly one "
+            "of them will happen, e.g. implemented as planned / delayed / abandoned) share one short "
+            "group label, and the group must list every alternative so its probabilities can sum to "
+            "100. An outcome that can happen independently of the others gets null.\n"
         )
 
         try:
@@ -1354,9 +1433,11 @@ class QuantitativeAnalysisService:
                 raw_mid=raw_mid,
                 raw_high=raw_high,
                 guardrail_corrections=guardrail_corrections,
+                exclusive_group=_group_label(item.get("exclusive_group")),
             )
             result.estimates.append(est)
 
+        _normalise_exclusive_groups(result.estimates)
         return result
 
     # ───────────────────────────────────────────────────────────
