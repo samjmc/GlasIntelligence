@@ -212,7 +212,8 @@ def _renumbered_csv(path: str, keep: list[int], expected_rows: int) -> str:
 
 
 def _write_all(sim_dir: str, writes: list[tuple[str, str]]) -> None:
-    """Write every file to a temp name first, then swap them in, so a failed write changes nothing."""
+    """Write every file to a temp name first, then swap them in: a failed write changes nothing, and only a
+    failed swap (rare: same directory, same disk) could leave the files partly updated."""
     temps = []
     try:
         for name, text in writes:
