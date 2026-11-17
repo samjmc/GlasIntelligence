@@ -3,6 +3,19 @@
 # grey cloud) before the first start; see docs/hosting.md.
 {
 	email {$ACME_EMAIL}
+
+	# Data minimisation: Caddy's error log lines keep the path and method only.
+	# Query strings (tokens), request headers and client IPs are removed.
+	log {
+		format filter {
+			wrap json
+			request>uri regexp \?.* ""
+			request>headers delete
+			request>remote_ip delete
+			request>client_ip delete
+			request>remote_port delete
+		}
+	}
 }
 
 {$APP_DOMAIN} {
@@ -22,3 +35,7 @@
 		}
 	}
 }
+
+# Other apps on this host (GlasApp) put one site block per file in deploy/sites/ on
+# the server. The files are not in git. A glob that matches no file is fine.
+import /etc/caddy/sites/*.caddy

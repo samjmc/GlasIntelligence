@@ -75,3 +75,6 @@ celerybeat.pid
 
 # Server secrets for the production stack (deploy/app-secrets.example.conf is the template)
 deploy/app-secrets.conf
+
+# Extra Caddy site files that live only on the server (see docs/hosting.md)
+deploy/sites/*.caddy

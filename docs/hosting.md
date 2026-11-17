@@ -93,6 +93,32 @@ Steps marked **(you)** need your accounts or payment. Claude must not create acc
 - `deploy.sh` pulls fresh base images on every build.
 - Reboot the server after kernel updates. The stack comes back by itself, because every service has `restart: unless-stopped`.
 
+## Other sites on this host
+
+The same Caddy can serve other apps (for example GlasApp). The `Caddyfile` ends with `import /etc/caddy/sites/*.caddy`, and the compose file mounts `deploy/sites/` on the server there (read only). The `.caddy` files are **not in git**; `deploy.sh` never touches them.
+
+1. On the server, create `/opt/glas/deploy/sites/<name>.caddy` with one site block, for example:
+   ```
+   glasapp.example.com {
+   	encode zstd gzip
+   	reverse_proxy glasapp:8080
+   }
+   ```
+2. Point the DNS record of that domain at this server (Cloudflare: DNS only).
+3. Apply it. This recreates only Caddy (a few seconds); the app keeps running:
+   ```
+   cd /opt/glas/deploy && set -a && . ./app-secrets.conf && set +a && docker compose up -d caddy
+   ```
+4. The other app's container must join the `glas_default` network, so Caddy can reach it by container name. In its compose file:
+   ```
+   networks:
+     default:
+       name: glas_default
+       external: true
+   ```
+
+The global `log` block in the `Caddyfile` strips query strings, request headers and client IPs from Caddy's own log lines, for every site on this host.
+
 ## Going public: email and payments
 
 Both need Sam's own accounts; the scripts read keys from the Windows user environment and print no secret.
