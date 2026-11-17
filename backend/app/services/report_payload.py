@@ -26,6 +26,7 @@ REPORT_PAYLOAD_VERSION = 1
 # file. It is LLM output nobody checked against sources, so it must not read as user evidence.
 AUTO_BRIEFING_PREFIXES = ("briefing_", "deep_research_")
 AUTO_BRIEFING_LABEL = "AI-written research briefing (not checked against web sources)"
+WEB_BRIEFING_LABEL = "Research briefing built from web search (sources listed below)"
 AUTO_BRIEFING_CLASSIFICATION = "ai_research_briefing"
 
 HOURS_PER_MONTH = 24 * 365 / 12
@@ -158,13 +159,24 @@ def _auto_briefing_labels(project) -> dict[str, str]:
     }
 
 
+def _has_web_sources(project) -> bool:
+    """True when the briefing came from web search: the project then carries its web_research sources."""
+    return any(s.get("kind") == "web_research" for s in getattr(project, "grounding_sources", None) or [])
+
+
+def briefing_label(project) -> str:
+    """How to describe the auto-written briefing: web-sourced, or AI-written with no web check."""
+    return WEB_BRIEFING_LABEL if _has_web_sources(project) else AUTO_BRIEFING_LABEL
+
+
 def label_auto_briefing_claims(project, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Relabel claim-ledger entries for auto-written briefings, which the ledger calls user-provided."""
     briefings = _auto_briefing_labels(project)
+    label = briefing_label(project)
     return [
         {
             **c,
-            "text": f"{AUTO_BRIEFING_LABEL}: {briefings[c['source_id']]}",
+            "text": f"{label}: {briefings[c['source_id']]}",
             "classification": AUTO_BRIEFING_CLASSIFICATION,
         }
         if c.get("source_id") in briefings
@@ -178,8 +190,9 @@ def grounding_summary(project) -> str:
     if project is None:
         return "(No project context)"
     briefings = _auto_briefing_labels(project)
+    label = briefing_label(project)
     sources = [
-        {**s, "kind": "ai_briefing", "label": f"{AUTO_BRIEFING_LABEL}: {s.get('label', '')}"}
+        {**s, "kind": "ai_briefing", "label": f"{label}: {s.get('label', '')}"}
         if s.get("source_id") in briefings
         else s
         for s in getattr(project, "grounding_sources", None) or []
@@ -270,9 +283,16 @@ def render_grounding_markdown(
             lines.append(f"- {c.get('text', '')} _(source: {c.get('source_id', 'n/a')})_")
         lines.append("")
     if briefing_claims:
-        lines.append(
-            f"**{AUTO_BRIEFING_LABEL}:** used as background for the simulation only; its claims are not verified facts."
-        )
+        if _has_web_sources(project):
+            lines.append(
+                f"**{WEB_BRIEFING_LABEL}:** used as background for the simulation; check any figure against "
+                "the web sources listed above before relying on it."
+            )
+        else:
+            lines.append(
+                f"**{AUTO_BRIEFING_LABEL}:** used as background for the simulation only; its claims are not "
+                "verified facts."
+            )
         for c in briefing_claims[:12]:
             lines.append(f"- {c.get('text', '')}")
         lines.append("")
