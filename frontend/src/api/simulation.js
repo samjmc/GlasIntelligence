@@ -51,6 +51,16 @@ export const getSimulationProfilesRealtime = (simulationId, platform = 'reddit')
 }
 
 /**
+ * Remove agents from a prepared simulation before it starts
+ * @param {string} simulationId
+ * @param {Object} data - { agent_ids?: number[], names?: string[] }
+ * @returns {Promise} { removed, count, profiles, config }
+ */
+export const removeSimulationAgents = (simulationId, data) => {
+  return service.post(`/api/simulation/${simulationId}/agents/remove`, data)
+}
+
+/**
  * Get simulation config
  * @param {string} simulationId
  */

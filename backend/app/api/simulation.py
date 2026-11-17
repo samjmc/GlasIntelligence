@@ -14,6 +14,7 @@ from flask import g, jsonify, request, send_file
 from ..config import Config
 from ..middleware.auth import require_auth
 from ..models.project import ProjectManager
+from ..services.agent_removal import AgentRemovalError, remove_agents
 from ..services.graph_store import graph_store_available, graph_store_unavailable_reason
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.report_agent import ReportManager
@@ -912,6 +913,31 @@ def get_simulation_profiles(simulation_id: str):
     except Exception as e:
         logger.error(f"Failed to get profiles: {str(e)}")
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@simulation_bp.route("/<simulation_id>/agents/remove", methods=["POST"])
+@require_auth
+def remove_simulation_agents(simulation_id: str):
+    """
+    Remove agents from a prepared simulation before it starts (owner only, via require_owner)
+
+    Request (JSON): {"agent_ids": [3, 7]} and/or {"names": ["O2"]}
+        agent_ids are the profiles' user_id (= the runner's agent id); names match a profile's
+        name/username or the config's entity_name. An unknown or ambiguous one is a 400 and
+        nothing is removed.
+
+    Returns: {"success": true, "data": {"removed": [...], "count": n, "profiles": [...], "config": {...}}}
+        400 bad request or fewer than MIN_AGENTS would be left; 409 not ready or already started.
+    """
+    sim_dir = os.path.join(SimulationManager.SIMULATION_DATA_DIR, simulation_id)
+    if not os.path.isdir(sim_dir):
+        return jsonify({"success": False, "error": f"Simulation not found: {simulation_id}"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        result = remove_agents(sim_dir, agent_ids=data.get("agent_ids"), names=data.get("names"))
+    except AgentRemovalError as e:
+        return jsonify({"success": False, "error": e.message}), e.status
+    return jsonify({"success": True, "data": {"simulation_id": simulation_id, **result}})
 
 
 @simulation_bp.route("/<simulation_id>/profiles/realtime", methods=["GET"])
