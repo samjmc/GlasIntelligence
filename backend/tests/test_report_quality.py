@@ -513,3 +513,23 @@ def test_auto_briefing_is_not_labelled_user_provided(label):
             "summary_text"
         ]
     )
+
+
+def test_web_sourced_briefing_is_not_called_unchecked():
+    # Live 2026-11-17: a Tavily briefing with 24 web sources was labelled "not checked against web sources".
+    project = _project("deep_research_dossier.md")
+    project.grounding_sources.append(
+        {
+            "source_id": "web_1",
+            "kind": "web_research",
+            "label": "Revolut launches mobile phone plans in Ireland",
+            "retrieved_at": "2026-11-17",
+        }
+    )
+    claims = rp.label_auto_briefing_claims(project, grounding_bundle.build_claim_ledger_from_project(project))
+
+    md = rp.render_grounding_markdown(project, [], claims)
+
+    assert f"{rp.WEB_BRIEFING_LABEL}: deep_research_dossier.md" in md
+    assert rp.AUTO_BRIEFING_LABEL not in md
+    assert "check any figure against the web sources" in md
