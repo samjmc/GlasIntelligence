@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 
 from ..config import Config
@@ -189,7 +190,9 @@ class SearchResearchAgent:
         scenario: str,
         context: str = "",
         angle_overrides: dict[str, bool] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
+        report = on_progress or (lambda _msg: None)
         llm = LLMClient(model=Config.SEARCH_RESEARCH_MODEL)
         tavily = TavilyClient(api_key=Config.TAVILY_API_KEY)
         selected_ids = LLMResearchAgent._resolve_angles(angle_overrides)
@@ -208,6 +211,7 @@ class SearchResearchAgent:
 
             all_queries.extend(queries)
             logger.info("Round %d/%d: running %d queries", round_num, max_rounds, len(queries))
+            report(f"Searching the web: round {round_num} of up to {max_rounds} ({len(queries)} searches)...")
 
             new_results: list[dict] = []
             for q in queries:
@@ -215,6 +219,7 @@ class SearchResearchAgent:
             all_sources.extend(screen_search_results(scenario, new_results))
 
             search_context = self._format_results(self._rank_by_credibility(all_sources))[:40_000]
+            report(f"Writing the briefing from {len(all_sources)} sources (round {round_num})...")
             summary_md = self._synthesize(llm, system_prompt, scenario, context, search_context)
 
             critique = self._critique(llm, scenario, summary_md)

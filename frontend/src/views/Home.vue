@@ -337,7 +337,7 @@
             <!-- Always visible (disabled until a scenario is typed) so the next step is never hidden -->
             <div class="console-section btn-section">
               <p v-if="showResearchFirstHint" class="start-hint" data-test="research-first-hint">
-                No documents? We will write a research briefing first (about 30 seconds).
+                No documents? We will write a research briefing first (about 30 seconds; a web-search briefing takes a few minutes).
               </p>
               <button
                 class="start-engine-btn"
