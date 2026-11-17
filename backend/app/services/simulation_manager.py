@@ -111,6 +111,8 @@ def _classify_with_stronger_model(messages: list[dict[str, str]], llm: Any = Non
         strong = LLMClient(model=Config.AGENT_CHECK_MODEL)
         return strong.chat_json(messages=messages, temperature=0.0, max_tokens=16000, thinking=True)
     except Exception as e:
+        if Config.AGENT_CHECK_MODEL == Config.LLM_MODEL_NAME:
+            raise
         logger.warning(f"Agent check with {Config.AGENT_CHECK_MODEL} failed ({type(e).__name__}); using default model")
         return LLMClient().chat_json(messages=messages, temperature=0.0, max_tokens=4000)
 
@@ -418,6 +420,8 @@ class SimulationManager:
                 graph_id=state.graph_id, defined_entity_types=defined_entity_types, enrich_with_edges=True
             )
             drop_non_actor_entities(filtered)
+            if progress_callback:
+                progress_callback("reading", 60, "Checking which entities can act in this scenario...")
             drop_irrelevant_agents(filtered, simulation_requirement)
 
             max_agents, _ = Config.simulation_limits(user_plan)

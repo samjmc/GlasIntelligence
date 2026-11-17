@@ -7,7 +7,6 @@ Three in 2015) and "Worldov" (unidentifiable) stayed as agents.
 
 from unittest.mock import MagicMock, patch
 
-from app.config import Config
 from app.services import simulation_manager as sm
 from app.services.zep_entity_reader import EntityNode, FilteredEntities
 
@@ -77,26 +76,51 @@ def test_prompt_carries_up_to_three_graph_facts_per_entity():
     assert "historical:" in prompt and "unclear:" in prompt
 
 
-def test_stronger_model_is_used_and_default_model_is_the_fallback():
-    filtered = _filtered(*ROWS)
+def _clients_failing_on(strong_model):
     clients = []
 
     def make_client(model=None):
         client = MagicMock()
         client.model = model
-        if model == Config.AGENT_CHECK_MODEL:
+        if model == strong_model:
             client.chat_json.side_effect = ValueError("bad json")
         else:
             client.chat_json.return_value = _answer((3, "historical"))
         clients.append(client)
         return client
 
-    with patch.object(sm, "LLMClient", side_effect=make_client):
+    return clients, make_client
+
+
+def test_stronger_model_is_used_and_default_model_is_the_fallback():
+    filtered = _filtered(*ROWS)
+    clients, make_client = _clients_failing_on("strong-model")
+
+    with (
+        patch.object(sm.Config, "AGENT_CHECK_MODEL", "strong-model"),
+        patch.object(sm.Config, "LLM_MODEL_NAME", "default-model"),
+        patch.object(sm, "LLMClient", side_effect=make_client),
+    ):
         sm.drop_irrelevant_agents(filtered, SCENARIO)
 
-    assert [c.model for c in clients] == [Config.AGENT_CHECK_MODEL, None]
+    assert [c.model for c in clients] == ["strong-model", None]
     assert clients[0].chat_json.call_args.kwargs["thinking"] is True
     assert "O2" not in [e.name for e in filtered.entities]
+
+
+def test_no_retry_when_the_check_model_is_the_default_model():
+    filtered = _filtered(*ROWS)
+    clients, make_client = _clients_failing_on("same-model")
+
+    with (
+        patch.object(sm.Config, "AGENT_CHECK_MODEL", "same-model"),
+        patch.object(sm.Config, "LLM_MODEL_NAME", "same-model"),
+        patch.object(sm, "LLMClient", side_effect=make_client),
+    ):
+        sm.drop_irrelevant_agents(filtered, SCENARIO)
+
+    assert [c.model for c in clients] == ["same-model"]  # one call, no identical retry
+    assert len(filtered.entities) == len(ROWS)  # failure keeps everyone
 
 
 def test_agent_check_model_defaults_to_deepseek_pro_on_deepseek():
