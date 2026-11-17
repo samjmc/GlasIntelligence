@@ -39,26 +39,52 @@ def _keep_entities(filtered: FilteredEntities, kept: list) -> None:
     filtered.entity_types = {t for t in (e.get_entity_type() for e in kept) if t}
 
 
-AGENT_RELEVANCE_PROMPT = """You choose which entities become agents in a simulation of this scenario:
+class AgentCategory(str, Enum):
+    """What an entity is, for deciding whether it can be an agent in this scenario."""
+
+    MARKET_ACTOR = "market_actor"  # company or brand active in the scenario's market or country
+    PUBLIC_BODY = "public_body"  # regulator, government department, public agency of that country (or the EU)
+    CIVIL_SOCIETY = "civil_society"  # NGO, consumer group, trade association, union
+    MEDIA = "media"  # news outlet or broadcaster that would report on the scenario
+    PUBLIC = "public"  # consumers, the public, a community
+    PERSON_ROLE = "person_role"  # an individual or role (e.g. "a fintech CEO")
+    SOURCE_OR_PLATFORM = "source_or_platform"  # an article, thread, post, video, document or website used as a
+    # source, or a platform/reference site (YouTube, Wikipedia, LinkedIn, research publishers)
+    NOT_IN_MARKET = "not_in_market"  # organisation not active in this market or country (foreign analogue, foreign
+    # brand, parent group, back-end supplier with no public role)
+    THING = "thing"  # rule, law, policy, product, plan, programme, event or place
+
+
+DROP_CATEGORIES = {AgentCategory.SOURCE_OR_PLATFORM, AgentCategory.NOT_IN_MARKET, AgentCategory.THING}
+
+AGENT_RELEVANCE_PROMPT = """You classify the entities found for a simulation of this scenario:
 
 {requirement}
 
-An agent must be able to act or speak in THIS scenario. DROP an entity when it is:
-- a rule, law, regulation, policy, framework, standard, product, plan, programme, scheme, event or place;
-- an organisation that is NOT active in the scenario's market or country and is only an example, analogue or precedent from elsewhere.
-KEEP companies active in the market, regulators, governments, public bodies, NGOs, consumer groups, unions, media and the public.
-An organisation that operates in the scenario's country or market is ALWAYS kept, even when the summary calls it an example or precedent (e.g. a local rival whose past launch is cited).
-When unsure, KEEP.
+Give EVERY entity exactly one category:
+- market_actor: a company or brand active in the scenario's market or country.
+- public_body: a regulator, government department or public agency of that country (or the EU), even if minor.
+- civil_society: an NGO, consumer group, trade association or union.
+- media: a news outlet or broadcaster that would report on the scenario.
+- public: consumers, the public or a community.
+- person_role: an individual or a role.
+- source_or_platform: a specific article, forum thread, post, video, document or website that is only a source, or a
+  platform or reference site (YouTube, Facebook, LinkedIn, Wikipedia, market-research publishers).
+- not_in_market: an organisation NOT active in this market or country (a foreign brand, a foreign analogue or
+  precedent, a parent group, or a back-end supplier with no public role).
+- thing: a rule, law, policy, product, plan, programme, event or place.
+An organisation that operates in the scenario's country or market is market_actor, even when the summary calls it an
+example or precedent. When unsure between two categories, pick the one that keeps the entity.
 
 Entities (index | name | type | summary):
 {entities}
 
-Return JSON: {{"drop": [{{"index": <int>, "reason": "<short reason>"}}]}}"""
+Return JSON: {{"entities": [{{"index": <int>, "category": "<category>", "reason": "<short reason>"}}]}}"""
 
 
 def drop_irrelevant_agents(filtered: FilteredEntities, simulation_requirement: str, llm: Any = None) -> None:
-    """Ask the LLM which entities cannot act in this scenario (rules named like organisations, foreign
-    analogues) and drop them. Fails open: on any error, or if it would drop more than half, keep all."""
+    """Have the LLM classify each entity (AgentCategory) and drop sources, things and entities not active in
+    this market. Fails open: on any error, an unknown category, or if it would drop more than half, keep."""
     entities = filtered.entities
     if len(entities) < 3 or not simulation_requirement.strip():
         return
@@ -76,9 +102,16 @@ def drop_irrelevant_agents(filtered: FilteredEntities, simulation_requirement: s
                 }
             ],
             temperature=0.0,
-            max_tokens=1500,
+            max_tokens=4000,
         )
-        drop = {int(d["index"]): str(d.get("reason", "")) for d in result.get("drop", []) if "index" in d}
+        drop: dict[int, str] = {}
+        for d in result.get("entities", []):
+            try:
+                category = AgentCategory(str(d.get("category", "")).strip().lower())
+            except ValueError:
+                continue  # unknown category: keep
+            if category in DROP_CATEGORIES and "index" in d:
+                drop[int(d["index"])] = f"{category.value}: {d.get('reason', '')}"
     except Exception as e:
         logger.warning(f"Agent relevance check failed, keeping all {len(entities)} entities: {type(e).__name__}")
         return
