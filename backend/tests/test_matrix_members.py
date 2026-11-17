@@ -56,4 +56,5 @@ def test_members_reach_the_writer_text_and_payload():
 def test_relevance_prompt_keeps_local_firms_cited_as_precedents():
     from app.services.simulation_manager import AGENT_RELEVANCE_PROMPT
 
-    assert "operates in the scenario's country or market is market_actor" in AGENT_RELEVANCE_PROMPT
+    assert "operates in the" in AGENT_RELEVANCE_PROMPT
+    assert "country or market today is market_actor" in AGENT_RELEVANCE_PROMPT

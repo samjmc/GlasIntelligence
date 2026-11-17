@@ -44,6 +44,7 @@ class LLMClient:
         temperature: float = 0.7,
         max_tokens: int = 4096,
         response_format: dict | None = None,
+        thinking: bool = False,
     ) -> str:
         """
         Send a chat request
@@ -72,7 +73,9 @@ class LLMClient:
         # with finish_reason=length (verified 2026-08-14). The app's structured
         # calls don't need reasoning; disable it. Retry without the param for
         # providers/models that reject it.
-        if "deepseek" in (self.base_url or "").lower():
+        # thinking=True keeps the model's default reasoning for calls that need judgement;
+        # give those calls a max_tokens budget that leaves room for the reasoning.
+        if "deepseek" in (self.base_url or "").lower() and not thinking:
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             try:
                 response = self.client.chat.completions.create(**kwargs)
@@ -87,7 +90,11 @@ class LLMClient:
         return content
 
     def chat_json(
-        self, messages: list[dict[str, str]], temperature: float = 0.3, max_tokens: int = 4096
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
+        thinking: bool = False,
     ) -> dict[str, Any]:
         """
         Send a chat request and return JSON
@@ -101,7 +108,11 @@ class LLMClient:
             Parsed JSON object
         """
         response = self.chat(
-            messages=messages, temperature=temperature, max_tokens=max_tokens, response_format={"type": "json_object"}
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+            thinking=thinking,
         )
         # Clean markdown code block markers
         cleaned_response = response.strip()

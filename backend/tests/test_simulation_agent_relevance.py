@@ -20,10 +20,11 @@ def _filtered(*pairs: tuple[str, str]) -> FilteredEntities:
 
 class FakeLLM:
     def __init__(self, result=None, error=None):
-        self.result, self.error, self.prompts = result, error, []
+        self.result, self.error, self.prompts, self.thinking = result, error, [], []
 
-    def chat_json(self, messages, temperature=0.3, max_tokens=4096):
+    def chat_json(self, messages, temperature=0.3, max_tokens=4096, thinking=False):
         self.prompts.append(messages[0]["content"])
+        self.thinking.append(thinking)
         if self.error:
             raise self.error
         return self.result
