@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
@@ -75,7 +76,10 @@ class DeepResearchAgent:
         scenario: str,
         context: str = "",
         angle_overrides: dict[str, bool] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
+        if on_progress:
+            on_progress("Running deep web research (this can take a long time)...")
         user_text = (
             "Research this scenario thoroughly. The output will ground a multi-agent simulation: "
             "prioritise verifiable facts, named actors with incentives/constraints, testable if–then "

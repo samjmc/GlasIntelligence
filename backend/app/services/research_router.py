@@ -19,6 +19,8 @@ that previously lived inline in ``research_tasks.py``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ..utils.logger import get_logger
 
 logger = get_logger("glas.research_router")
@@ -48,13 +50,17 @@ def run_research_chain(
     prompt: str,
     context: str = "",
     angle_overrides: dict | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> dict:
-    """Run the first healthy agent in the chain; raise the last error if all fail."""
+    """Run the first healthy agent in the chain; raise the last error if all fail.
+
+    on_progress(message) is called as the agent moves on, so the page can say what is happening.
+    """
     last_exc: Exception | None = None
     for agent in research_agent_chain():
         try:
             return agent.run(  # type: ignore[no-any-return]
-                prompt, context=context, angle_overrides=angle_overrides
+                prompt, context=context, angle_overrides=angle_overrides, on_progress=on_progress
             )
         except Exception as exc:
             last_exc = exc

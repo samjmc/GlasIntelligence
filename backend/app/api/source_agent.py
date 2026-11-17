@@ -224,7 +224,11 @@ def start_deep_research():
             tm.update_task(task_id, message="Classifying scenario and selecting research angles...")
             from ..services.research_router import run_research_chain
 
-            dossier = run_research_chain(prompt, angle_overrides=angle_overrides)
+            dossier = run_research_chain(
+                prompt,
+                angle_overrides=angle_overrides,
+                on_progress=lambda msg: tm.update_task(task_id, message=msg),
+            )
             tm.update_task(task_id, message="Research in progress...")
             tm.complete_task(task_id, dossier)
         except Exception:

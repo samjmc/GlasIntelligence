@@ -7,6 +7,7 @@ DeepResearchAgent so research_tasks and downstream consumers work without change
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from typing import Any
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
@@ -129,7 +130,10 @@ class LLMResearchAgent:
         scenario: str,
         context: str = "",
         angle_overrides: dict[str, bool] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
+        if on_progress:
+            on_progress("Writing an AI briefing (no web search)...")
         selected_ids = self._resolve_angles(angle_overrides)
         system_prompt = self._build_system_prompt(selected_ids)
 
