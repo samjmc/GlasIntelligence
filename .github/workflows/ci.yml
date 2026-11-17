@@ -196,7 +196,9 @@ jobs:
 
   build-and-e2e:
     name: Build & E2E Tests
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04 on 2026-11-17 and Playwright 1.58 cannot install
+    # chromium there. Move back to ubuntu-latest once Playwright supports 26.04.
+    runs-on: ubuntu-24.04
     needs: [test-backend, test-frontend]
     if: ${{ !cancelled() }}
     steps:
