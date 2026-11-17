@@ -47,6 +47,7 @@ An agent must be able to act or speak in THIS scenario. DROP an entity when it i
 - a rule, law, regulation, policy, framework, standard, product, plan, programme, scheme, event or place;
 - an organisation that is NOT active in the scenario's market or country and is only an example, analogue or precedent from elsewhere.
 KEEP companies active in the market, regulators, governments, public bodies, NGOs, consumer groups, unions, media and the public.
+An organisation that operates in the scenario's country or market is ALWAYS kept, even when the summary calls it an example or precedent (e.g. a local rival whose past launch is cited).
 When unsure, KEEP.
 
 Entities (index | name | type | summary):

@@ -738,6 +738,9 @@ class StakeholderImpactRow:
     activity_index: float = 0.0
     escalation_exposure: float = 0.0
     voice_share_pct: float = 0.0
+    # The agents in this type. Without them the report writer guesses group membership and
+    # lists one agent under two types (seen live 2026-11-10: An Post Mobile).
+    members: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -748,6 +751,7 @@ class StakeholderImpactRow:
             "activity_index": self.activity_index,
             "escalation_exposure": self.escalation_exposure,
             "voice_share_pct": self.voice_share_pct,
+            "members": list(self.members),
         }
 
 
@@ -766,15 +770,16 @@ class StakeholderImpactMatrix:
             )
         lines = [
             "=== Stakeholder impact matrix (by entity type) ===",
-            "| Type | Stance mix | Majority | Avg intensity | Activity index* | Escalation exposure** | Voice share |",
-            "|------|------------|----------|---------------|-----------------|----------------------|-------------|",
+            "| Type | Agents | Stance mix | Majority | Avg intensity | Activity index* | Escalation exposure** | Voice share |",
+            "|------|--------|------------|----------|---------------|-----------------|----------------------|-------------|",
         ]
         for r in self.rows:
             lines.append(
-                f"| {r.entity_type} | {r.stance_label} | {r.stance_majority} | {r.avg_intensity} | "
-                f"{r.activity_index} | {r.escalation_exposure}% | {r.voice_share_pct}% |"
+                f"| {r.entity_type} | {', '.join(r.members) or 'n/a'} | {r.stance_label} | {r.stance_majority} | "
+                f"{r.avg_intensity} | {r.activity_index} | {r.escalation_exposure}% | {r.voice_share_pct}% |"
             )
         lines.append("")
+        lines.append("Each agent belongs to exactly ONE type: name an agent only under the type listed here.")
         lines.append("*Activity index = avg actions per agent in type / global avg actions per agent.")
         lines.append("**Escalation exposure = share of aggressive-type actions within that type's volume.")
         return "\n".join(lines)
@@ -1608,6 +1613,16 @@ class QuantitativeAnalysisService:
             global_mean = sum(a["total_actions"] for a in agent_stats) / max(len(agent_stats), 1)
 
         type_agg: dict[str, dict[str, float]] = {}
+        # One type per agent: the profile type map wins, the stance type only fills gaps.
+        agent_type_of: dict[str, str] = {
+            a["agent_name"]: name_to_type.get(a["agent_name"], "Unknown") for a in agent_stats
+        }
+        for s in stance.stances:
+            if s.agent_name and s.agent_name not in agent_type_of:
+                agent_type_of[s.agent_name] = s.agent_type or "Unknown"
+        members: dict[str, set[str]] = {}
+        for name, atype in agent_type_of.items():
+            members.setdefault(atype, set()).add(name)
         for a in agent_stats:
             atype = name_to_type.get(a["agent_name"], "Unknown")
             if atype not in type_agg:
@@ -1651,6 +1666,7 @@ class QuantitativeAnalysisService:
                     activity_index=round(activity_index, 2),
                     escalation_exposure=round(esc, 1),
                     voice_share_pct=round(voice, 1),
+                    members=sorted(members.get(etype, set())),
                 )
             )
 
