@@ -91,35 +91,92 @@
             <div class="preview-header">
               <span class="preview-title">Generated Agent Personas</span>
             </div>
-            <div class="profiles-list">
+            <p
+              v-if="removeError"
+              class="remove-error"
+              role="alert"
+              data-test="remove-agent-error"
+            >
+              {{ removeError }}
+            </p>
+            <div
+              ref="profilesList"
+              class="profiles-list"
+            >
               <div
                 v-for="(profile, idx) in profiles"
-                :key="idx"
-                class="profile-card"
-                role="button"
-                tabindex="0"
-                :aria-label="`View persona: ${profile.username || 'Unknown'}`"
-                @click="selectProfile(profile)"
-                @keydown.enter.self.prevent="selectProfile(profile)"
-                @keydown.space.self.prevent="selectProfile(profile)"
+                :key="profile.username || idx"
+                class="profile-item"
               >
-                <div class="profile-header">
-                  <span class="profile-realname">{{ profile.username || 'Unknown' }}</span>
-                  <span class="profile-username">@{{ profile.name || `agent_${idx}` }}</span>
+                <div
+                  class="profile-card"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`View persona: ${profile.username || 'Unknown'}`"
+                  @click="selectProfile(profile)"
+                  @keydown.enter.self.prevent="selectProfile(profile)"
+                  @keydown.space.self.prevent="selectProfile(profile)"
+                >
+                  <div class="profile-header">
+                    <span class="profile-realname">{{ profile.username || 'Unknown' }}</span>
+                    <span class="profile-username">@{{ profile.name || `agent_${idx}` }}</span>
+                  </div>
+                  <div class="profile-meta">
+                    <span class="profile-profession">{{ profile.profession || 'Unknown role' }}</span>
+                  </div>
+                  <p class="profile-bio">{{ profile.bio || 'No bio available' }}</p>
+                  <div v-if="profile.interested_topics?.length" class="profile-topics">
+                    <span
+                      v-for="topic in profile.interested_topics.slice(0, 3)"
+                      :key="topic"
+                      class="topic-tag"
+                    >{{ topic }}</span>
+                    <span v-if="profile.interested_topics.length > 3" class="topic-more">
+                      +{{ profile.interested_topics.length - 3 }}
+                    </span>
+                  </div>
                 </div>
-                <div class="profile-meta">
-                  <span class="profile-profession">{{ profile.profession || 'Unknown role' }}</span>
-                </div>
-                <p class="profile-bio">{{ profile.bio || 'No bio available' }}</p>
-                <div v-if="profile.interested_topics?.length" class="profile-topics">
-                  <span 
-                    v-for="topic in profile.interested_topics.slice(0, 3)" 
-                    :key="topic" 
-                    class="topic-tag"
-                  >{{ topic }}</span>
-                  <span v-if="profile.interested_topics.length > 3" class="topic-more">
-                    +{{ profile.interested_topics.length - 3 }}
-                  </span>
+                <!-- Remove control: a sibling of the card, not nested in its role="button"; .stop so it never opens the details -->
+                <div
+                  v-if="phase >= 4"
+                  class="profile-remove"
+                  :data-remove-for="agentIdOf(profile, idx)"
+                  @click.stop
+                  @keydown.stop
+                >
+                  <template v-if="confirmingRemoveId === agentIdOf(profile, idx)">
+                    <span class="remove-confirm-text">Remove?</span>
+                    <button
+                      type="button"
+                      class="remove-confirm-btn danger"
+                      data-test="confirm-remove-yes"
+                      :aria-label="`Yes, remove ${agentName(profile)}`"
+                      :disabled="removeLocked"
+                      @click.stop="confirmRemove(profile, idx)"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      class="remove-confirm-btn"
+                      data-test="confirm-remove-no"
+                      :disabled="removing"
+                      @click.stop="cancelRemove(profile, idx)"
+                    >
+                      No
+                    </button>
+                  </template>
+                  <button
+                    v-else
+                    type="button"
+                    class="remove-agent-btn"
+                    data-test="remove-agent"
+                    :aria-label="`Remove agent ${agentName(profile)}`"
+                    :disabled="removeLocked"
+                    @click.stop="askRemove(profile, idx)"
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
             </div>
@@ -545,7 +602,7 @@
               type="button"
               class="action-btn primary"
               data-test="start-simulation"
-              :disabled="phase < 4"
+              :disabled="phase < 4 || removing"
               @click="handleStartSimulation"
             >
               Start Simulation ➝
@@ -660,7 +717,8 @@ import {
   getPrepareStatus, 
   getSimulationProfilesRealtime,
   getSimulationConfig,
-  getSimulationConfigRealtime 
+  getSimulationConfigRealtime,
+  removeSimulationAgents
 } from '../api/simulation'
 import { focusNextStepButton } from '../composables/useStepReady'
 
@@ -805,7 +863,64 @@ const addLog = (msg) => {
   emit('add-log', msg)
 }
 
+// Removing agents: only before the run starts, one request at a time
+const confirmingRemoveId = ref(null)
+const removing = ref(false)
+const removalClosed = ref(false) // the simulation started (here, or the server says so)
+const removeError = ref('')
+const removeLocked = computed(() => removing.value || removalClosed.value)
+
+const agentIdOf = (profile, idx) => profile.user_id ?? idx
+const agentName = (profile) => profile.name || profile.username || 'Unknown'
+
+// Move focus once the list has re-rendered (the clicked control or the whole card is replaced)
+const profilesList = ref(null)
+const focusInList = (selector) => {
+  nextTick(() => profilesList.value?.querySelector(selector)?.focus())
+}
+const focusRemoveControl = (agentId, control) => {
+  focusInList(`[data-remove-for="${agentId}"] [data-test="${control}"]`)
+}
+
+const askRemove = (profile, idx) => {
+  if (removeLocked.value) return
+  removeError.value = ''
+  confirmingRemoveId.value = agentIdOf(profile, idx)
+  focusRemoveControl(confirmingRemoveId.value, 'confirm-remove-yes')
+}
+
+const cancelRemove = (profile, idx) => {
+  confirmingRemoveId.value = null
+  focusRemoveControl(agentIdOf(profile, idx), 'remove-agent')
+}
+
+const confirmRemove = async (profile, idx) => {
+  if (removeLocked.value) return
+  const name = agentName(profile)
+  removing.value = true
+  removeError.value = ''
+  try {
+    const res = await removeSimulationAgents(props.simulationId, { agent_ids: [agentIdOf(profile, idx)] })
+    profiles.value = res.data.profiles || []
+    expectedTotal.value = res.data.count ?? profiles.value.length
+    if (res.data.config) simulationConfig.value = res.data.config
+    confirmingRemoveId.value = null
+    const left = profiles.value.length
+    readyMessage.value = `Removed ${name}. ${left} agent${left === 1 ? '' : 's'} left.`
+    addLog(`Removed agent ${name}; ${left} agents left`)
+    // The removed card is gone: put focus on the card that took its place (or the new last one)
+    focusInList(`.profile-item:nth-child(${Math.min(idx, left - 1) + 1}) .profile-card`)
+  } catch (err) {
+    if (err.response?.status === 409) removalClosed.value = true
+    removeError.value = `Could not remove ${name}: ${err.response?.data?.error || err.message || 'Unknown error'}`
+  } finally {
+    removing.value = false
+  }
+}
+
 const handleStartSimulation = () => {
+  removalClosed.value = true
+  confirmingRemoveId.value = null
   const params = { maxRounds: effectiveRounds.value }
   addLog(`Starting simulation: ${effectiveRounds.value} rounds (${props.userPlan} plan)`)
   emit('next-step', params)
@@ -1411,6 +1526,77 @@ onUnmounted(() => {
 .profile-card:hover {
   border-color: #999;
   background: #FFF;
+}
+
+/* Remove control sits over the card's top-right corner (a sibling, not inside the card) */
+.profile-item {
+  position: relative;
+}
+
+.profile-item:has(.profile-remove) .profile-header {
+  padding-right: 72px;
+}
+
+.profile-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
+  border-radius: 4px;
+  background: #FAFAFA;
+}
+
+.remove-confirm-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+}
+
+.remove-agent-btn,
+.remove-confirm-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border: 1px solid #CCC;
+  border-radius: 4px;
+  background: #FFF;
+  color: #333;
+  cursor: pointer;
+}
+
+.remove-agent-btn:hover:not(:disabled),
+.remove-confirm-btn.danger {
+  border-color: #C62828;
+  color: #C62828;
+}
+
+.remove-confirm-btn.danger:hover:not(:disabled) {
+  background: #C62828;
+  color: #FFF;
+}
+
+.remove-agent-btn:disabled,
+.remove-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.remove-agent-btn:focus-visible,
+.remove-confirm-btn:focus-visible {
+  outline: 3px solid #FF5722;
+  outline-offset: 2px;
+}
+
+.remove-error {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid #C62828;
+  background: #FFEBEE;
+  color: #B71C1C;
+  font-size: 12px;
 }
 
 .profile-header {
