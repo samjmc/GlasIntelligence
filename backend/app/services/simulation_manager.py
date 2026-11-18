@@ -53,9 +53,18 @@ class AgentCategory(str, Enum):
     NOT_IN_MARKET = "not_in_market"  # organisation not active in this market or country (foreign analogue, foreign
     # brand, parent group, back-end supplier with no public role)
     THING = "thing"  # rule, law, policy, product, plan, programme, event or place
+    HISTORICAL = "historical"  # no longer exists or trades there (merged, closed, renamed away)
+    UNCLEAR = "unclear"  # cannot tell what it is from the name, summary and facts
 
 
-DROP_CATEGORIES = {AgentCategory.SOURCE_OR_PLATFORM, AgentCategory.NOT_IN_MARKET, AgentCategory.THING}
+DROP_CATEGORIES = {
+    AgentCategory.SOURCE_OR_PLATFORM,
+    AgentCategory.NOT_IN_MARKET,
+    AgentCategory.THING,
+    AgentCategory.HISTORICAL,
+    AgentCategory.UNCLEAR,
+}
+FACTS_PER_ENTITY = 3
 
 AGENT_RELEVANCE_PROMPT = """You classify the entities found for a simulation of this scenario:
 
@@ -73,13 +82,39 @@ Give EVERY entity exactly one category:
 - not_in_market: an organisation NOT active in this market or country (a foreign brand, a foreign analogue or
   precedent, a parent group, or a back-end supplier with no public role).
 - thing: a rule, law, policy, product, plan, programme, event or place.
-An organisation that operates in the scenario's country or market is market_actor, even when the summary calls it an
-example or precedent. When unsure between two categories, pick the one that keeps the entity.
+- historical: an organisation or brand that no longer exists or no longer trades in this market (merged, closed,
+  rebranded away), even if the sources mention it.
+- unclear: you cannot tell what this is from its name, summary and facts and from what you know.
+Use your own knowledge of the market as well as the summary and facts. An organisation that operates in the
+scenario's country or market today is market_actor, even when the summary calls it an example or precedent. Only when
+you are unsure between two categories that both keep the entity, pick either.
 
-Entities (index | name | type | summary):
+Entities (index | name | type | summary | facts from the sources):
 {entities}
 
 Return JSON: {{"entities": [{{"index": <int>, "category": "<category>", "reason": "<short reason>"}}]}}"""
+
+
+def _entity_facts(entity: Any) -> str:
+    """Up to FACTS_PER_ENTITY graph facts about the entity (e.g. 'O2 merged into Three in 2015')."""
+    facts = [str(edge.get("fact") or "").strip() for edge in getattr(entity, "related_edges", None) or []]
+    return " ; ".join([f[:160] for f in facts if f][:FACTS_PER_ENTITY]) or "none"
+
+
+def _classify_with_stronger_model(messages: list[dict[str, str]], llm: Any = None) -> dict[str, Any]:
+    """The agent check needs world knowledge, so it uses Config.AGENT_CHECK_MODEL with reasoning on.
+    On any failure it retries once with the default model and no reasoning."""
+    if llm is not None:  # tests
+        injected: dict[str, Any] = llm.chat_json(messages=messages, temperature=0.0, max_tokens=16000, thinking=True)
+        return injected
+    try:
+        strong = LLMClient(model=Config.AGENT_CHECK_MODEL)
+        return strong.chat_json(messages=messages, temperature=0.0, max_tokens=16000, thinking=True)
+    except Exception as e:
+        if Config.AGENT_CHECK_MODEL == Config.LLM_MODEL_NAME:
+            raise
+        logger.warning(f"Agent check with {Config.AGENT_CHECK_MODEL} failed ({type(e).__name__}); using default model")
+        return LLMClient().chat_json(messages=messages, temperature=0.0, max_tokens=4000)
 
 
 def drop_irrelevant_agents(filtered: FilteredEntities, simulation_requirement: str, llm: Any = None) -> None:
@@ -89,21 +124,18 @@ def drop_irrelevant_agents(filtered: FilteredEntities, simulation_requirement: s
     if len(entities) < 3 or not simulation_requirement.strip():
         return
     lines = "\n".join(
-        f"{i} | {e.name} | {e.get_entity_type() or 'Entity'} | {(e.summary or '')[:200]}"
+        f"{i} | {e.name} | {e.get_entity_type() or 'Entity'} | {(e.summary or '')[:300]} | {_entity_facts(e)}"
         for i, e in enumerate(entities)
     )
+    messages = [
+        {
+            "role": "user",
+            "content": AGENT_RELEVANCE_PROMPT.format(requirement=simulation_requirement[:2000], entities=lines),
+        }
+    ]
     try:
-        client = llm or LLMClient()
-        result = client.chat_json(
-            messages=[
-                {
-                    "role": "user",
-                    "content": AGENT_RELEVANCE_PROMPT.format(requirement=simulation_requirement[:2000], entities=lines),
-                }
-            ],
-            temperature=0.0,
-            max_tokens=4000,
-        )
+        result = _classify_with_stronger_model(messages, llm)
+
         drop: dict[int, str] = {}
         for d in result.get("entities", []):
             try:
@@ -388,6 +420,8 @@ class SimulationManager:
                 graph_id=state.graph_id, defined_entity_types=defined_entity_types, enrich_with_edges=True
             )
             drop_non_actor_entities(filtered)
+            if progress_callback:
+                progress_callback("reading", 60, "Checking which entities can act in this scenario...")
             drop_irrelevant_agents(filtered, simulation_requirement)
 
             max_agents, _ = Config.simulation_limits(user_plan)

@@ -41,6 +41,13 @@ def _safe_float(val, default: float, *, env_key: str | None = None) -> float:
         return default
 
 
+def agent_check_model(override: str, base_url: str, default_model: str) -> str:
+    """Model for the agent check: the override if set, deepseek-v4-pro on DeepSeek, else the default model."""
+    if override:
+        return override
+    return "deepseek-v4-pro" if "deepseek" in (base_url or "").lower() else default_model
+
+
 # Load .env file from project root
 # Path: .env (relative to backend/app/config.py)
 project_root_env = os.path.join(os.path.dirname(__file__), "../../.env")
@@ -65,6 +72,10 @@ class Config:
     LLM_API_KEY = os.environ.get("LLM_API_KEY")
     LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
     LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "gpt-4o-mini")
+    # Deciding which entities may become agents needs world knowledge (is O2 still trading in Ireland?)
+    # that the small default model lacks, so that one call uses a larger model with reasoning on.
+    # Empty: deepseek-v4-pro on DeepSeek, else LLM_MODEL_NAME.
+    AGENT_CHECK_MODEL = agent_check_model(os.environ.get("AGENT_CHECK_MODEL", ""), LLM_BASE_URL, LLM_MODEL_NAME)
 
     # Supabase config
     SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
